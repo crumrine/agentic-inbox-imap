@@ -1,0 +1,14 @@
+agentic-imapd - Agentic Inbox IMAP/SMTP gateway
+Copyright (c) 2026 Brian Crumrine
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+This component is independent work. It is not derived from Cloudflare's
+Agentic Inbox, although it is written to serve that project's HTTP API and
+currently ships alongside it.
+
+It is a separate Go module and carries its own LICENSE and NOTICE so that it
+remains self-contained if it is ever extracted into its own repository.
+
+Third-party dependencies are declared in go.mod. Their licenses are retained
+by their respective authors.
