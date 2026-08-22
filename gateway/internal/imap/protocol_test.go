@@ -24,6 +24,10 @@ type rawClient struct {
 	conn net.Conn
 	br   *bufio.Reader
 	seq  int
+
+	// greeting is the server's first line, kept so tests can assert on the
+	// capability list it advertises.
+	greeting string
 }
 
 func startRawClient(t *testing.T, be Backend, opts ...Option) *rawClient {
@@ -38,7 +42,7 @@ func startRawClient(t *testing.T, be Backend, opts ...Option) *rawClient {
 		Logger:       testLogger{t},
 	})
 	served := make(chan error, 1)
-	go func() { served <- srv.Serve(ln) }()
+	go func() { served <- srv.Serve(WrapListener(ln, AllowCleartext())) }()
 
 	conn, err := ln.dial()
 	if err != nil {
@@ -52,9 +56,9 @@ func startRawClient(t *testing.T, be Backend, opts ...Option) *rawClient {
 	})
 
 	c := &rawClient{t: t, conn: conn, br: bufio.NewReader(conn)}
-	greeting := c.readLine()
-	if !strings.HasPrefix(greeting, "* OK") {
-		t.Fatalf("greeting = %q, want * OK ...", greeting)
+	c.greeting = c.readLine()
+	if !strings.HasPrefix(c.greeting, "* OK") {
+		t.Fatalf("greeting = %q, want * OK ...", c.greeting)
 	}
 	return c
 }

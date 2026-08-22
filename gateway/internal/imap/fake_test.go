@@ -441,8 +441,12 @@ func startTestServer(t *testing.T, be Backend, opts ...Option) *imapclient.Clien
 		Logger:       testLogger{t},
 	})
 
+	// Serve through the same ID proxy production uses, so every test in
+	// this package exercises its pass-through path as a side effect.
+	// AllowCleartext is required because these are net.Pipe connections,
+	// not TLS; production takes the default and rejects cleartext.
 	served := make(chan error, 1)
-	go func() { served <- srv.Serve(ln) }()
+	go func() { served <- srv.Serve(WrapListener(ln, AllowCleartext())) }()
 
 	conn, err := ln.dial()
 	if err != nil {

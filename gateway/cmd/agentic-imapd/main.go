@@ -31,6 +31,7 @@ import (
 	"github.com/crumrine/agentic-inbox/gateway/internal/backend"
 	"github.com/crumrine/agentic-inbox/gateway/internal/config"
 	imapsession "github.com/crumrine/agentic-inbox/gateway/internal/imap"
+	"io"
 )
 
 func main() {
@@ -55,7 +56,16 @@ func run() error {
 		"log_level", cfg.LogLevel,
 	)
 
-	backendClient, err := backend.New(cfg.InboxURL.String(), cfg.AccessClientID, cfg.AccessClientSecret)
+	var backendOpts []backend.Option
+	if cfg.AccessCookie != "" {
+		// Testing path. Loud on purpose: this credential is one person's
+		// Access session, it expires, and it must not reach production.
+		logger.Warn("authenticating to the Worker with a CF_Authorization cookie; " +
+			"this is for local testing only, use a service token in production")
+		backendOpts = append(backendOpts, backend.WithAccessCookie(cfg.AccessCookie))
+	}
+
+	backendClient, err := backend.New(cfg.InboxURL.String(), cfg.AccessClientID, cfg.AccessClientSecret, backendOpts...)
 	if err != nil {
 		return fmt.Errorf("building backend client: %w", err)
 	}
@@ -66,23 +76,57 @@ func run() error {
 		return fmt.Errorf("loading TLS certificate: %w", err)
 	}
 
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+	}
+
 	server := imapserver.New(&imapserver.Options{
 		NewSession: func(conn *imapserver.Conn) (imapserver.Session, *imapserver.GreetingData, error) {
 			return imapsession.NewSession(backendClient, imapsession.WithLogger(logger)), nil, nil
 		},
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			MinVersion:   tls.VersionTLS12,
-		},
-		Logger: printfLogger{logger},
+		// No TLSConfig here on purpose. Options.TLSConfig exists only to
+		// enable STARTTLS, and this listener is implicit TLS on 993, so
+		// STARTTLS has nothing to offer. Leaving it set would be actively
+		// wrong now: go-imap decides whether a connection is already
+		// encrypted with a `c.conn.(*tls.Conn)` type assertion, the ID
+		// proxy below wraps that connection, and the assertion therefore
+		// fails — so the server would advertise STARTTLS on a connection
+		// that is already TLS.
+		//
+		// InsecureAuth is set for the same reason, not because anything is
+		// cleartext: canAuth() uses that same defeated type assertion and
+		// would otherwise refuse LOGIN on a perfectly encrypted link. The
+		// guarantee it normally provides is reinstated by the wrapped
+		// listener, which by default drops any connection that is not a
+		// *tls.Conn before go-imap can see it.
+		InsecureAuth: true,
+		Logger:       printfLogger{logger},
+		// At debug level, dump the whole protocol conversation. Real mail
+		// clients issue commands no unit test thinks to send, and the useful
+		// failure detail is almost always the exact line the client choked on.
+		//
+		// SECURITY: this writes LOGIN lines, so it prints app passwords in
+		// clear. Debug level only, and never in production.
+		DebugWriter: debugWriter(cfg.LogLevel),
 	})
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Listen for TLS ourselves rather than using ListenAndServeTLS, so the
+	// accepted connections can be wrapped. The wrapper answers the RFC 2971
+	// ID command, which go-imap does not implement and whose arrival before
+	// LOGIN otherwise drops the connection — see internal/imap/idproxy.go.
+	// Order matters: TLS terminates first, so the proxy sees plaintext IMAP.
+	listener, err := tls.Listen("tcp", cfg.IMAPAddr, tlsConfig)
+	if err != nil {
+		return fmt.Errorf("listening on %s: %w", cfg.IMAPAddr, err)
+	}
+
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- server.ListenAndServeTLS(cfg.IMAPAddr)
+		errCh <- server.Serve(imapsession.WrapListener(listener))
 	}()
 
 	select {
@@ -94,7 +138,7 @@ func run() error {
 	case <-ctx.Done():
 		logger.Info("shutdown signal received, closing listener")
 		closeErr := server.Close()
-		<-errCh // wait for ListenAndServeTLS to return
+		<-errCh // wait for Serve to return
 		if closeErr != nil {
 			return fmt.Errorf("closing imap server: %w", closeErr)
 		}
@@ -130,4 +174,14 @@ type printfLogger struct {
 
 func (p printfLogger) Printf(format string, args ...interface{}) {
 	p.l.Error(fmt.Sprintf(format, args...))
+}
+
+// debugWriter returns a writer for go-imap's protocol trace, or nil to disable
+// it. Enabled only at debug level: the trace contains LOGIN lines and therefore
+// app passwords in clear.
+func debugWriter(levelName string) io.Writer {
+	if strings.ToLower(strings.TrimSpace(levelName)) != "debug" {
+		return nil
+	}
+	return os.Stderr
 }
