@@ -8,11 +8,13 @@ import { jwtVerify, createRemoteJWKSet } from "jose";
 import { createRequestHandler } from "react-router";
 import { app as apiApp, receiveEmail } from "./index";
 import { EmailMCP } from "./mcp";
+import { imapApi, IMAP_API_BASE } from "./routes/imap-api";
 import type { Env } from "./types";
 
 export { MailboxDO } from "./durableObject";
 export { EmailAgent } from "./agent";
 export { EmailMCP } from "./mcp";
+export { ImapAuthRateLimitDO } from "./durableObject/authRateLimit";
 
 declare module "react-router" {
 	export interface AppLoadContext {
@@ -77,6 +79,17 @@ app.use("*", async (c, next) => {
 
 	// Authorization model note: once a teammate passes the shared Cloudflare
 	// Access policy, they can access all mailboxes in this app by design.
+	//
+	// Service tokens: the IMAP gateway authenticates with a Cloudflare Access
+	// service token (CF-Access-Client-Id / CF-Access-Client-Secret). Access
+	// validates the pair at the edge and mints the same cf-access-jwt-assertion,
+	// but a service-token JWT carries `common_name` instead of `email` and has
+	// no identity claims at all. The verification above checks only the
+	// signature, issuer and audience and never reads an identity claim, so it
+	// accepts service-token JWTs as-is — no change needed. Do not add an
+	// `email`-claim check here without exempting service tokens, or the gateway
+	// breaks. The Access application policy must include an allow rule for the
+	// gateway's service token (action "Service Auth", selector "Service Token").
 	return next();
 });
 
@@ -92,6 +105,13 @@ app.all("/mcp/*", async (c) => {
 
 // Mount the API routes
 app.route("/", apiApp);
+
+// IMAP gateway API — must be before the React Router catch-all, which would
+// otherwise swallow it and answer with the SPA shell. Mounted after apiApp so
+// that apiApp's `/api/*` CORS middleware (registered earlier, therefore
+// composed ahead of these handlers) applies to it too. Sits inside the Access
+// middleware registered at the top of this file.
+app.route(IMAP_API_BASE, imapApi);
 
 // Agent WebSocket routing - must be before React Router catch-all
 app.all("/agents/*", async (c) => {
