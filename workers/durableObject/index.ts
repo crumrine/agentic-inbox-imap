@@ -87,6 +87,10 @@ interface EmailData {
 	thread_id?: string | null;
 	message_id?: string | null;
 	raw_headers?: string | null;
+	/** R2 key for the raw RFC822 message (see workers/lib/raw-mime.ts). Null if storage failed or wasn't attempted. */
+	raw_key?: string | null;
+	/** Byte length of the raw RFC822 message. */
+	rfc822_size?: number | null;
 }
 
 interface AttachmentData {
@@ -590,7 +594,16 @@ export class MailboxDO extends DurableObject<Env> {
 		try {
 			const result = this.db
 				.insert(schema.folders)
-				.values({ id, name, is_deletable })
+				.values({
+					id,
+					name,
+					is_deletable,
+					// UIDVALIDITY is stamped once, at folder creation, and never
+					// touched again -- IMAP clients treat a change as "throw away
+					// everything you cached for this folder".
+					uid_validity: sql<number>`strftime('%s','now')`,
+					uid_next: 1,
+				})
 				.returning({ id: schema.folders.id, name: schema.folders.name })
 				.get();
 			return { ...result, unreadCount: 0 };
@@ -631,6 +644,37 @@ export class MailboxDO extends DurableObject<Env> {
 		return true;
 	}
 
+	/**
+	 * Allocate the next UID for a folder.
+	 *
+	 * UIDs are per FOLDER, not per mailbox: `inbox` and `sent` each run
+	 * their own sequence starting at 1.
+	 *
+	 * This is a read-modify-write of folders.uid_next, so it is expressed
+	 * as a single `UPDATE ... RETURNING` statement. SQLite's RETURNING
+	 * yields the *post*-update value, so the UID handed out is one less
+	 * than what comes back. Doing it in one statement (and never awaiting
+	 * mid-allocation) means no other request can interleave and observe
+	 * the same uid_next.
+	 *
+	 * uid_next only ever increases. Deleting a message does not give its
+	 * UID back.
+	 */
+	#allocateUid(folderId: string): number {
+		const allocated = this.db
+			.update(schema.folders)
+			.set({ uid_next: sql<number>`${schema.folders.uid_next} + 1` })
+			.where(eq(schema.folders.id, folderId))
+			.returning({ uid_next: schema.folders.uid_next })
+			.get();
+
+		if (!allocated) {
+			throw new Error(`allocateUid: folder "${folderId}" not found`);
+		}
+
+		return allocated.uid_next - 1;
+	}
+
 	async moveEmail(id: string, folderId: string) {
 		const folder = this.db
 			.select({ id: schema.folders.id })
@@ -640,9 +684,25 @@ export class MailboxDO extends DurableObject<Env> {
 
 		if (!folder) return false;
 
+		const current = this.db
+			.select({ folder_id: schema.emails.folder_id })
+			.from(schema.emails)
+			.where(eq(schema.emails.id, id))
+			.get();
+
+		// Unknown id, or already in the target folder: nothing to renumber.
+		// (Historically this returned true for a missing id; keep that.)
+		if (!current || current.folder_id === folderId) {
+			return true;
+		}
+
+		// A move retires the UID in the source folder and mints a brand new
+		// one in the target. The source UID is never reused.
+		const uid = this.#allocateUid(folderId);
+
 		this.db
 			.update(schema.emails)
-			.set({ folder_id: folderId })
+			.set({ folder_id: folderId, uid })
 			.where(eq(schema.emails.id, id))
 			.run();
 
@@ -841,6 +901,11 @@ export class MailboxDO extends DurableObject<Env> {
 		const folderId = folderRow.id;
 		const isSent = folderId === Folders.SENT;
 
+		// Allocate the UID immediately before the INSERT, with no await in
+		// between, so the allocation and the row that owns it cannot be
+		// separated by another request.
+		const uid = this.#allocateUid(folderId);
+
 		// Sent emails are always read — the sender obviously knows what they wrote.
 		// This prevents sent replies from inflating thread_unread_count.
 		this.db
@@ -862,6 +927,9 @@ export class MailboxDO extends DurableObject<Env> {
 				thread_id: email.thread_id ?? null,
 				message_id: email.message_id ?? null,
 				raw_headers: email.raw_headers ?? null,
+				raw_key: email.raw_key ?? null,
+				rfc822_size: email.rfc822_size ?? null,
+				uid,
 			})
 			.run();
 
@@ -869,4 +937,622 @@ export class MailboxDO extends DurableObject<Env> {
 			this.db.insert(schema.attachments).values(attachments).run();
 		}
 	}
+
+	// ── IMAP read API (raw SQL — see the type block below this class) ──
+	//
+	// These three methods back `workers/routes/imap-api.ts`, which the Go IMAP
+	// gateway consumes. Two rules shape all of them:
+	//
+	//   1. Nothing here touches R2. A mail client issuing FETCH over a 5,000
+	//      message folder must cost SQLite work and nothing else, so every
+	//      figure an IMAP FETCH needs is either a column or derived in SQL.
+	//   2. Counts come from aggregates, never from loading rows and counting
+	//      them in JS.
+
+	/**
+	 * Every folder with its IMAP counts. One query, all aggregates in SQL.
+	 *
+	 * `recent` is always 0: \Recent means "arrived since some other session
+	 * last looked", and this Worker has no session state to answer that from.
+	 * RFC 9051 dropped \Recent entirely and the gateway already reports
+	 * NumRecent 0 on SELECT, so 0 is the consistent answer rather than a
+	 * guess dressed up as a count.
+	 */
+	async imapFolders(): Promise<ImapFolder[]> {
+		const rows = [
+			...this.ctx.storage.sql.exec(
+				`SELECT f.id                                AS id,
+				        f.name                              AS name,
+				        COALESCE(f.uid_validity, 1)         AS uid_validity,
+				        COALESCE(f.uid_next, 1)             AS uid_next,
+				        COALESCE(c.exists_count, 0)         AS exists_count,
+				        COALESCE(c.unseen_count, 0)         AS unseen_count
+				   FROM folders f
+				   LEFT JOIN (
+				        SELECT folder_id,
+				               COUNT(*)                                          AS exists_count,
+				               SUM(CASE WHEN COALESCE(read, 0) = 0 THEN 1 ELSE 0 END) AS unseen_count
+				          FROM emails
+				         WHERE uid IS NOT NULL
+				         GROUP BY folder_id
+				   ) c ON c.folder_id = f.id
+				  ORDER BY f.id`,
+			),
+		] as unknown as {
+			id: string;
+			name: string;
+			uid_validity: number;
+			uid_next: number;
+			exists_count: number;
+			unseen_count: number;
+		}[];
+
+		return rows.map((row) => ({
+			id: row.id,
+			name: row.name,
+			uidValidity: Number(row.uid_validity),
+			uidNext: Number(row.uid_next),
+			exists: Number(row.exists_count),
+			unseen: Number(row.unseen_count),
+			recent: 0,
+		}));
+	}
+
+	/**
+	 * A page of message metadata for one folder, by ascending UID.
+	 *
+	 * `folderKey` is the folder **id** (`inbox`, `sent`, …) — that is what the
+	 * gateway puts in the URL. A display name is accepted too, case
+	 * insensitively, purely so a hand-typed request does not 404.
+	 *
+	 * Returns null when the folder does not exist, which the route turns into
+	 * a 404. An empty folder returns a page with no messages, not null.
+	 */
+	async imapMessages(
+		folderKey: string,
+		options: { sinceUid?: number; limit?: number } = {},
+	): Promise<ImapMessagesPage | null> {
+		const folder = this.#imapFolderRow(folderKey);
+		if (!folder) return null;
+
+		const sinceUid = Math.max(0, Math.trunc(options.sinceUid ?? 0));
+		const limit = clampImapLimit(options.limit);
+		const isDraftFolder = folder.id === Folders.DRAFT;
+
+		const rows = [
+			...this.ctx.storage.sql.exec(
+				`SELECT e.uid                                AS uid,
+				        COALESCE(e.read, 0)                  AS read,
+				        COALESCE(e.starred, 0)               AS starred,
+				        COALESCE(e.answered, 0)              AS answered,
+				        COALESCE(e.deleted, 0)               AS deleted,
+				        e.flags                              AS flags,
+				        e.date                               AS date,
+				        e.subject                            AS subject,
+				        e.sender                             AS sender,
+				        e.recipient                          AS recipient,
+				        e.cc                                 AS cc,
+				        e.message_id                         AS message_id,
+				        e.in_reply_to                        AS in_reply_to,
+				        e.rfc822_size                        AS rfc822_size,
+				        e.raw_key                            AS raw_key,
+				        ${IMAP_SIZE_ESTIMATE_SQL}            AS size_estimate,
+				        ${imapHeaderSql("date")}             AS hdr_date,
+				        ${imapHeaderSql("from")}             AS hdr_from,
+				        ${imapHeaderSql("to")}               AS hdr_to,
+				        ${imapHeaderSql("cc")}               AS hdr_cc
+				   FROM emails e
+				  WHERE e.folder_id = ?1
+				    AND e.uid IS NOT NULL
+				    AND e.uid >= ?2
+				  ORDER BY e.uid ASC
+				  LIMIT ?3`,
+				folder.id,
+				sinceUid,
+				limit,
+			),
+		] as unknown as ImapMessageRow[];
+
+		return {
+			messages: rows.map((row) => imapMessageFromRow(row, isDraftFolder)),
+			uidNext: Number(folder.uid_next),
+		};
+	}
+
+	/**
+	 * Everything needed to serve one message's raw bytes: the R2 key when the
+	 * message has stored raw MIME, and the fields to rebuild an equivalent
+	 * message when it does not (see the legacy path in the route).
+	 *
+	 * The three outcomes are distinguished so the route can answer "no such
+	 * folder" and "no such message" differently without either of them
+	 * revealing an R2 key or any other internal detail.
+	 */
+	async imapRawSource(folderKey: string, uid: number): Promise<ImapRawSourceResult> {
+		const folder = this.#imapFolderRow(folderKey);
+		if (!folder) return { status: "no-folder" };
+
+		const row = [
+			...this.ctx.storage.sql.exec(
+				`SELECT e.id                      AS id,
+				        e.raw_key                 AS raw_key,
+				        e.message_id              AS message_id,
+				        e.subject                 AS subject,
+				        e.sender                  AS sender,
+				        e.recipient               AS recipient,
+				        e.cc                      AS cc,
+				        e.bcc                     AS bcc,
+				        e.date                    AS date,
+				        e.body                    AS body,
+				        e.in_reply_to             AS in_reply_to,
+				        e.email_references        AS email_references,
+				        ${imapHeaderSql("date")}  AS hdr_date,
+				        ${imapHeaderSql("from")}  AS hdr_from,
+				        ${imapHeaderSql("to")}    AS hdr_to,
+				        ${imapHeaderSql("cc")}    AS hdr_cc
+				   FROM emails e
+				  WHERE e.folder_id = ?1 AND e.uid = ?2
+				  LIMIT 1`,
+				folder.id,
+				Math.trunc(uid),
+			),
+		][0] as unknown as ImapRawRow | undefined;
+
+		if (!row) return { status: "no-message" };
+
+		const attachments = [
+			...this.ctx.storage.sql.exec(
+				`SELECT id, filename, mimetype, size, content_id, disposition
+				   FROM attachments
+				  WHERE email_id = ?1
+				  ORDER BY id`,
+				row.id,
+			),
+		] as unknown as ImapRawAttachment[];
+
+		const from = parseAddressList(row.hdr_from ?? row.sender ?? "")[0] ?? null;
+
+		return {
+			status: "ok",
+			message: {
+				id: row.id,
+				rawKey: row.raw_key ?? null,
+				messageId: row.message_id ?? row.id,
+				subject: row.subject ?? "",
+				from,
+				toHeader: row.hdr_to ?? row.recipient ?? null,
+				ccHeader: row.hdr_cc ?? row.cc ?? null,
+				bccHeader: row.bcc ?? null,
+				internalDate: toRfc3339(row.date),
+				dateHeader: row.hdr_date ?? null,
+				body: row.body ?? "",
+				inReplyTo: row.in_reply_to ?? null,
+				references: parseJsonStringArray(row.email_references),
+				attachments: attachments.map((a) => ({
+					id: a.id,
+					filename: a.filename,
+					mimetype: a.mimetype,
+					size: Number(a.size),
+					content_id: a.content_id ?? null,
+					disposition: a.disposition ?? null,
+				})),
+			},
+		};
+	}
+
+	/** Resolve a folder by id (canonical) or, tolerantly, by display name. */
+	#imapFolderRow(folderKey: string): { id: string; uid_next: number } | undefined {
+		return [
+			...this.ctx.storage.sql.exec(
+				`SELECT id, COALESCE(uid_next, 1) AS uid_next
+				   FROM folders
+				  WHERE id = ?1 OR lower(id) = lower(?1) OR lower(name) = lower(?1)
+				  ORDER BY CASE WHEN id = ?1 THEN 0 ELSE 1 END
+				  LIMIT 1`,
+				folderKey,
+			),
+		][0] as unknown as { id: string; uid_next: number } | undefined;
+	}
+}
+
+// ── IMAP read model ──────────────────────────────────────────────────
+//
+// Shapes here are wire types: they are serialised verbatim by
+// workers/routes/imap-api.ts and decoded by the Go structs in
+// gateway/internal/backend/types.go. Field names and casing must match those
+// struct tags exactly — renaming one here silently breaks the gateway, since
+// encoding/json just leaves the Go field zero.
+
+/**
+ * Hard ceiling on `limit` for the message-metadata endpoint. A caller cannot
+ * ask for more than this many rows in one page no matter what it sends, which
+ * is what keeps a single request from turning into an unbounded result set.
+ */
+export const IMAP_MESSAGES_MAX_LIMIT = 1000;
+
+/** Bytes added to a legacy message's size estimate for MIME scaffolding. */
+const IMAP_LEGACY_MIME_OVERHEAD_BYTES = 512;
+
+export interface ImapFolder {
+	id: string;
+	name: string;
+	uidValidity: number;
+	uidNext: number;
+	exists: number;
+	unseen: number;
+	recent: number;
+}
+
+export interface ImapAddress {
+	name: string;
+	address: string;
+}
+
+export interface ImapEnvelope {
+	subject: string;
+	from: ImapAddress[];
+	to: ImapAddress[];
+	cc: ImapAddress[];
+	messageId: string;
+	inReplyTo: string;
+	/** The `Date` **header**, not the internal date. See imapMessageFromRow. */
+	date: string;
+}
+
+export interface ImapMessage {
+	uid: number;
+	flags: string[];
+	/** RFC 3339. Receive time, which is what IMAP INTERNALDATE means. */
+	internalDate: string;
+	rfc822Size: number;
+	envelope: ImapEnvelope;
+	/**
+	 * True when the exact bytes of this message are stored in R2. False means
+	 * the raw endpoint will synthesize an equivalent message instead, so the
+	 * bytes are a faithful reconstruction rather than the originals — DKIM
+	 * will not verify against them and rfc822Size is an estimate.
+	 */
+	hasRaw: boolean;
+}
+
+export interface ImapMessagesPage {
+	messages: ImapMessage[];
+	uidNext: number;
+}
+
+export interface ImapRawAttachment {
+	id: string;
+	filename: string;
+	mimetype: string;
+	size: number;
+	content_id: string | null;
+	disposition: string | null;
+}
+
+export interface ImapRawSource {
+	id: string;
+	/** R2 key of the stored raw message, or null for a legacy row. */
+	rawKey: string | null;
+	messageId: string;
+	subject: string;
+	from: ImapAddress | null;
+	toHeader: string | null;
+	ccHeader: string | null;
+	bccHeader: string | null;
+	internalDate: string;
+	dateHeader: string | null;
+	body: string;
+	inReplyTo: string | null;
+	references: string[];
+	attachments: ImapRawAttachment[];
+}
+
+export type ImapRawSourceResult =
+	| { status: "no-folder" }
+	| { status: "no-message" }
+	| { status: "ok"; message: ImapRawSource };
+
+/** Row shape of the metadata query in MailboxDO.imapMessages. */
+interface ImapMessageRow {
+	uid: number;
+	read: number;
+	starred: number;
+	answered: number;
+	deleted: number;
+	flags: string | null;
+	date: string | null;
+	subject: string | null;
+	sender: string | null;
+	recipient: string | null;
+	cc: string | null;
+	message_id: string | null;
+	in_reply_to: string | null;
+	rfc822_size: number | null;
+	raw_key: string | null;
+	size_estimate: number;
+	hdr_date: string | null;
+	hdr_from: string | null;
+	hdr_to: string | null;
+	hdr_cc: string | null;
+}
+
+/** Row shape of the raw-source query in MailboxDO.imapRawSource. */
+interface ImapRawRow {
+	id: string;
+	raw_key: string | null;
+	message_id: string | null;
+	subject: string | null;
+	sender: string | null;
+	recipient: string | null;
+	cc: string | null;
+	bcc: string | null;
+	date: string | null;
+	body: string | null;
+	in_reply_to: string | null;
+	email_references: string | null;
+	hdr_date: string | null;
+	hdr_from: string | null;
+	hdr_to: string | null;
+	hdr_cc: string | null;
+}
+
+/**
+ * Size fallback for rows predating raw-MIME storage (`rfc822_size` NULL).
+ *
+ * Derived entirely in SQL from column lengths so the metadata endpoint keeps
+ * its promise never to read R2: header JSON bytes + body bytes + the base64
+ * expansion of the attachment bytes + a flat allowance for MIME scaffolding.
+ * It is an estimate and cannot be authoritative — the only authoritative
+ * answer would be building the message, which means reading attachments back
+ * out of R2.
+ */
+const IMAP_SIZE_ESTIMATE_SQL = `(
+	LENGTH(CAST(COALESCE(e.raw_headers, '') AS BLOB))
+	+ LENGTH(CAST(COALESCE(e.body, '') AS BLOB))
+	+ ((SELECT COALESCE(SUM(a.size), 0) FROM attachments a WHERE a.email_id = e.id) * 4 + 2) / 3
+	+ ${IMAP_LEGACY_MIME_OVERHEAD_BYTES}
+)`;
+
+/**
+ * SQL that pulls one header value out of the `raw_headers` JSON.
+ *
+ * `raw_headers` is a JSON array of `{key, value}` written by the inbound
+ * parser and the send paths, with lower-cased keys. Doing the lookup in SQL
+ * rather than shipping the whole header blob per row is the difference
+ * between a few hundred bytes and several KB of DKIM/Received noise per
+ * message on a folder listing.
+ *
+ * Both guards matter: `json_valid`/`json_type` keeps a NULL or non-array
+ * value from raising, and the inner CASE keeps `json_extract` off any array
+ * element that is not an object. `name` is a literal from this module only —
+ * never caller input — so it is safe to interpolate.
+ */
+function imapHeaderSql(name: string): string {
+	return `(CASE WHEN json_valid(e.raw_headers) AND json_type(e.raw_headers) = 'array' THEN (
+		SELECT json_extract(h.value, '$.value')
+		  FROM json_each(e.raw_headers) AS h
+		 WHERE (CASE WHEN h.type = 'object'
+		             THEN lower(json_extract(h.value, '$.key'))
+		        END) = '${name}'
+		 LIMIT 1
+	) END)`;
+}
+
+/** Clamp a caller-supplied page size into [1, IMAP_MESSAGES_MAX_LIMIT]. */
+export function clampImapLimit(limit: number | undefined): number {
+	if (limit === undefined || !Number.isFinite(limit)) return IMAP_MESSAGES_MAX_LIMIT;
+	return Math.min(Math.max(1, Math.trunc(limit)), IMAP_MESSAGES_MAX_LIMIT);
+}
+
+/**
+ * Normalise a stored date into strict RFC 3339.
+ *
+ * This is not cosmetic. `internalDate` decodes into a Go `time.Time`, and a
+ * string Go cannot parse fails the whole JSON decode — one bad legacy row
+ * would take down the entire folder listing. Anything unparseable becomes the
+ * epoch, which is wrong but inert.
+ */
+export function toRfc3339(value: string | null | undefined): string {
+	if (value) {
+		const parsed = new Date(value);
+		if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+	}
+	return new Date(0).toISOString();
+}
+
+function parseJsonStringArray(value: string | null | undefined): string[] {
+	if (!value) return [];
+	try {
+		const parsed = JSON.parse(value) as unknown;
+		if (!Array.isArray(parsed)) return [];
+		return parsed.filter((v): v is string => typeof v === "string" && v.trim() !== "");
+	} catch {
+		return [];
+	}
+}
+
+// ── RFC 2047 encoded-words ────────────────────────────────────────────
+
+/**
+ * Decode `=?UTF-8?B?...?=` / `?Q?` words in a header value.
+ *
+ * Display names in stored headers are raw wire bytes, so without this a
+ * non-ASCII sender shows up as mojibake in every mail client. Any word that
+ * fails to decode (unknown charset, bad base64) is left exactly as it was.
+ */
+export function decodeEncodedWords(value: string): string {
+	if (!value.includes("=?")) return value;
+	// Whitespace between two adjacent encoded-words is not part of the text.
+	const joined = value.replace(/(\?=)\s+(?==\?)/g, "$1");
+	return joined.replace(
+		/=\?([^?]+)\?([bBqQ])\?([^?]*)\?=/g,
+		(match, charset: string, encoding: string, text: string) => {
+			try {
+				let bytes: Uint8Array;
+				if (encoding.toLowerCase() === "b") {
+					const binary = atob(text.replace(/\s+/g, ""));
+					bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+				} else {
+					const decoded = text
+						.replace(/_/g, " ")
+						.replace(/=([0-9A-Fa-f]{2})/g, (_m, hex: string) =>
+							String.fromCharCode(Number.parseInt(hex, 16)),
+						);
+					bytes = Uint8Array.from(decoded, (ch) => ch.charCodeAt(0));
+				}
+				const label = charset.split("*")[0].trim().toLowerCase() || "utf-8";
+				return new TextDecoder(label).decode(bytes);
+			} catch {
+				return match;
+			}
+		},
+	);
+}
+
+// ── Address lists ──────────────────────────────────────────────────────
+
+/**
+ * Split an address list on the commas that actually separate addresses —
+ * not the ones inside `"Lastname, Firstname"` or inside a comment.
+ */
+function splitAddressList(value: string): string[] {
+	const parts: string[] = [];
+	let current = "";
+	let quoted = false;
+	let depth = 0;
+
+	for (let i = 0; i < value.length; i++) {
+		const ch = value[i];
+		if (quoted) {
+			if (ch === "\\" && i + 1 < value.length) {
+				current += ch + value[++i];
+				continue;
+			}
+			if (ch === '"') quoted = false;
+			current += ch;
+			continue;
+		}
+		if (ch === '"') {
+			quoted = true;
+			current += ch;
+			continue;
+		}
+		if (ch === "<" || ch === "(") depth++;
+		else if (ch === ">" || ch === ")") depth = Math.max(0, depth - 1);
+		else if (ch === "," && depth === 0) {
+			parts.push(current);
+			current = "";
+			continue;
+		}
+		current += ch;
+	}
+	parts.push(current);
+
+	return parts.map((p) => p.trim()).filter((p) => p !== "");
+}
+
+/**
+ * Parse `Name <addr@host>, addr2@host` into envelope addresses.
+ *
+ * Handles the two shapes actually stored: real `From`/`To` headers (which may
+ * carry display names and encoded-words) and the bare comma-joined address
+ * columns. Entries with no address part are dropped — the gateway cannot
+ * represent them in an IMAP envelope anyway.
+ */
+export function parseAddressList(value: string | null | undefined): ImapAddress[] {
+	if (!value) return [];
+	const out: ImapAddress[] = [];
+
+	for (const part of splitAddressList(value)) {
+		// Group syntax ("Team: a@x, b@y;") — keep the members, drop the label.
+		const bracket = /^(.*?)<([^>]*)>[^>]*$/.exec(part);
+		let name = "";
+		let address = "";
+		if (bracket) {
+			name = bracket[1].trim();
+			address = bracket[2].trim();
+		} else {
+			address = part.replace(/\((?:[^()\\]|\\.)*\)/g, "").trim();
+		}
+		if (!address) continue;
+
+		name = decodeEncodedWords(name).trim();
+		if (name.length >= 2 && name.startsWith('"') && name.endsWith('"')) {
+			name = name.slice(1, -1).replace(/\\(.)/g, "$1");
+		}
+		out.push({ name, address });
+	}
+
+	return out;
+}
+
+// ── Flags ──────────────────────────────────────────────────────────────
+
+/**
+ * The IMAP FLAGS list for a row.
+ *
+ * Four of the five system flags are boolean columns; \Draft is a property of
+ * the containing folder, not of the row. Custom keywords come from the
+ * `flags` JSON column and are appended, deduped case-insensitively (RFC 9051
+ * §2.3.2 makes keywords case-insensitive) so a stored "\\seen" cannot show up
+ * twice alongside the derived "\\Seen".
+ */
+export function deriveImapFlags(
+	row: {
+		read: number | null;
+		starred: number | null;
+		answered: number | null;
+		deleted: number | null;
+		flags: string | null;
+	},
+	isDraftFolder: boolean,
+): string[] {
+	const flags: string[] = [];
+	const seen = new Set<string>();
+	const add = (flag: string) => {
+		const key = flag.toLowerCase();
+		if (seen.has(key)) return;
+		seen.add(key);
+		flags.push(flag);
+	};
+
+	if (row.read) add("\\Seen");
+	if (row.answered) add("\\Answered");
+	if (row.starred) add("\\Flagged");
+	if (row.deleted) add("\\Deleted");
+	if (isDraftFolder) add("\\Draft");
+	for (const keyword of parseJsonStringArray(row.flags)) add(keyword.trim());
+
+	return flags;
+}
+
+/** Map one metadata row onto the wire shape the gateway decodes. */
+function imapMessageFromRow(row: ImapMessageRow, isDraftFolder: boolean): ImapMessage {
+	const internalDate = toRfc3339(row.date);
+
+	// INTERNALDATE and the envelope date are different things and are kept
+	// that way: `date` is receive time, the envelope date is the message's own
+	// `Date:` header out of raw_headers. Falling back to internalDate when the
+	// header is missing is a last resort, not the normal path.
+	const envelopeDate = row.hdr_date?.trim() ? row.hdr_date.trim() : internalDate;
+
+	return {
+		uid: Number(row.uid),
+		flags: deriveImapFlags(row, isDraftFolder),
+		internalDate,
+		rfc822Size: Number(row.rfc822_size ?? row.size_estimate ?? 0),
+		envelope: {
+			subject: row.subject ?? "",
+			// Prefer the stored headers, which are the same bytes the raw
+			// endpoint serves, so ENVELOPE and BODY[HEADER] cannot disagree.
+			// The columns are only a fallback for rows with no headers.
+			from: parseAddressList(row.hdr_from ?? row.sender),
+			to: parseAddressList(row.hdr_to ?? row.recipient),
+			cc: parseAddressList(row.hdr_cc ?? row.cc),
+			messageId: row.message_id ?? "",
+			inReplyTo: row.in_reply_to ?? "",
+			date: envelopeDate,
+		},
+		hasRaw: row.raw_key !== null && row.raw_key !== undefined,
+	};
 }

@@ -8,6 +8,15 @@ export const folders = sqliteTable("folders", {
 	id: text("id").primaryKey(),
 	name: text("name").notNull().unique(),
 	is_deletable: integer("is_deletable").notNull().default(1),
+	/**
+	 * IMAP UIDVALIDITY. Set once when the folder is created and never
+	 * changed. Unix seconds. Nullable only because SQLite's ALTER TABLE
+	 * ADD COLUMN cannot default to a non-constant expression; migration
+	 * 9 backfills every pre-existing folder.
+	 */
+	uid_validity: integer("uid_validity"),
+	/** Next UID to hand out in this folder. Monotonic; never decreases. */
+	uid_next: integer("uid_next").notNull().default(1),
 });
 
 export const emails = sqliteTable("emails", {
@@ -29,6 +38,21 @@ export const emails = sqliteTable("emails", {
 	thread_id: text("thread_id"),
 	message_id: text("message_id"),
 	raw_headers: text("raw_headers"),
+	/**
+	 * IMAP UID. Unique *within a folder* (see idx_emails_folder_uid),
+	 * ascending, never reused. Moving a message to another folder
+	 * assigns a new UID there and retires the old one.
+	 */
+	uid: integer("uid"),
+	/** IMAP \Answered */
+	answered: integer("answered").default(0),
+	/** IMAP \Deleted -- pre-EXPUNGE marker, not an actual row deletion. */
+	deleted: integer("deleted").default(0),
+	/** JSON array of custom IMAP keywords. */
+	flags: text("flags"),
+	rfc822_size: integer("rfc822_size"),
+	/** R2 key for the raw RFC822 message. NULL for legacy messages. */
+	raw_key: text("raw_key"),
 });
 
 export const attachments = sqliteTable("attachments", {

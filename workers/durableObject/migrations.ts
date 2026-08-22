@@ -168,4 +168,64 @@ export const mailboxMigrations: Migration[] = [
             CREATE INDEX IF NOT EXISTS idx_emails_folder_date ON emails(folder_id, date DESC);
         `,
 	},
+	{
+		// IMAP UID + flag support (DEV-663).
+		//
+		// No txn() wrapper: Cloudflare's DO runtime forbids SQL-level
+		// BEGIN TRANSACTION. applyMigrations() runs the whole statement
+		// batch inside state.storage.transactionSync(), so this is still
+		// atomic -- see the runner at the top of this file.
+		//
+		// Notes on the column definitions:
+		//   * SQLite cannot ADD COLUMN ... NOT NULL without a *constant*
+		//     DEFAULT, so uid_validity (a timestamp) is added nullable and
+		//     backfilled by the UPDATE below. MailboxDO.createFolder sets it
+		//     for every folder created after this migration.
+		//   * uid_next can use a constant DEFAULT 1, so it is NOT NULL.
+		//   * emails.uid is nullable at the SQL level (ADD COLUMN cannot
+		//     backfill a per-row value); the backfill immediately below fills
+		//     every existing row, and createEmail fills every new one.
+		//
+		// UIDs are per FOLDER, not per mailbox: the backfill ranks each
+		// folder's messages independently, ordered by the existing `date`
+		// column (ties broken by id so the ordering is deterministic), and
+		// then parks each folder's uid_next one past its highest uid.
+		name: "9_imap_uid_flags",
+		sql: `
+            ALTER TABLE folders ADD COLUMN uid_validity INTEGER;
+            ALTER TABLE folders ADD COLUMN uid_next INTEGER NOT NULL DEFAULT 1;
+
+            ALTER TABLE emails ADD COLUMN uid INTEGER;
+            ALTER TABLE emails ADD COLUMN answered INTEGER DEFAULT 0;
+            ALTER TABLE emails ADD COLUMN deleted INTEGER DEFAULT 0;
+            ALTER TABLE emails ADD COLUMN flags TEXT;
+            ALTER TABLE emails ADD COLUMN rfc822_size INTEGER;
+            ALTER TABLE emails ADD COLUMN raw_key TEXT;
+
+            UPDATE folders
+               SET uid_validity = strftime('%s','now')
+             WHERE uid_validity IS NULL;
+
+            UPDATE emails
+               SET uid = (
+                   SELECT COUNT(*)
+                     FROM emails AS e2
+                    WHERE e2.folder_id = emails.folder_id
+                      AND (
+                            COALESCE(e2.date, '') < COALESCE(emails.date, '')
+                         OR (COALESCE(e2.date, '') = COALESCE(emails.date, '')
+                             AND e2.id <= emails.id)
+                          )
+               );
+
+            UPDATE folders
+               SET uid_next = COALESCE(
+                   (SELECT MAX(uid) + 1 FROM emails WHERE emails.folder_id = folders.id),
+                   1
+               );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_emails_folder_uid
+                ON emails(folder_id, uid);
+        `,
+	},
 ];
