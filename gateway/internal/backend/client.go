@@ -29,6 +29,7 @@ const (
 	// Access service-token headers sent on every request.
 	headerAccessClientID     = "CF-Access-Client-Id"
 	headerAccessClientSecret = "CF-Access-Client-Secret"
+	headerCookie             = "Cookie"
 
 	// apiPrefix is the fixed path prefix for the IMAP gateway API.
 	apiPrefix = "/api/imap/v1"
@@ -56,6 +57,10 @@ type Client struct {
 	baseURL      *url.URL
 	clientID     string
 	clientSecret string
+
+	// accessCookie is an alternative to the service token, for local testing
+	// only. See WithAccessCookie.
+	accessCookie string
 	httpClient   *http.Client
 
 	// requestTimeout bounds JSON endpoints only; see defaultRequestTimeout.
@@ -165,8 +170,7 @@ func (c *Client) newRequest(ctx context.Context, method, path string, query url.
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set(headerAccessClientID, c.clientID)
-	req.Header.Set(headerAccessClientSecret, c.clientSecret)
+	c.applyAccessCredentials(req)
 	req.Header.Set("Accept", "application/json")
 	return req, nil
 }
@@ -349,4 +353,27 @@ func (c *Client) RawMessage(ctx context.Context, mailbox, folder string, uid uin
 	}
 
 	return &RawMessageReader{ReadCloser: resp.Body, Size: resp.ContentLength}, nil
+}
+
+// applyAccessCredentials attaches whichever Cloudflare Access credential is
+// configured. A service token is the supported production mechanism; the
+// cookie is a testing fallback (see WithAccessCookie).
+func (c *Client) applyAccessCredentials(req *http.Request) {
+	if c.accessCookie != "" {
+		req.Header.Set(headerCookie, c.accessCookie)
+		return
+	}
+	req.Header.Set(headerAccessClientID, c.clientID)
+	req.Header.Set(headerAccessClientSecret, c.clientSecret)
+}
+
+// WithAccessCookie authenticates to the Worker with a CF_Authorization cookie
+// instead of a service token.
+//
+// This exists for local testing before a service token is provisioned. It is
+// NOT suitable for production: the cookie is bound to one human's Access
+// identity, expires, and cannot be rotated independently of that person. The
+// value is the full cookie header, e.g. "CF_Authorization=ey...".
+func WithAccessCookie(cookie string) Option {
+	return func(c *Client) { c.accessCookie = cookie }
 }

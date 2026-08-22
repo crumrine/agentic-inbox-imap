@@ -21,6 +21,7 @@ const (
 	EnvInboxURL           = "AGENTIC_INBOX_URL"
 	EnvAccessClientID     = "AGENTIC_ACCESS_CLIENT_ID"
 	EnvAccessClientSecret = "AGENTIC_ACCESS_CLIENT_SECRET"
+	EnvAccessCookie       = "AGENTIC_ACCESS_COOKIE"
 	EnvIMAPAddr           = "AGENTIC_IMAP_ADDR"
 	EnvTLSCert            = "AGENTIC_TLS_CERT"
 	EnvTLSKey             = "AGENTIC_TLS_KEY"
@@ -47,6 +48,10 @@ type Config struct {
 	// service token sent on every request to the Worker.
 	AccessClientID     string
 	AccessClientSecret string
+
+	// AccessCookie is a testing-only alternative to the service token.
+	// See backend.WithAccessCookie.
+	AccessCookie string
 
 	// IMAPAddr is the address agentic-imapd listens on for IMAP
 	// connections, e.g. "100.64.1.2:993".
@@ -89,14 +94,28 @@ func load(lookup lookupFunc) (*Config, error) {
 		return nil, fmt.Errorf("config: %s must be an http(s) URL", EnvInboxURL)
 	}
 
-	clientID, ok := lookup(EnvAccessClientID)
-	if !ok || strings.TrimSpace(clientID) == "" {
-		return nil, fmt.Errorf("config: missing required environment variable %s", EnvAccessClientID)
-	}
+	// Cloudflare Access needs either a service token (production) or a
+	// CF_Authorization cookie (local testing, see AccessCookie). Requiring
+	// one of the two rather than the token specifically is what lets the
+	// gateway run before a service token has been provisioned.
+	rawCookie, _ := lookup(EnvAccessCookie)
+	accessCookie := strings.TrimSpace(rawCookie)
 
-	clientSecret, ok := lookup(EnvAccessClientSecret)
-	if !ok || strings.TrimSpace(clientSecret) == "" {
-		return nil, fmt.Errorf("config: missing required environment variable %s", EnvAccessClientSecret)
+	rawClientID, _ := lookup(EnvAccessClientID)
+	rawClientSecret, _ := lookup(EnvAccessClientSecret)
+	clientID := strings.TrimSpace(rawClientID)
+	clientSecret := strings.TrimSpace(rawClientSecret)
+
+	hasToken := clientID != "" && clientSecret != ""
+	if accessCookie == "" && !hasToken {
+		return nil, fmt.Errorf(
+			"config: no Cloudflare Access credential. Set %s and %s, or %s for local testing",
+			EnvAccessClientID, EnvAccessClientSecret, EnvAccessCookie)
+	}
+	// A half-configured service token is a mistake worth naming rather than
+	// silently falling back to no credential at all.
+	if accessCookie == "" && (clientID != "") != (clientSecret != "") {
+		return nil, fmt.Errorf("config: %s and %s must both be set", EnvAccessClientID, EnvAccessClientSecret)
 	}
 
 	certFile, ok := lookup(EnvTLSCert)
@@ -140,6 +159,7 @@ func load(lookup lookupFunc) (*Config, error) {
 		InboxURL:           inboxURL,
 		AccessClientID:     clientID,
 		AccessClientSecret: clientSecret,
+		AccessCookie:       accessCookie,
 		IMAPAddr:           addr,
 		TLSCertFile:        certFile,
 		TLSKeyFile:         keyFile,
