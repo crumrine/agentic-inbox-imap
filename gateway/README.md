@@ -1,0 +1,168 @@
+# agentic-imapd
+
+A small, stateless IMAP/SMTP gateway for [agentic-inbox](../README.md).
+
+Cloudflare Workers cannot accept inbound TCP connections, so IMAP cannot
+terminate in the Worker. `agentic-imapd` is an always-on process - meant to
+run on a small VPS or home server on your [Tailscale](https://tailscale.com)
+network - that speaks IMAP (and, eventually, SMTP submission) to mail
+clients and calls the Worker's HTTP API as its only backing store.
+
+**It is stateless.** No mail, no database, no durable state on disk. The
+mailbox Durable Object in the Worker stays the single source of truth;
+`agentic-imapd` is a protocol translator in front of it.
+
+## Status
+
+Phase 1, read-only IMAP. Configuration, the backend HTTP client, the process
+entrypoint, deploy files, and the IMAP protocol session
+(`internal/imap.Session`) are all implemented.
+
+Serving now: CAPABILITY, NOOP, LOGOUT, AUTHENTICATE PLAIN, LOGIN, LIST, LSUB,
+STATUS, SELECT (read-only), EXAMINE, CLOSE, UNSELECT, SEARCH and FETCH
+(including ENVELOPE, BODYSTRUCTURE, BODY[...] with HEADER.FIELDS and partial
+ranges). `Poll` refreshes the selected folder append-only, so new mail appears
+after a client NOOP.
+
+Not served: STORE, APPEND, COPY, MOVE, EXPUNGE and IDLE all answer NO and keep
+the connection alive. Writes are phase 2 (Trellis DEV-670 through DEV-673) and
+IDLE needs a push channel from the Durable Object (DEV-674). SMTP submission
+(`internal/smtp`) is still an empty placeholder for phase 2.
+
+Nothing here has yet been exercised against a real mail client or a live
+Worker. Every test runs against a fake backend and an in-process go-imap
+server.
+
+## Why Tailscale-only
+
+`agentic-imapd` listens **only** on a Tailscale interface address
+(100.64.0.0/10) or loopback - never a public address. This is a deliberate
+security decision, not a temporary limitation:
+
+- No public port 993 means no credential-stuffing surface and no
+  abuse-monitoring burden.
+- TLS certificates come from `tailscale cert`, so there is no ACME/Let's
+  Encrypt path to operate, and no public DNS record is required.
+- Mail clients (or a client-side Tailscale-aware proxy) reach it over your
+  tailnet exactly like any other private service.
+
+This is enforced in code, not just by convention: `internal/config`
+resolves the configured listen address and refuses to start if it is not
+loopback or in the Tailscale CGNAT range, unless
+`AGENTIC_ALLOW_PUBLIC_BIND=true` is explicitly set. There is a unit test
+(`internal/config/config_test.go`) covering this guard.
+
+## Layout
+
+```
+gateway/
+  go.mod                     separate Go module: github.com/crumrine/agentic-inbox/gateway
+  cmd/agentic-imapd/main.go  entrypoint: load config, build backend client, start listener, graceful shutdown
+  internal/config/           configuration from environment, with validation and the public-bind guard
+  internal/backend/          typed HTTP client for the Worker's IMAP-gateway API
+  internal/imap/             read-only imapserver.Session: FETCH, SEARCH, append-only Poll
+  internal/smtp/             empty package placeholder (phase 2)
+  deploy/                    systemd unit + example env file
+```
+
+It is a separate Go module (its own `go.mod`) so the Node/TypeScript build
+in the rest of this repo never sees it, and `npm`/`vitest` never try to
+touch Go files.
+
+## Build
+
+Requires Go 1.27+.
+
+```sh
+cd gateway
+go build ./...
+go vet ./...
+go test ./...
+```
+
+Produces a single static binary at `./agentic-imapd` if you build the
+`cmd/agentic-imapd` package directly:
+
+```sh
+go build -o agentic-imapd ./cmd/agentic-imapd
+```
+
+## Dependencies
+
+Dependency surface is intentionally small - this is meant to be
+open-sourced, and every dependency is a maintenance and audit cost:
+
+- [`github.com/emersion/go-imap/v2`](https://github.com/emersion/go-imap)
+  **pinned at `v2.0.0-beta.8`**. The `imapserver` package has been pre-1.0
+  for a long time and has broken its API across beta releases before;
+  bumping this pin should be a deliberate, tested change, not a routine `go
+  get -u`. Pulls in `github.com/emersion/go-message` and
+  `github.com/emersion/go-sasl` transitively.
+- Everything else is the standard library. No config framework, no logging
+  framework (uses `log/slog`), no HTTP router (the backend client builds
+  requests by hand).
+
+## Configuration
+
+All configuration is environment variables, validated at startup - the
+process fails fast with an error naming the missing or invalid variable. No
+secret value is ever included in an error message or log line.
+
+| Variable | Required | Description |
+|---|---|---|
+| `AGENTIC_INBOX_URL` | yes | Base URL of the Worker, e.g. `https://mail.example.com` |
+| `AGENTIC_ACCESS_CLIENT_ID` | yes | Cloudflare Access service token client ID, sent as the `CF-Access-Client-Id` header on every request to the Worker |
+| `AGENTIC_ACCESS_CLIENT_SECRET` | yes | Cloudflare Access service token secret, sent as `CF-Access-Client-Secret` |
+| `AGENTIC_TLS_CERT` | yes | Path to a certificate from `tailscale cert` |
+| `AGENTIC_TLS_KEY` | yes | Path to the matching private key from `tailscale cert` |
+| `AGENTIC_IMAP_ADDR` | no | Listen address, `host:port`. If unset, `agentic-imapd` scans local interfaces for a `100.64.0.0/10` address and binds it on port 993. 993 is privileged, so the shipped systemd unit grants `CAP_NET_BIND_SERVICE`; set a port above 1024 here if you would rather drop that capability. |
+| `AGENTIC_LOG_LEVEL` | no | `debug` \| `info` (default) \| `warn` \| `error` |
+| `AGENTIC_ALLOW_PUBLIC_BIND` | no | `true` to disable the public-bind safety interlock. Leave unset in production. |
+
+See `deploy/agentic-imapd.env.example` for a filled-out template.
+
+## Deploy
+
+1. Build the binary (or cross-compile: `GOOS=linux GOARCH=arm64 go build -o
+   agentic-imapd ./cmd/agentic-imapd`) and copy it to the target host as
+   `/usr/local/bin/agentic-imapd`.
+2. Bring up Tailscale on the host and run `tailscale cert
+   <your-magicdns-name>` to get a cert/key pair. Point
+   `AGENTIC_TLS_CERT`/`AGENTIC_TLS_KEY` at them. `tailscale cert` refreshes
+   certificates as they approach expiry when run again (e.g. from a cron
+   job or timer) - `agentic-imapd` does not manage renewal itself.
+3. Create a Cloudflare Access service token for the Worker's `/api/imap/v1/`
+   routes and put its ID/secret in `AGENTIC_ACCESS_CLIENT_ID` /
+   `AGENTIC_ACCESS_CLIENT_SECRET`.
+4. Copy `deploy/agentic-imapd.env.example` to
+   `/etc/agentic-imapd/agentic-imapd.env`, fill it in, and `chmod 600` it
+   (it holds a secret).
+5. Copy `deploy/agentic-imapd.service` to
+   `/etc/systemd/system/agentic-imapd.service`, create the
+   `agentic-imapd` system user/group it runs as, then:
+
+   ```sh
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now agentic-imapd
+   ```
+
+The unit runs with heavy sandboxing (`ProtectSystem=strict`, no writable
+paths, and `CAP_NET_BIND_SERVICE` as its only capability) since the process
+is stateless and only needs outbound HTTPS to the Worker, inbound TLS on
+the tailnet, and read access to the cert/key files.
+
+That one capability exists because the default listen port is 993, which is
+privileged: without it a default install fails `bind(2)` with `EACCES` and
+restart-loops. If you set `AGENTIC_IMAP_ADDR` to a port above 1024 you can
+empty both `CapabilityBoundingSet=` and `AmbientCapabilities=` in the unit
+and run with no capabilities at all, at the cost of configuring a
+non-default port by hand in every mail client.
+
+## Requirements this gateway assumes
+
+- The host is on your Tailscale network (`tailscale up` has been run and
+  the interface has a `100.64.0.0/10` address).
+- The Worker exposes `/api/imap/v1/*` behind Cloudflare Access, and a
+  service token has been provisioned for this gateway.
+- Nothing else - no database, no local mail storage, no cron jobs. If the
+  process is killed and restarted, it comes back up with zero local state.
