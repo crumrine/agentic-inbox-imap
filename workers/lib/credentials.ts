@@ -34,8 +34,28 @@ import type { Env } from "../types";
  */
 export type CredentialEnv = Pick<Env, "BUCKET">;
 
-/** Current OWASP (2023 Password Storage Cheat Sheet) figure for PBKDF2-HMAC-SHA256. */
-export const PBKDF2_ITERATIONS = 600_000;
+/**
+ * Cloudflare Workers' WebCrypto refuses PBKDF2 above 100,000 iterations:
+ *
+ *   NotSupportedError: Pbkdf2 failed: iteration counts above 100000
+ *   are not supported (requested 600000).
+ *
+ * This is a hard platform ceiling, not a tuning choice. OWASP's current figure
+ * for PBKDF2-HMAC-SHA256 is 600,000, which we cannot reach here.
+ *
+ * That is acceptable *only* because app passwords are machine-generated with
+ * 100 bits of entropy (see randomPassword). At that strength an offline attack
+ * is infeasible regardless of iteration count, so the KDF is defence in depth
+ * rather than the thing standing between an attacker and the mailbox. If this
+ * ever accepts a user-chosen password, 100k is not enough and the hashing
+ * would need to move somewhere without this ceiling.
+ *
+ * Note that local workerd (the vitest pool) does NOT enforce this limit, so a
+ * value above it passes every test and fails only in production. PBKDF2_MAX
+ * exists so a test can assert the ceiling that the runtime will not.
+ */
+export const PBKDF2_MAX_ITERATIONS = 100_000;
+export const PBKDF2_ITERATIONS = 100_000;
 
 /** Derived key length in bits. Matches the SHA-256 output; no truncation. */
 export const DERIVED_KEY_BITS = 256;

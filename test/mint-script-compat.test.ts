@@ -19,13 +19,14 @@ import {
 	CREDENTIAL_ALGORITHM,
 	DERIVED_KEY_BITS,
 	PBKDF2_ITERATIONS,
+	PBKDF2_MAX_ITERATIONS,
 	credentialKey,
 	verifyAppPassword,
 } from "../workers/lib/credentials";
 
 /** Exactly what scripts/mint-app-password.mjs hardcodes. Keep in sync. */
 const SCRIPT = {
-	PBKDF2_ITERATIONS: 600_000,
+	PBKDF2_ITERATIONS: 100_000,
 	DERIVED_KEY_BITS: 256,
 	CREDENTIAL_ALGORITHM: "PBKDF2-HMAC-SHA256",
 	PASSWORD_ALPHABET: "abcdefghjkmnpqrstvwxyz0123456789",
@@ -95,5 +96,42 @@ describe("mint-app-password.mjs compatibility", () => {
 		// Dashes are presentation only, so the undashed form must work too.
 		expect(await verifyAppPassword(env as never, mailboxId, "k3fq72vmxa9hbnprt4ws")).toBe(true);
 		expect(await verifyAppPassword(env as never, mailboxId, "wrong-pass-word-here")).toBe(false);
+	});
+});
+
+/**
+ * Regression guard for a production-only failure.
+ *
+ * Cloudflare Workers' WebCrypto rejects PBKDF2 above 100,000 iterations:
+ *
+ *   NotSupportedError: Pbkdf2 failed: iteration counts above 100000
+ *   are not supported (requested 600000).
+ *
+ * Local workerd does NOT enforce that ceiling, so 600,000 passed every test
+ * here and threw on the first real request. verifyAppPassword's catch turned
+ * the exception into a plain `false`, which the auth route reported as 401 -
+ * indistinguishable from a wrong password. It cost a production deploy and a
+ * live diagnostic probe to find.
+ *
+ * The runtime will not fail this for us locally, so assert it explicitly.
+ */
+describe("PBKDF2 iteration ceiling (Workers platform limit)", () => {
+	it("stays at or below the 100,000 the runtime accepts", () => {
+		expect(PBKDF2_MAX_ITERATIONS).toBe(100_000);
+		expect(PBKDF2_ITERATIONS).toBeLessThanOrEqual(PBKDF2_MAX_ITERATIONS);
+	});
+
+	it("derives at the configured count without throwing", async () => {
+		const salt = crypto.getRandomValues(new Uint8Array(16));
+		const km = await crypto.subtle.importKey(
+			"raw", new TextEncoder().encode("probe"), "PBKDF2", false, ["deriveBits"],
+		);
+		await expect(
+			crypto.subtle.deriveBits(
+				{ name: "PBKDF2", hash: "SHA-256", salt: salt.slice().buffer as ArrayBuffer, iterations: PBKDF2_ITERATIONS },
+				km,
+				DERIVED_KEY_BITS,
+			),
+		).resolves.toBeDefined();
 	});
 });

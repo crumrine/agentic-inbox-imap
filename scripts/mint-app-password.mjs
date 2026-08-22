@@ -16,7 +16,9 @@
  *   node scripts/mint-app-password.mjs bc@bpxo.cc "apple mail"
  */
 
-const PBKDF2_ITERATIONS = 600_000;
+// Cloudflare Workers caps PBKDF2 at 100,000 iterations. See
+// workers/lib/credentials.ts for why that ceiling is acceptable here.
+const PBKDF2_ITERATIONS = 100_000;
 const DERIVED_KEY_BITS = 256;
 const CREDENTIAL_ALGORITHM = "PBKDF2-HMAC-SHA256";
 const PASSWORD_ALPHABET = "abcdefghjkmnpqrstvwxyz0123456789";
