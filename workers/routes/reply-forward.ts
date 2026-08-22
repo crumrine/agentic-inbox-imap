@@ -15,6 +15,7 @@ import {
 	resolveOriginalEmail,
 } from "../lib/email-helpers";
 import { SendEmailRequestSchema } from "../lib/schemas";
+import { buildAndStoreOutboundMime } from "../lib/raw-mime";
 import { Folders } from "../../shared/folders";
 import type { MailboxContext } from "../lib/mailbox";
 
@@ -54,6 +55,10 @@ export async function handleReplyEmail(c: AppContext) {
 	}
 
 	const attachmentData = await storeAttachments(c.env.BUCKET, messageId, attachments);
+	const rawMimeResult = await buildAndStoreOutboundMime(c.env.BUCKET, mailboxId, messageId, {
+		messageId: outgoingMessageId, from, to, cc, bcc, subject, html, text,
+		inReplyTo: originalMsgId, references, attachments,
+	});
 
 	await stub.createEmail(
 		Folders.SENT,
@@ -81,6 +86,8 @@ export async function handleReplyEmail(c: AppContext) {
 				...(originalMsgId ? [{ key: "in-reply-to", value: `<${originalMsgId}>` }] : []),
 				...(references.length > 0 ? [{ key: "references", value: references.map((r: string) => `<${r}>`).join(" ") }] : []),
 			]),
+			raw_key: rawMimeResult.raw_key,
+			rfc822_size: rawMimeResult.rfc822_size,
 		},
 		attachmentData,
 	);
@@ -144,6 +151,9 @@ export async function handleForwardEmail(c: AppContext) {
 	}
 
 	const attachmentData = await storeAttachments(c.env.BUCKET, messageId, attachments);
+	const rawMimeResult = await buildAndStoreOutboundMime(c.env.BUCKET, mailboxId, messageId, {
+		messageId: outgoingMessageId, from, to, cc, bcc, subject, html, text, attachments,
+	});
 
 	await stub.createEmail(
 		Folders.SENT,
@@ -169,6 +179,8 @@ export async function handleForwardEmail(c: AppContext) {
 				{ key: "date", value: new Date().toISOString() },
 				{ key: "message-id", value: `<${outgoingMessageId}>` },
 			]),
+			raw_key: rawMimeResult.raw_key,
+			rfc822_size: rawMimeResult.rfc822_size,
 		},
 		attachmentData,
 	);

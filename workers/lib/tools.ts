@@ -27,6 +27,7 @@ import {
 	buildThreadingHeaders,
 } from "./email-helpers";
 import { verifyDraft } from "./ai";
+import { buildAndStoreOutboundMime } from "./raw-mime";
 import { sendEmail } from "../email-sender";
 import { Folders } from "../../shared/folders";
 import type { Env } from "../types";
@@ -446,6 +447,16 @@ export async function toolSendReply(
 		return { error: `Failed to send reply: ${(e as Error).message}` };
 	}
 
+	const rawMimeResult = await buildAndStoreOutboundMime(env.BUCKET, mailboxId, messageId, {
+		messageId: outgoingMessageId,
+		from: mailboxId,
+		to: params.to,
+		subject: params.subject,
+		html: fullBodyHtml,
+		inReplyTo: originalMsgId,
+		references,
+	});
+
 	await stub.createEmail(
 		Folders.SENT,
 		{
@@ -460,6 +471,8 @@ export async function toolSendReply(
 				references.length > 0 ? JSON.stringify(references) : null,
 			thread_id: threadId,
 			message_id: outgoingMessageId,
+			raw_key: rawMimeResult.raw_key,
+			rfc822_size: rawMimeResult.rfc822_size,
 		},
 		[],
 	);
@@ -510,6 +523,14 @@ export async function toolSendEmail(
 		return { error: `Failed to send email: ${(e as Error).message}` };
 	}
 
+	const rawMimeResult = await buildAndStoreOutboundMime(env.BUCKET, mailboxId, messageId, {
+		messageId: outgoingMessageId,
+		from: mailboxId,
+		to: params.to,
+		subject: params.subject,
+		html: sanitizedBody,
+	});
+
 	await stub.createEmail(
 		Folders.SENT,
 		{
@@ -523,6 +544,8 @@ export async function toolSendEmail(
 			email_references: null,
 			thread_id: messageId,
 			message_id: outgoingMessageId,
+			raw_key: rawMimeResult.raw_key,
+			rfc822_size: rawMimeResult.rfc822_size,
 		},
 		[],
 	);

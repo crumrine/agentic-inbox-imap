@@ -17,6 +17,7 @@ import {
 } from "./lib/email-helpers";
 import { SendEmailRequestSchema } from "./lib/schemas";
 import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
+import { buildAndStoreOutboundMime, storeRawMime } from "./lib/raw-mime";
 import { Folders } from "../shared/folders";
 import type { Env } from "./types";
 import { requireMailbox, type MailboxContext } from "./lib/mailbox";
@@ -183,6 +184,10 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 	const rateLimitError = await (stub as any).checkSendRateLimit();
 	if (rateLimitError) return c.json({ error: rateLimitError }, 429);
 	const attachmentData = await storeAttachments(c.env.BUCKET, messageId, attachments);
+	const rawMimeResult = await buildAndStoreOutboundMime(c.env.BUCKET, mailboxId, messageId, {
+		messageId: outgoingMessageId, from, to, cc, bcc, subject, html, text,
+		inReplyTo: in_reply_to || null, references: references || [], attachments,
+	});
 
 	await stub.createEmail(Folders.SENT, {
 		id: messageId, subject, sender: fromEmail, recipient: toStr,
@@ -199,6 +204,7 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 			{ key: "subject", value: subject }, { key: "date", value: new Date().toISOString() },
 			{ key: "message-id", value: `<${outgoingMessageId}>` },
 		]),
+		raw_key: rawMimeResult.raw_key, rfc822_size: rawMimeResult.rfc822_size,
 	}, attachmentData);
 
 	c.executionCtx.waitUntil(
@@ -392,6 +398,11 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env
 
 	const originalMessageId = parsedEmail.messageId ? extractMsgId(parsedEmail.messageId) : null;
 
+	// Store the raw bytes exactly as received, byte-for-byte, so the message
+	// is readable over IMAP. A storage hiccup must never bounce or drop mail:
+	// storeRawMime never throws, and falls back to raw_key: null on failure.
+	const rawMimeResult = await storeRawMime(env.BUCKET, mailboxId, messageId, rawEmail);
+
 	await stub.createEmail(Folders.INBOX, {
 		id: messageId, subject: parsedEmail.subject || "",
 		sender: (parsedEmail.from?.address || "").toLowerCase(), recipient: allRecipients.join(", "),
@@ -400,6 +411,7 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env
 		body: parsedEmail.html || parsedEmail.text || "",
 		in_reply_to: inReplyTo, email_references: emailReferences.length > 0 ? JSON.stringify(emailReferences) : null,
 		thread_id: threadId, message_id: originalMessageId, raw_headers: JSON.stringify(parsedEmail.headers),
+		raw_key: rawMimeResult.raw_key, rfc822_size: rawMimeResult.rfc822_size,
 	}, attachmentData);
 
 	const agentStub = env.EMAIL_AGENT.get(env.EMAIL_AGENT.idFromName(mailboxId));

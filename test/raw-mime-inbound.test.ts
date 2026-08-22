@@ -1,0 +1,105 @@
+// Copyright (c) 2026 Brian Crumrine
+// Licensed under the Apache 2.0 license found in the LICENSE file or at:
+//     https://opensource.org/licenses/Apache-2.0
+
+import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
+import { describe, expect, it } from "vitest";
+
+import type { Env } from "../workers/types";
+import { receiveEmail } from "../workers/index";
+import { mailbox } from "./helpers";
+
+function streamFromBytes(bytes: Uint8Array): ReadableStream<Uint8Array> {
+	return new ReadableStream({
+		start(controller) {
+			controller.enqueue(bytes);
+			controller.close();
+		},
+	});
+}
+
+function rawEmailBytes(to: string, subject = "Inbound test"): Uint8Array {
+	const raw = [
+		"From: sender@example.com",
+		`To: ${to}`,
+		`Subject: ${subject}`,
+		"Date: Wed, 21 Aug 2026 00:00:00 +0000",
+		"MIME-Version: 1.0",
+		"Content-Type: text/plain; charset=\"UTF-8\"",
+		"",
+		"Hello from the outside world.",
+		"",
+	].join("\r\n");
+	return new TextEncoder().encode(raw);
+}
+
+describe("receiveEmail: raw MIME storage (DEV-661)", () => {
+	it("stores the raw bytes to R2 byte-for-byte and records raw_key + rfc822_size", async () => {
+		const mailboxId = "inbound-raw@brian404.com";
+		await env.BUCKET.put(`mailboxes/${mailboxId}.json`, "{}");
+
+		const bytes = rawEmailBytes(mailboxId);
+		const ctx = createExecutionContext();
+		await receiveEmail(
+			{ raw: streamFromBytes(bytes), rawSize: bytes.byteLength },
+			env as unknown as Env,
+			ctx,
+		);
+		await waitOnExecutionContext(ctx);
+
+		const stub = mailbox(mailboxId);
+		const emails = await stub.getEmails({ folder: "inbox" });
+		expect(emails).toHaveLength(1);
+		const created = emails[0] as { id: string };
+
+		const full = (await stub.getEmail(created.id)) as {
+			raw_key: string | null;
+			rfc822_size: number | null;
+		};
+		expect(full.raw_key).toBe(`raw/${mailboxId}/${created.id}.eml`);
+		expect(full.rfc822_size).toBe(bytes.byteLength);
+
+		const stored = await env.BUCKET.get(full.raw_key as string);
+		expect(stored).not.toBeNull();
+		const storedBytes = new Uint8Array(await (stored as R2ObjectBody).arrayBuffer());
+		expect(Array.from(storedBytes)).toEqual(Array.from(bytes));
+	});
+
+	it("never loses mail: if the R2 put throws, the email row is still created with raw_key NULL", async () => {
+		const mailboxId = "inbound-r2-outage@brian404.com";
+		const mailboxKey = `mailboxes/${mailboxId}.json`;
+
+		// A bucket stand-in whose `put` always fails (simulating an R2 outage),
+		// but whose `head` still reports the mailbox as existing so receiveEmail
+		// gets past its "mailbox exists" check.
+		const failingBucket = {
+			head: async (key: string) => (key === mailboxKey ? ({} as R2Object) : null),
+			put: async () => {
+				throw new Error("simulated R2 outage");
+			},
+		} as unknown as Env["BUCKET"];
+
+		const testEnv = { ...(env as unknown as Env), BUCKET: failingBucket };
+
+		const bytes = rawEmailBytes(mailboxId, "Should still land in the inbox");
+		const ctx = createExecutionContext();
+		await receiveEmail({ raw: streamFromBytes(bytes), rawSize: bytes.byteLength }, testEnv, ctx);
+		await waitOnExecutionContext(ctx);
+
+		// The email itself must exist -- a storage hiccup must not drop mail.
+		const stub = mailbox(mailboxId);
+		const emails = await stub.getEmails({ folder: "inbox" });
+		expect(emails).toHaveLength(1);
+
+		const full = (await stub.getEmail(emails[0].id)) as {
+			raw_key: string | null;
+			rfc822_size: number | null;
+			subject: string | null;
+		};
+		expect(full.subject).toBe("Should still land in the inbox");
+		expect(full.raw_key).toBeNull();
+		// Size is still recorded -- it's just a byte count, independent of
+		// whether the storage attempt succeeded.
+		expect(full.rfc822_size).toBe(bytes.byteLength);
+	});
+});
