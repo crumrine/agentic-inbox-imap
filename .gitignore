@@ -17,3 +17,8 @@ opencode.jsonc
 skills-lock.json
 .DS_Store
 worker-configuration.d.ts
+
+# Go build artifacts (gateway/ is a separate Go module)
+gateway/agentic-imapd
+gateway/*.exe
+gateway/**/*.test

@@ -37,11 +37,11 @@ https://github.com/cloudflare/agentic-inbox/issues/4#issuecomment-4269118513
 
 ## Features
 
-- **Full email client** — Send and receive emails via Cloudflare Email Routing with a rich text composer, reply/forward threading, folder organization, search, and attachments
-- **Per-mailbox isolation** — Each mailbox runs in its own Durable Object with SQLite storage and R2 for attachments
-- **Built-in AI agent** — Side panel with 9 email tools for reading, searching, drafting, and sending
-- **Auto-draft on new email** — Agent automatically reads inbound emails and generates draft replies, always requiring explicit confirmation before sending
-- **Configurable and persistent** — Custom system prompts per mailbox, persistent chat history, streaming markdown responses, and tool call visibility
+- **Full email client** - Send and receive emails via Cloudflare Email Routing with a rich text composer, reply/forward threading, folder organization, search, and attachments
+- **Per-mailbox isolation** - Each mailbox runs in its own Durable Object with SQLite storage and R2 for attachments
+- **Built-in AI agent** - Side panel with 9 email tools for reading, searching, drafting, and sending
+- **Auto-draft on new email** - Agent automatically reads inbound emails and generates draft replies, always requiring explicit confirmation before sending
+- **Configurable and persistent** - Custom system prompts per mailbox, persistent chat history, streaming markdown responses, and tool call visibility
 
 ## Stack
 
@@ -76,7 +76,28 @@ npm run deploy
 - [Workers AI](https://developers.cloudflare.com/workers-ai/) enabled (for the agent)
 - [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/) configured for deployed/shared environments (required in production)
 
-Any user who passes the shared Cloudflare Access policy can access all mailboxes in this app by design. This includes the MCP server at `/mcp` -- external AI tools (Claude Code, Cursor, etc.) connected via MCP can operate on any mailbox by passing a `mailboxId` parameter. There is no per-mailbox authorization; the Cloudflare Access policy is the single trust boundary.
+## Security model
+
+Anyone who passes the shared Cloudflare Access policy can reach every mailbox in this app, by design. This includes the MCP server at `/mcp` -- external AI tools (Claude Code, Cursor, etc.) connected via MCP can operate on any mailbox by passing a `mailboxId` parameter. There is no per-mailbox authorization behind Access; a single team policy is the trust boundary for the web app and the MCP server.
+
+The IMAP gateway adds a second, narrower path, and it changes that picture. It's worth understanding both what it adds and what it doesn't protect against.
+
+**App passwords are a second credential, scoped per mailbox.** Ordinary mail clients cannot present a Cloudflare Access identity, so each mailbox can have its own app passwords for IMAP login. They're hashed with PBKDF2-HMAC-SHA256 (600,000 iterations, a per-entry random salt) and stored in R2 at `credentials/{mailboxId}.json`, a key deliberately separate from `mailboxes/{id}.json`. That settings object is loaded into the AI agent's system prompt, so keeping credential material out of it isn't a style choice, it's what keeps a prompt injection or a stray `JSON.stringify` from being able to leak a password hash.
+
+**The gateway itself is a trusted component, not a per-request-verified one.** It authenticates a mail client's app password once, at `POST /api/imap/v1/auth`, then uses a Cloudflare Access service token for every subsequent call: listing folders, fetching messages, reading raw MIME. Those read routes do not re-check the app password; they trust the gateway to have already matched the session to the right mailbox. That means a compromised or misbehaving gateway can read every mailbox behind that service token, not just the one it authenticated. The Worker has no way to tell those cases apart.
+
+**Setting this up requires an explicit Access policy change.** The Cloudflare Access application in front of the Worker needs an allow rule for the gateway's service token (policy action "Service Auth", selecting the token), or the gateway can't reach the Worker at all. Once that rule exists, anything holding that token has the same reach the gateway does.
+
+**The actual compensating control is network placement, not the service token.** The gateway (`gateway/`) binds only to a loopback or Tailscale (100.64.0.0/10) address and refuses to start on any other address unless `AGENTIC_ALLOW_PUBLIC_BIND=true` is explicitly set. There is no public IMAP port and therefore no internet-facing surface for password guessing. If you set that variable and expose it publicly, that's your decision and your risk to own; the default is closed.
+
+**Brute-forcing app passwords is rate-limited per mailbox.** A Durable Object counts failed `/auth` attempts against each mailbox id and blocks further attempts once the window's limit is hit, so a sustained guess against one mailbox is bounded.
+
+What this doesn't cover, stated plainly:
+
+- **Auth response timing leaks how many app passwords a mailbox has, not whether it exists.** An unknown mailbox does one dummy password derivation to keep its timing close to a real check, but a mailbox with N app passwords does N derivations, so response time scales with N and an attacker can use that to estimate it. Response bodies are identical either way, so this is a minor signal, not a mailbox-existence oracle.
+- **The rate limiter is per mailbox, not global.** An attacker guessing one password each across many different mailboxes isn't bounded by it; only repeated guesses against a single mailbox are.
+- **The service-token trust path has been verified by reading the code, not by testing it against a live Cloudflare Access edge.** The Worker's Access middleware validates only the JWT's issuer and audience and never inspects an identity claim, which is why it accepts a service-token JWT the same way it accepts a user's, but that has been confirmed by code review, not by an end-to-end run through Access.
+- **There's no UI yet for creating or revoking app passwords.** The credential store (`workers/lib/credentials.ts`) exists and is exercised by the gateway's auth flow, but today an app password can only be minted by calling that code directly, not from the app's UI.
 
 ## Architecture
 

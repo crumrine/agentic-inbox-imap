@@ -1,0 +1,17 @@
+Agentic Inbox
+Copyright (c) 2026 Brian Crumrine
+
+This product includes software originally developed by Cloudflare, Inc.:
+
+    Agentic Inbox
+    https://github.com/cloudflare/agentic-inbox
+    Copyright (c) 2026 Cloudflare, Inc.
+    Licensed under the Apache License, Version 2.0
+
+This repository was seeded from that project and has been modified. Files
+carrying a Cloudflare copyright notice are upstream work, retained under the
+Apache License, Version 2.0. Files added since carry their own notice.
+
+The IMAP/SMTP gateway under gateway/ is independent work. It is not derived
+from the upstream project and may be distributed separately. See
+gateway/NOTICE.
