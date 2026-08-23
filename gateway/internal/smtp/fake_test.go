@@ -324,14 +324,21 @@ func testTLSConfigs(t *testing.T) (server, client *tls.Config) {
 	pool := x509.NewCertPool()
 	pool.AddCert(leaf)
 
-	return &tls.Config{
+	// Assigned to variables rather than returned as two inline composite
+	// literals. gofmt indents a multi-value return of composite literals
+	// differently before and after Go 1.25, so the inline form is formatted
+	// one way by the version in go.mod and another by a newer toolchain,
+	// and whichever we commit the other one "fixes" and breaks CI.
+	serverCfg := &tls.Config{
 		Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}},
 		MinVersion:   tls.VersionTLS12,
-	}, &tls.Config{
+	}
+	clientCfg := &tls.Config{
 		RootCAs:    pool,
 		ServerName: "gateway.test",
 		MinVersion: tls.VersionTLS12,
 	}
+	return serverCfg, clientCfg
 }
 
 // startTLS performs the client half of a STARTTLS upgrade and replaces the
