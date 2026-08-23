@@ -85,3 +85,37 @@ type FlagResult struct {
 type FlagsPage struct {
 	Updated []FlagResult `json:"updated"`
 }
+
+// CopiedMessage pairs a source UID with the UID the message received in the
+// destination folder. UIDs are per folder, so a copy or move always mints a
+// new one.
+type CopiedMessage struct {
+	SourceUID uint32 `json:"sourceUid"`
+	DestUID   uint32 `json:"destUid"`
+}
+
+// CopyPage is the response body of POST
+// /api/imap/v1/{mailbox}/{folder}/copy.
+//
+// UIDs the Worker does not recognise are silently absent from Copied.
+type CopyPage struct {
+	Copied []CopiedMessage `json:"copied"`
+}
+
+// MovePage is the response body of POST
+// /api/imap/v1/{mailbox}/{folder}/move.
+type MovePage struct {
+	Moved []CopiedMessage `json:"moved"`
+}
+
+// ExpungePage is the response body of POST
+// /api/imap/v1/{mailbox}/{folder}/expunge. Expunged holds the source UIDs
+// actually removed, ascending.
+//
+// The server-side rule is that expunging moves a message to Trash from
+// every folder except Trash itself, where it is destroyed. Either way the
+// message is gone from the folder the client is looking at, which is all
+// an IMAP client can observe.
+type ExpungePage struct {
+	Expunged []uint32 `json:"expunged"`
+}

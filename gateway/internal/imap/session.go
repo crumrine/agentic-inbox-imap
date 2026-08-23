@@ -7,23 +7,31 @@
 // github.com/emersion/go-imap/v2/imapserver.
 //
 // Scope: CAPABILITY, NOOP, LOGOUT, AUTHENTICATE PLAIN, LOGIN, LIST, LSUB,
-// STATUS, SELECT, EXAMINE, CLOSE, UNSELECT, SEARCH, FETCH, IDLE and STORE
-// of message flags. Moving, copying, appending and expunging messages are
-// phase 2 and answer NO.
+// STATUS, SELECT, EXAMINE, CLOSE, UNSELECT, SEARCH, FETCH, IDLE, STORE of
+// message flags, COPY, MOVE and EXPUNGE. APPEND is the remaining gap and
+// answers NO.
 //
-// Flag writes are here rather than in phase 2 because refusing them is not
-// a survivable degradation: iOS Mail sets \Seen on display, and a NO to
-// that put it into a reconnect loop in which no message ever rendered.
+// The write commands are here because refusing them is not a survivable
+// degradation. iOS Mail sets \Seen on display and deletes with
+// \Deleted + EXPUNGE; a NO to either put it into a reconnect loop in which
+// no message ever rendered.
 //
 // The session holds no durable state. The only thing it retains between
 // commands is the selected folder's sequence-number snapshot and a bounded
 // in-memory LRU of raw message bodies, both of which die with the
-// connection. The snapshot grows append-only; it never shrinks or renumbers
-// within a selection.
+// connection.
 //
-// Two things grow it, and they share one implementation on purpose: Poll,
-// which go-imap calls after every command, and Idle, which runs the same
-// refresh on a timer while a client holds an IDLE open. See poll.
+// The snapshot grows append-only, from two callers sharing one
+// implementation on purpose: Poll, which go-imap calls after every command,
+// and Idle, which runs the same refresh on a timer while a client holds an
+// IDLE open. See poll.
+//
+// It shrinks in exactly one place, Expunge, and only ever alongside the
+// untagged EXPUNGE responses that tell the client to renumber too. A
+// message that disappears for any other reason, such as a deletion in the
+// web UI, stays in the snapshot and simply fails to fetch; letting Poll
+// drop it would renumber the mailbox under a client that was never told.
+// See mutate.go.
 package imap
 
 import (
@@ -246,6 +254,84 @@ func (sel *selection) withFlags(results []backend.FlagResult) *selection {
 		msgs:        msgs,
 		byUID:       byUID,
 	}
+}
+
+// withoutUIDs returns a copy of the snapshot with the given messages
+// removed, which renumbers every message after each removal.
+//
+// This is the one operation that shrinks a selection, and it exists only
+// because the client asked for it. Everything else about the snapshot is
+// append-only precisely so that sequence numbers cannot move under a
+// client's feet; here they must, and the caller is responsible for having
+// already told the client via untagged EXPUNGE responses.
+//
+// Like withFlags it is copy-on-write: a Fetch, Search or Idle walking the
+// previous selection keeps a consistent view of it.
+func (sel *selection) withoutUIDs(uids []uint32) *selection {
+	if len(uids) == 0 {
+		return sel
+	}
+	drop := make(map[uint32]struct{}, len(uids))
+	for _, uid := range uids {
+		drop[uid] = struct{}{}
+	}
+
+	msgs := make([]*backend.Message, 0, len(sel.msgs))
+	for _, msg := range sel.msgs {
+		if _, gone := drop[msg.UID]; gone {
+			continue
+		}
+		msgs = append(msgs, msg)
+	}
+	if len(msgs) == len(sel.msgs) {
+		return sel
+	}
+
+	byUID := make(map[uint32]*backend.Message, len(msgs))
+	for _, msg := range msgs {
+		byUID[msg.UID] = msg
+	}
+
+	return &selection{
+		folderKey:   sel.folderKey,
+		name:        sel.name,
+		uidValidity: sel.uidValidity,
+		// UIDNEXT never goes backwards: the UIDs just freed are not reused.
+		uidNext:  sel.uidNext,
+		readOnly: sel.readOnly,
+		msgs:     msgs,
+		byUID:    byUID,
+	}
+}
+
+// seqNumsFor maps UIDs to their sequence numbers in this snapshot,
+// descending. UIDs the snapshot does not hold are skipped: the client was
+// never told about them, so there is no sequence number to report.
+//
+// Descending is what makes untagged EXPUNGE safe to emit without
+// arithmetic. Each EXPUNGE renumbers every message after it, so removing
+// the highest first leaves the lower numbers still valid. See Expunge.
+func (sel *selection) seqNumsFor(uids []uint32) []uint32 {
+	if len(uids) == 0 {
+		return nil
+	}
+	want := make(map[uint32]struct{}, len(uids))
+	for _, uid := range uids {
+		want[uid] = struct{}{}
+	}
+
+	// Walking msgs in order yields ascending sequence numbers, so a
+	// straight reverse is all that is needed; no sort.
+	seqNums := make([]uint32, 0, len(uids))
+	for i, msg := range sel.msgs {
+		if _, ok := want[msg.UID]; ok {
+			seqNums = append(seqNums, uint32(i+1))
+		}
+	}
+	for i, j := 0, len(seqNums)-1; i < j; i, j = i+1, j-1 {
+		seqNums[i], seqNums[j] = seqNums[j], seqNums[i]
+	}
+	return seqNums
 }
 
 // firstUnseenSeqNum returns the sequence number of the first message
@@ -1412,32 +1498,6 @@ func (s *Session) Append(mailbox string, r imap.LiteralReader, options *imap.App
 		_, _ = discard(r)
 	}
 	return nil, errNotYetSupported("APPEND")
-}
-
-func (s *Session) Copy(numSet imap.NumSet, dest string) (*imap.CopyData, error) {
-	return nil, errNotYetSupported("COPY")
-}
-
-// Expunge is reached two ways: the explicit EXPUNGE / UID EXPUNGE commands,
-// and internally from CLOSE, which go-imap implements as Expunge(w, nil)
-// followed by Unselect.
-//
-// The session cannot tell CLOSE apart from a bare EXPUNGE at this
-// interface, and CLOSE is in scope, so the nil-UID case unselects without
-// expunging anything.
-//
-// That used to be justified by nothing being able to carry \Deleted in a
-// read-only mailbox. STORE now sets \Deleted, so it no longer is: a client
-// that marks messages deleted and closes the mailbox will find them still
-// there. Removal needs the expunge endpoint, which is phase 2; until then
-// this is a known gap rather than a correct answer. UID EXPUNGE, which can
-// only come from an explicit client command, is refused outright so at
-// least the explicit case is honest.
-func (s *Session) Expunge(w *imapserver.ExpungeWriter, uids *imap.UIDSet) error {
-	if uids != nil {
-		return errNotYetSupported("UID EXPUNGE")
-	}
-	return nil
 }
 
 // Compile-time assertion that Session satisfies imapserver.Session, so a

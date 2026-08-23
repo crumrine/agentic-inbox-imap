@@ -7,6 +7,7 @@ package backend
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -619,5 +620,166 @@ func TestSetFlags_HonoursRequestTimeout(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 5*time.Second {
 		t.Errorf("SetFlags took %v; the request timeout did not apply", elapsed)
+	}
+}
+
+func TestCopy_Success(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requireAccessHeaders(t, r)
+		if r.Method != http.MethodPost || r.URL.Path != "/api/imap/v1/user@example.com/inbox/copy" {
+			t.Errorf("%s %s", r.Method, r.URL.Path)
+		}
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"copied":[{"sourceUid":3,"destUid":9},{"sourceUid":4,"destUid":10}]}`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, srv)
+	got, err := c.Copy(context.Background(), "user@example.com", "inbox", []uint32{3, 4}, "archive")
+	if err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+	if len(got) != 2 || got[0].SourceUID != 3 || got[0].DestUID != 9 || got[1].SourceUID != 4 || got[1].DestUID != 10 {
+		t.Errorf("copied = %+v", got)
+	}
+	const wantBody = `{"uids":[3,4],"destination":"archive"}`
+	if strings.TrimSpace(gotBody) != wantBody {
+		t.Errorf("body = %s\nwant  %s", gotBody, wantBody)
+	}
+}
+
+func TestMove_Success(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requireAccessHeaders(t, r)
+		if r.URL.Path != "/api/imap/v1/user@example.com/inbox/move" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"moved":[{"sourceUid":3,"destUid":7}]}`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, srv)
+	got, err := c.Move(context.Background(), "user@example.com", "inbox", []uint32{3}, "trash")
+	if err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+	if len(got) != 1 || got[0].SourceUID != 3 || got[0].DestUID != 7 {
+		t.Errorf("moved = %+v", got)
+	}
+	if !strings.Contains(gotBody, `"destination":"trash"`) {
+		t.Errorf("body = %s", gotBody)
+	}
+}
+
+// TestExpunge_NilUIDsOmitsTheField: absent uids means "every \Deleted
+// message", which is a genuinely different request from an empty list.
+func TestExpunge_NilUIDsOmitsTheField(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"expunged":[2,5]}`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, srv)
+	got, err := c.Expunge(context.Background(), "user@example.com", "inbox", nil)
+	if err != nil {
+		t.Fatalf("Expunge: %v", err)
+	}
+	if len(got) != 2 || got[0] != 2 || got[1] != 5 {
+		t.Errorf("expunged = %v", got)
+	}
+	if strings.TrimSpace(gotBody) != `{}` {
+		t.Errorf("body = %s, want {} so the Worker applies the \\Deleted rule itself", gotBody)
+	}
+}
+
+func TestExpunge_WithUIDs(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/imap/v1/user@example.com/inbox/expunge" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"expunged":[3]}`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, srv)
+	got, err := c.Expunge(context.Background(), "user@example.com", "inbox", []uint32{3, 4})
+	if err != nil {
+		t.Fatalf("Expunge: %v", err)
+	}
+	if len(got) != 1 || got[0] != 3 {
+		t.Errorf("expunged = %v", got)
+	}
+	if strings.TrimSpace(gotBody) != `{"uids":[3,4]}` {
+		t.Errorf("body = %s", gotBody)
+	}
+}
+
+func TestCopyMoveExpunge_ErrorMapping(t *testing.T) {
+	calls := map[string]func(c *Client) error{
+		"copy": func(c *Client) error {
+			_, err := c.Copy(context.Background(), "user@example.com", "inbox", []uint32{1}, "archive")
+			return err
+		},
+		"move": func(c *Client) error {
+			_, err := c.Move(context.Background(), "user@example.com", "inbox", []uint32{1}, "trash")
+			return err
+		},
+		"expunge": func(c *Client) error {
+			_, err := c.Expunge(context.Background(), "user@example.com", "inbox", nil)
+			return err
+		},
+	}
+	statuses := map[int]error{
+		http.StatusNotFound:            ErrNotFound,
+		http.StatusInternalServerError: ErrServer,
+		http.StatusUnauthorized:        ErrAuthFailed,
+	}
+
+	for name, call := range calls {
+		for status, want := range statuses {
+			t.Run(fmt.Sprintf("%s/%d", name, status), func(t *testing.T) {
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(status)
+					w.Write([]byte(`{"error":"nope"}`))
+				}))
+				defer srv.Close()
+				if err := call(newTestClient(t, srv)); !errors.Is(err, want) {
+					t.Errorf("err = %v, want %v", err, want)
+				}
+			})
+		}
+	}
+}
+
+func TestCopyMoveExpunge_HonourRequestTimeout(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release
+	}))
+	defer srv.Close()
+	defer close(release)
+
+	c := newTestClient(t, srv, WithRequestTimeout(50*time.Millisecond))
+	start := time.Now()
+	if _, err := c.Expunge(context.Background(), "user@example.com", "inbox", nil); err == nil {
+		t.Fatal("Expunge succeeded against a hung server")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("Expunge took %v; the request timeout did not apply", elapsed)
 	}
 }

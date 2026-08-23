@@ -341,6 +341,72 @@ func (c *Client) SetFlags(ctx context.Context, mailbox, folder string, updates [
 	return page.Updated, nil
 }
 
+// Copy calls POST /api/imap/v1/{mailbox}/{folder}/copy, copying messages
+// into destination. The source folder is unchanged.
+//
+// It returns a source-UID to destination-UID pair per message copied. UIDs
+// the Worker does not know are omitted rather than reported as an error.
+func (c *Client) Copy(ctx context.Context, mailbox, folder string, uids []uint32, destination string) ([]CopiedMessage, error) {
+	var page CopyPage
+	path := mailboxPath(mailbox) + "/" + url.PathEscape(folder) + "/copy"
+	if err := c.doUIDsRequest(ctx, path, uids, destination, &page); err != nil {
+		return nil, err
+	}
+	return page.Copied, nil
+}
+
+// Move calls POST /api/imap/v1/{mailbox}/{folder}/move, moving messages
+// into destination. The source UIDs cease to exist in the source folder.
+func (c *Client) Move(ctx context.Context, mailbox, folder string, uids []uint32, destination string) ([]CopiedMessage, error) {
+	var page MovePage
+	path := mailboxPath(mailbox) + "/" + url.PathEscape(folder) + "/move"
+	if err := c.doUIDsRequest(ctx, path, uids, destination, &page); err != nil {
+		return nil, err
+	}
+	return page.Moved, nil
+}
+
+// Expunge calls POST /api/imap/v1/{mailbox}/{folder}/expunge.
+//
+// A nil uids slice omits the field entirely, which the Worker reads as
+// "every message with \Deleted". A non-nil slice restricts the operation
+// to those UIDs. The two are genuinely different requests, so a caller that
+// wants the unrestricted form must pass nil, not an empty slice.
+//
+// It returns the source UIDs actually removed.
+func (c *Client) Expunge(ctx context.Context, mailbox, folder string, uids []uint32) ([]uint32, error) {
+	body := struct {
+		UIDs []uint32 `json:"uids,omitempty"`
+	}{UIDs: uids}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("backend: encoding expunge request: %w", err)
+	}
+
+	var page ExpungePage
+	path := mailboxPath(mailbox) + "/" + url.PathEscape(folder) + "/expunge"
+	if err := c.doJSON(ctx, http.MethodPost, path, nil, bytes.NewReader(payload), "application/json", &page); err != nil {
+		return nil, err
+	}
+	return page.Expunged, nil
+}
+
+// doUIDsRequest posts the {"uids":[...],"destination":"..."} body shared by
+// the copy and move endpoints.
+func (c *Client) doUIDsRequest(ctx context.Context, path string, uids []uint32, destination string, out any) error {
+	if uids == nil {
+		uids = []uint32{}
+	}
+	payload, err := json.Marshal(struct {
+		UIDs        []uint32 `json:"uids"`
+		Destination string   `json:"destination"`
+	}{UIDs: uids, Destination: destination})
+	if err != nil {
+		return fmt.Errorf("backend: encoding request: %w", err)
+	}
+	return c.doJSON(ctx, http.MethodPost, path, nil, bytes.NewReader(payload), "application/json", out)
+}
+
 // RawMessageReader is the streamed body of a raw message fetch. Callers
 // MUST call Close when done, even on error paths after a successful call,
 // to return the connection to the pool.

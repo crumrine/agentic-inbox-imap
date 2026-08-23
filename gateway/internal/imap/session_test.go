@@ -568,16 +568,9 @@ func TestOutOfScopeCommandsReturnCleanErrors(t *testing.T) {
 			_, err := s.Append("INBOX", nil, nil)
 			return err
 		},
-		"Copy": func(s *Session) error {
-			_, err := s.Copy(imap.SeqSetNum(1), "Archive")
-			return err
-		},
-		"UIDExpunge": func(s *Session) error {
-			set := imap.UIDSetNum(5)
-			return s.Expunge(nil, &set)
-		},
-		// IDLE is deliberately absent: it is implemented now, by polling.
-		// See idle_test.go.
+		// IDLE, STORE, COPY, MOVE and EXPUNGE are deliberately absent:
+		// they are implemented. See idle_test.go, store_test.go and
+		// mutate_test.go.
 	}
 
 	for name, call := range calls {
@@ -603,10 +596,11 @@ func TestOutOfScopeCommandsReturnCleanErrors(t *testing.T) {
 	}
 }
 
-// TestCloseExpungeIsANoop covers the CLOSE path. go-imap implements CLOSE
+// TestCloseExpungeSucceeds covers the CLOSE path. go-imap implements CLOSE
 // as Expunge(w, nil) followed by Unselect, so a nil UID set must not fail
-// or CLOSE, which is in scope, breaks.
-func TestCloseExpungeIsANoop(t *testing.T) {
+// or CLOSE, which is in scope, breaks. With nothing marked \Deleted there
+// is nothing to remove, but the call still has to succeed.
+func TestCloseExpungeSucceeds(t *testing.T) {
 	s := newSelectedSession(t, newFakeBackend(t))
 	if err := s.Expunge(nil, nil); err != nil {
 		t.Fatalf("Expunge(nil): %v; CLOSE would fail", err)

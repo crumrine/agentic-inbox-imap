@@ -38,6 +38,7 @@ func startRawClient(t *testing.T, be Backend, opts ...Option) *rawClient {
 		NewSession: func(conn *imapserver.Conn) (imapserver.Session, *imapserver.GreetingData, error) {
 			return NewSession(be, opts...), nil, nil
 		},
+		Caps:         ServerCaps(),
 		InsecureAuth: true,
 		Logger:       newTestLogger(t),
 	})

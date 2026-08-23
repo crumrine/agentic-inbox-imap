@@ -419,8 +419,6 @@ func TestWriteCommandsAnswerNoAndKeepTheConnection(t *testing.T) {
 		{"RENAME", func() error { return client.Rename("Archive", "Old", nil).Wait() }},
 		{"SUBSCRIBE", func() error { return client.Subscribe("Archive").Wait() }},
 		{"UNSUBSCRIBE", func() error { return client.Unsubscribe("Archive").Wait() }},
-		{"COPY", func() error { _, err := client.Copy(imap.SeqSetNum(1), "Archive").Wait(); return err }},
-		{"UID EXPUNGE", func() error { return client.UIDExpunge(imap.UIDSetNum(5)).Close() }},
 		{"APPEND", func() error {
 			const body = "Subject: nope\r\n\r\nbody\r\n"
 			cmd := client.Append("INBOX", int64(len(body)), nil)
@@ -448,10 +446,10 @@ func TestWriteCommandsAnswerNoAndKeepTheConnection(t *testing.T) {
 	}
 }
 
-// TestExpungeIsAcceptedAsANoop mirrors the CLOSE path: plain EXPUNGE on a
-// read-only mailbox reports nothing expunged rather than failing, because
-// no message can carry \Deleted in the first place.
-func TestExpungeIsAcceptedAsANoop(t *testing.T) {
+// TestExpungeWithNothingMarkedReportsNothing: a bare EXPUNGE over a
+// mailbox where nothing carries \Deleted must succeed and report no
+// removals, rather than erroring or inventing one.
+func TestExpungeWithNothingMarkedReportsNothing(t *testing.T) {
 	client := startTestServer(t, newFakeBackend(t))
 	loginAndSelect(t, client, "INBOX")
 
@@ -461,6 +459,40 @@ func TestExpungeIsAcceptedAsANoop(t *testing.T) {
 	}
 	if len(seqNums) != 0 {
 		t.Errorf("EXPUNGE reported %v expunged, want none", seqNums)
+	}
+}
+
+// TestExpungeOverTheWireReportsSequenceNumbers is the same path with
+// something actually marked, driven by go-imap's own client so the
+// untagged responses are parsed rather than string-matched.
+func TestExpungeOverTheWireReportsSequenceNumbers(t *testing.T) {
+	be := newFakeBackend(t)
+	client := startTestServer(t, be)
+	loginAndSelect(t, client, "INBOX")
+
+	if _, err := client.Store(imap.UIDSetNum(9), &imap.StoreFlags{
+		Op:     imap.StoreFlagsAdd,
+		Silent: true,
+		Flags:  []imap.Flag{imap.FlagDeleted},
+	}, nil).Collect(); err != nil {
+		t.Fatalf("STORE: %v", err)
+	}
+
+	seqNums, err := client.Expunge().Collect()
+	if err != nil {
+		t.Fatalf("EXPUNGE: %v", err)
+	}
+	if len(seqNums) != 1 || seqNums[0] != 2 {
+		t.Fatalf("EXPUNGE reported %v, want [2]", seqNums)
+	}
+
+	// The client's own view has renumbered; ours must match it.
+	msgs, err := client.Fetch(imap.SeqSetNum(2), &imap.FetchOptions{UID: true}).Collect()
+	if err != nil {
+		t.Fatalf("FETCH: %v", err)
+	}
+	if len(msgs) != 1 || msgs[0].UID != 12 {
+		t.Errorf("sequence 2 after the expunge = %+v, want UID 12", msgs)
 	}
 }
 

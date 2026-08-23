@@ -100,6 +100,7 @@ func run() error {
 		// guarantee it normally provides is reinstated by the wrapped
 		// listener, which by default drops any connection that is not a
 		// *tls.Conn before go-imap can see it.
+		Caps:         imapsession.ServerCaps(),
 		InsecureAuth: true,
 		Logger:       printfLogger{logger},
 		// At debug level, dump the whole protocol conversation. Real mail

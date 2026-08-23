@@ -21,7 +21,9 @@ entrypoint, deploy files, and the IMAP protocol session
 Serving now: CAPABILITY, NOOP, LOGOUT, AUTHENTICATE PLAIN, LOGIN, ID, LIST,
 LSUB, STATUS, SELECT, EXAMINE, CLOSE, UNSELECT, SEARCH, FETCH (including
 ENVELOPE, BODYSTRUCTURE, BODY[...] with HEADER.FIELDS and partial ranges),
-IDLE and STORE of message flags.
+IDLE, STORE of message flags, COPY, MOVE and EXPUNGE. MOVE and UIDPLUS are
+advertised, so clients use one round trip to move a message and get real
+COPYUID response codes back.
 
 New mail reaches a client two ways, both through the same append-only
 refresh: `Poll` runs after every command, and `Idle` runs it on a timer for
@@ -48,18 +50,26 @@ this data model, and nothing is ever reported as recent. PERMANENTFLAGS
 advertises exactly what STORE will persist, and an EXAMINE'd mailbox
 advertises none and refuses STORE, as RFC 9051 requires.
 
-Not served: APPEND, COPY, MOVE and EXPUNGE all answer NO and keep the
-connection alive (Trellis DEV-670 through DEV-673). One consequence worth
-knowing: `\Deleted` can now be set but nothing expunges it, so CLOSE
-unselects without removing anything and those messages persist. SMTP
-submission (`internal/smtp`) is still an empty placeholder for phase 2.
+Deleting works the way clients expect it to. `\Deleted` plus EXPUNGE, and
+MOVE to Trash, both do what they say. Expunging renumbers, which is the one
+place the snapshot shrinks: the untagged EXPUNGE responses go out in
+descending sequence order so each removal only renumbers messages the
+client has already been told about. A message that disappears any other way,
+such as a deletion in the web UI, deliberately does *not* shrink the
+snapshot; it stays addressable and fails to fetch, because renumbering a
+mailbox under a client that was never sent an EXPUNGE is worse than a stale
+entry.
+
+Not served: APPEND answers NO and keeps the connection alive. SMTP
+submission (`internal/smtp`) is still an empty placeholder.
 
 Verified against iOS Mail over the tailnet with a live Worker: connect, full
 folder sync, UID SEARCH, UID FETCH with BODY.PEEK[HEADER] and partial ranges,
-and IDLE holding open until DONE. Flag writes are covered against a fake
-backend and an in-process go-imap server, including a replay of the exact
-`UID FETCH` / `UID STORE .SILENT` / `IDLE` sequence the live client sends,
-but have not yet run against a real client.
+IDLE holding open until DONE, and flag writes persisting. COPY, MOVE and
+EXPUNGE are covered against a fake backend and an in-process go-imap server,
+including a replay of the swipe-to-delete sequence
+(`UID STORE +FLAGS (\Deleted)` then `UID EXPUNGE`), but have not yet run
+against a real client.
 
 ## Why Tailscale-only
 

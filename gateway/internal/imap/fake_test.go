@@ -110,6 +110,9 @@ type fakeBackend struct {
 	maxLimit int
 
 	// Injected failures.
+	copyErr     error
+	moveErr     error
+	expungeErr  error
 	setFlagsErr error
 	authErr     error
 	foldersErr  error
@@ -119,6 +122,12 @@ type fakeBackend struct {
 	// setFlagsCalls records every batch handed to SetFlags, so tests can
 	// assert on the exact add/remove pairs put on the wire.
 	setFlagsCalls [][]backend.FlagUpdate
+
+	// transferCalls and expungeCalls record what COPY, MOVE and EXPUNGE
+	// asked for. expungeCalls stores a nil entry for the unrestricted form,
+	// which is a different request from an empty list.
+	transferCalls []transferCall
+	expungeCalls  [][]uint32
 
 	// Counters.
 	authCalls     int
@@ -460,6 +469,197 @@ func (f *fakeBackend) setFlagsCallCount() int {
 	return len(f.setFlagsCalls)
 }
 
+// transferCall records one COPY or MOVE request.
+type transferCall struct {
+	op          string
+	folder      string
+	uids        []uint32
+	destination string
+}
+
+func (f *fakeBackend) transferLocked(folder, destination string, uids []uint32, remove bool) ([]backend.CopiedMessage, error) {
+	msgs, ok := f.messages[folder]
+	if !ok {
+		return nil, &backend.APIError{Kind: backend.ErrKindNotFound, StatusCode: 404}
+	}
+	if _, ok := f.messages[destination]; !ok {
+		return nil, &backend.APIError{Kind: backend.ErrKindNotFound, StatusCode: 404}
+	}
+
+	want := make(map[uint32]struct{}, len(uids))
+	for _, uid := range uids {
+		want[uid] = struct{}{}
+	}
+
+	out := make([]backend.CopiedMessage, 0, len(uids))
+	kept := msgs[:0:0]
+	for _, msg := range msgs {
+		if _, ok := want[msg.UID]; !ok {
+			kept = append(kept, msg)
+			continue
+		}
+		src := msg
+		destUID := f.copyInto(src, folder, destination)
+		out = append(out, backend.CopiedMessage{SourceUID: msg.UID, DestUID: destUID})
+		if !remove {
+			kept = append(kept, msg)
+		}
+	}
+	if remove {
+		f.messages[folder] = kept
+		f.recountLocked(folder)
+	}
+	// Ascending by source uid, as the endpoint returns them.
+	sort.Slice(out, func(i, j int) bool { return out[i].SourceUID < out[j].SourceUID })
+	return out, nil
+}
+
+// copyInto appends src to destination with a fresh UID and carries its raw
+// body across.
+func (f *fakeBackend) copyInto(src backend.Message, srcFolder, destination string) uint32 {
+	var dest *backend.Folder
+	for i := range f.folders {
+		if f.folders[i].ID == destination {
+			dest = &f.folders[i]
+			break
+		}
+	}
+	if dest == nil {
+		return 0
+	}
+
+	uid := dest.UIDNext
+	copied := src
+	copied.UID = uid
+	copied.Flags = append([]string(nil), src.Flags...)
+	f.messages[destination] = append(f.messages[destination], copied)
+
+	if raw, ok := f.raw[srcFolder][src.UID]; ok {
+		if f.raw[destination] == nil {
+			f.raw[destination] = map[uint32]string{}
+		}
+		f.raw[destination][uid] = raw
+	}
+
+	dest.UIDNext = uid + 1
+	dest.Exists++
+	return uid
+}
+
+func (f *fakeBackend) recountLocked(folderID string) {
+	for i := range f.folders {
+		if f.folders[i].ID != folderID {
+			continue
+		}
+		msgs := f.messages[folderID]
+		f.folders[i].Exists = uint32(len(msgs))
+		var unseen uint32
+		for _, m := range msgs {
+			if !newFlagSet(m.Flags).has(imap.FlagSeen) {
+				unseen++
+			}
+		}
+		f.folders[i].Unseen = unseen
+	}
+}
+
+func (f *fakeBackend) Copy(ctx context.Context, mailbox, folder string, uids []uint32, destination string) ([]backend.CopiedMessage, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.transferCalls = append(f.transferCalls, transferCall{"copy", folder, append([]uint32(nil), uids...), destination})
+	if f.copyErr != nil {
+		return nil, f.copyErr
+	}
+	return f.transferLocked(folder, destination, uids, false)
+}
+
+func (f *fakeBackend) Move(ctx context.Context, mailbox, folder string, uids []uint32, destination string) ([]backend.CopiedMessage, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.transferCalls = append(f.transferCalls, transferCall{"move", folder, append([]uint32(nil), uids...), destination})
+	if f.moveErr != nil {
+		return nil, f.moveErr
+	}
+	return f.transferLocked(folder, destination, uids, true)
+}
+
+// Expunge mirrors the Worker: a nil uids slice means every message with
+// \Deleted, a non-nil one restricts it to those UIDs. Whether the removed
+// message lands in Trash or is destroyed is the Worker's business and
+// invisible over IMAP, so the fake just removes it from the folder.
+func (f *fakeBackend) Expunge(ctx context.Context, mailbox, folder string, uids []uint32) ([]uint32, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if uids == nil {
+		f.expungeCalls = append(f.expungeCalls, nil)
+	} else {
+		f.expungeCalls = append(f.expungeCalls, append([]uint32(nil), uids...))
+	}
+	if f.expungeErr != nil {
+		return nil, f.expungeErr
+	}
+
+	msgs, ok := f.messages[folder]
+	if !ok {
+		return nil, &backend.APIError{Kind: backend.ErrKindNotFound, StatusCode: 404}
+	}
+
+	var want map[uint32]struct{}
+	if uids != nil {
+		want = make(map[uint32]struct{}, len(uids))
+		for _, uid := range uids {
+			want[uid] = struct{}{}
+		}
+	}
+
+	var expunged []uint32
+	kept := msgs[:0:0]
+	for _, msg := range msgs {
+		deleted := newFlagSet(msg.Flags).has(imap.FlagDeleted)
+		named := want == nil || func() bool { _, ok := want[msg.UID]; return ok }()
+		if deleted && named {
+			expunged = append(expunged, msg.UID)
+			delete(f.raw[folder], msg.UID)
+			continue
+		}
+		kept = append(kept, msg)
+	}
+	f.messages[folder] = kept
+	f.recountLocked(folder)
+	sort.Slice(expunged, func(i, j int) bool { return expunged[i] < expunged[j] })
+	return expunged, nil
+}
+
+func (f *fakeBackend) lastExpungeRequest() (uids []uint32, called bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.expungeCalls) == 0 {
+		return nil, false
+	}
+	return f.expungeCalls[len(f.expungeCalls)-1], true
+}
+
+func (f *fakeBackend) lastTransfer() (transferCall, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.transferCalls) == 0 {
+		return transferCall{}, false
+	}
+	return f.transferCalls[len(f.transferCalls)-1], true
+}
+
+func (f *fakeBackend) uidsIn(folderID string) []uint32 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]uint32, 0, len(f.messages[folderID]))
+	for _, m := range f.messages[folderID] {
+		out = append(out, m.UID)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
 // ---------------------------------------------------------------------
 // In-memory server harness
 // ---------------------------------------------------------------------
@@ -559,6 +759,7 @@ func startTestServer(t *testing.T, be Backend, opts ...Option) *imapclient.Clien
 		NewSession: func(conn *imapserver.Conn) (imapserver.Session, *imapserver.GreetingData, error) {
 			return NewSession(be, opts...), nil, nil
 		},
+		Caps:         ServerCaps(),
 		InsecureAuth: true,
 		Logger:       newTestLogger(t),
 	})
