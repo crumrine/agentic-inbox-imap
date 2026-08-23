@@ -37,13 +37,14 @@
  * — more exposure for the same trust decision, not less.
  */
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import {
 	IMAP_MAX_UID,
 	IMAP_MESSAGES_MAX_LIMIT,
 	type ImapRawAttachment,
 	type ImapRawSource,
+	type ImapRelocateResult,
 	type MailboxDO,
 } from "../durableObject";
 import { authRateLimiter } from "../durableObject/authRateLimit";
@@ -184,6 +185,34 @@ const MAX_FLAGS_PER_UPDATE = 64;
 const MAX_FLAG_LENGTH = 64;
 
 const FlagName = z.string().min(1).max(MAX_FLAG_LENGTH);
+
+/**
+ * Caps on a COPY / MOVE / EXPUNGE request.
+ *
+ * Same reasoning as `MAX_FLAG_UPDATES`: a client is allowed to act on every
+ * message the read endpoint has shown it in one page, and no more.
+ * `MAX_FOLDER_KEY_LENGTH` bounds the destination string before it reaches the
+ * Durable Object — folder ids are slugs, so anything long is not a folder.
+ */
+const MAX_RELOCATE_UIDS = IMAP_MESSAGES_MAX_LIMIT;
+const MAX_FOLDER_KEY_LENGTH = 128;
+
+const UidList = z.array(z.number().int().min(1).max(IMAP_MAX_UID)).max(MAX_RELOCATE_UIDS);
+
+const RelocateBody = z.object({
+	uids: UidList,
+	destination: z.string().min(1).max(MAX_FOLDER_KEY_LENGTH),
+});
+
+/**
+ * `uids` absent, null, or an empty object all mean "every message with
+ * `\Deleted` set". Only a present list restricts the set (RFC 4315 UID
+ * EXPUNGE), and it can only narrow it: a uid named without `\Deleted` is
+ * left alone.
+ */
+const ExpungeBody = z.object({
+	uids: UidList.nullish(),
+});
 
 const FlagsBody = z.object({
 	updates: z
@@ -373,6 +402,170 @@ imapApi.post("/:mailboxId/:folder/flags", async (c) => {
 
 	return c.json(result);
 });
+
+// ── Write API: copy, move, expunge ───────────────────────────────────
+//
+// The other half of "a read-only mailbox is an unusable one". iOS Mail's
+// swipe-to-delete is either `+FLAGS (\Deleted)` followed by EXPUNGE or a
+// straight MOVE to Trash; both answered `NO` before these routes existed, and
+// a `NO` on a routine command is what drops iOS into its reconnect loop.
+//
+// Shared shape across all three: uids that no longer resolve are skipped and
+// omitted from the response rather than failing the batch, exactly as /flags
+// does, because a message can vanish between a client's snapshot and its
+// command. Everything is applied in one Durable Object round trip inside a
+// transaction, so a concurrent reader never sees half a batch.
+
+/**
+ * POST /api/imap/v1/{mailbox}/{folder}/copy
+ *   { "uids": [3, 4], "destination": "archive" }
+ *   -> 200 { "copied": [ { "sourceUid": 3, "destUid": 9 }, ... ] }
+ *   -> 400 { "error": "Invalid request" }
+ *   -> 404 { "error": "Not found" | "Folder not found" }
+ *
+ * The source messages are left exactly as they were. The copy shares the
+ * original's raw R2 object instead of duplicating the bytes — see
+ * `MailboxDO.imapCopyMessages` for what that means for attachments and for
+ * the delete path.
+ */
+imapApi.post("/:mailboxId/:folder/copy", async (c) => {
+	const body = await parseRelocateBody(c.req.raw);
+	if (!body) return c.json(INVALID_REQUEST_BODY, 400);
+
+	const stub = await resolveMailbox(c.env, c.req.param("mailboxId"));
+	if (!stub) return c.json(NOT_FOUND_BODY, 404);
+
+	const result = await stub.imapCopyMessages(c.req.param("folder"), body.destination, body.uids);
+	return relocateResponse(c, result, "copied");
+});
+
+/**
+ * POST /api/imap/v1/{mailbox}/{folder}/move
+ *   { "uids": [3, 4], "destination": "trash" }
+ *   -> 200 { "moved": [ { "sourceUid": 3, "destUid": 7 }, ... ] }
+ *   -> 400 { "error": "Invalid request" }
+ *   -> 404 { "error": "Not found" | "Folder not found" }
+ *
+ * The source uid is retired and never handed out again; the message gets a
+ * brand new uid in the destination. Moving to the folder the message is
+ * already in is a no-op that reports the uid unchanged, rather than churning
+ * it for no reason.
+ */
+imapApi.post("/:mailboxId/:folder/move", async (c) => {
+	const body = await parseRelocateBody(c.req.raw);
+	if (!body) return c.json(INVALID_REQUEST_BODY, 400);
+
+	const stub = await resolveMailbox(c.env, c.req.param("mailboxId"));
+	if (!stub) return c.json(NOT_FOUND_BODY, 404);
+
+	const result = await stub.imapMoveMessages(c.req.param("folder"), body.destination, body.uids);
+	return relocateResponse(c, result, "moved");
+});
+
+/**
+ * POST /api/imap/v1/{mailbox}/{folder}/expunge
+ *   { "uids": [3] }   // optional; absent or null means every \Deleted message
+ *   -> 200 { "expunged": [3] }
+ *   -> 400 { "error": "Invalid request" }
+ *   -> 404 { "error": "Not found" | "Folder not found" }
+ *
+ * **EXPUNGE moves to Trash everywhere except in Trash, where it destroys.**
+ * The reasoning for that decision lives on `MailboxDO.imapExpunge`; the short
+ * version is that every mail client spells "delete" as \Deleted + EXPUNGE and
+ * every user of one expects that to mean "it is in the Trash", and this app's
+ * own UI already works that way.
+ *
+ * `expunged` holds the source uids that left the folder, ascending, which is
+ * what the gateway turns into untagged EXPUNGE responses.
+ */
+imapApi.post("/:mailboxId/:folder/expunge", async (c) => {
+	const uids = await parseExpungeBody(c.req.raw);
+	if (uids === INVALID) return c.json(INVALID_REQUEST_BODY, 400);
+
+	const stub = await resolveMailbox(c.env, c.req.param("mailboxId"));
+	if (!stub) return c.json(NOT_FOUND_BODY, 404);
+
+	const result = await stub.imapExpunge(c.req.param("folder"), uids);
+	if (result.status === "no-folder") return c.json(FOLDER_NOT_FOUND_BODY, 404);
+
+	// The rows are already gone and committed, so a failed purge is a leaked
+	// R2 object and nothing worse. Never fail the response over it: the client
+	// is owed its EXPUNGE, and telling it the delete failed when the messages
+	// are demonstrably gone is the refusal loop all over again.
+	if (result.orphanedKeys.length > 0) {
+		await purgeR2Keys(c.env.BUCKET, result.orphanedKeys);
+	}
+
+	return c.json({ expunged: result.expunged });
+});
+
+/**
+ * Parse a copy/move body. Null means "reject with 400".
+ *
+ * Reads the raw Request rather than `c.req.json()` so a malformed body raises
+ * here instead of somewhere Hono turns into a 500, and never surfaces the zod
+ * error: it embeds the input it rejected, which is a list of uids.
+ */
+async function parseRelocateBody(
+	request: Request,
+): Promise<z.infer<typeof RelocateBody> | null> {
+	try {
+		return RelocateBody.parse(await request.json());
+	} catch {
+		return null;
+	}
+}
+
+/** Sentinel for "the expunge body was malformed", distinct from "no uid list". */
+const INVALID = Symbol("invalid");
+
+/**
+ * Parse an expunge body into a uid list, `null` for "all \Deleted", or
+ * `INVALID`. A completely empty body is accepted as `null`: the uid list is
+ * optional in the contract, and a client that sends no body at all means the
+ * same thing as one that sends `{}`.
+ */
+async function parseExpungeBody(request: Request): Promise<number[] | null | typeof INVALID> {
+	try {
+		const raw = (await request.text()).trim();
+		const parsed = ExpungeBody.parse(raw === "" ? {} : JSON.parse(raw));
+		return parsed.uids ?? null;
+	} catch {
+		return INVALID;
+	}
+}
+
+/** Turn a COPY/MOVE result into its response, under the key the contract names. */
+function relocateResponse(
+	c: Context<{ Bindings: ImapApiEnv }>,
+	result: ImapRelocateResult,
+	key: "copied" | "moved",
+): Response {
+	// Source and destination collapse to the same body on purpose. Which of
+	// the two the caller got wrong is not a secret worth an extra shape, and
+	// keeping one body means no future edit can turn this route into a probe
+	// for which folders a mailbox has.
+	if (result.status !== "ok") return c.json(FOLDER_NOT_FOUND_BODY, 404);
+	return c.json({ [key]: result.entries });
+}
+
+/**
+ * Delete R2 objects that no row references any more, in batches R2 accepts.
+ *
+ * Failures are logged and swallowed — see the call site. The keys are not
+ * echoed into the log line; the count is enough to notice a systematic leak.
+ */
+async function purgeR2Keys(bucket: R2Bucket, keys: string[]): Promise<void> {
+	const R2_DELETE_BATCH = 1000;
+	for (let i = 0; i < keys.length; i += R2_DELETE_BATCH) {
+		const batch = keys.slice(i, i + R2_DELETE_BATCH);
+		try {
+			await bucket.delete(batch);
+		} catch (e) {
+			console.error(`Failed to purge ${batch.length} expunged R2 object(s):`, (e as Error).message);
+		}
+	}
+}
 
 /**
  * Hard ceiling on total attachment bytes (raw, pre-base64) the synthesis path

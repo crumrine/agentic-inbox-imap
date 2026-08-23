@@ -696,17 +696,32 @@ export class MailboxDO extends DurableObject<Env> {
 			return true;
 		}
 
-		// A move retires the UID in the source folder and mints a brand new
-		// one in the target. The source UID is never reused.
-		const uid = this.#allocateUid(folderId);
-
-		this.db
-			.update(schema.emails)
-			.set({ folder_id: folderId, uid })
-			.where(eq(schema.emails.id, id))
-			.run();
+		this.#moveEmailRow(id, folderId);
 
 		return true;
+	}
+
+	/**
+	 * Relocate one email row to `destinationFolderId` and return its new UID.
+	 *
+	 * A move retires the UID in the source folder and mints a brand new one in
+	 * the target; the source UID is never reused. This is the single place
+	 * that rule is implemented, shared by the app-facing `moveEmail` and the
+	 * IMAP MOVE/EXPUNGE batches, so the two cannot drift apart.
+	 *
+	 * Synchronous on purpose: callers run it inside `transactionSync`, where
+	 * an await is not allowed, and the allocation must not be separated from
+	 * the UPDATE that claims it.
+	 */
+	#moveEmailRow(id: string, destinationFolderId: string): number {
+		const uid = this.#allocateUid(destinationFolderId);
+		this.ctx.storage.sql.exec(
+			`UPDATE emails SET folder_id = ?1, uid = ?2 WHERE id = ?3`,
+			destinationFolderId,
+			uid,
+			id,
+		);
+		return uid;
 	}
 
 	// ── Search (raw SQL — dynamic condition builder) ───────────────
@@ -1272,6 +1287,270 @@ export class MailboxDO extends DurableObject<Env> {
 		});
 	}
 
+	// ── IMAP write API: COPY / MOVE / EXPUNGE (DEV-671) ────────────────
+	//
+	// Same rule as the flag endpoint above, and for the same reason: a `NO`
+	// on a routine command puts iOS Mail into a reconnect loop, and delete is
+	// the most routine command there is. So an unknown uid is skipped, never
+	// an error, and every batch is one round trip inside `transactionSync`.
+
+	/**
+	 * IMAP COPY: duplicate messages into another folder, leaving the source
+	 * rows exactly as they were.
+	 *
+	 * The copy is a new row with a new id and a freshly minted UID in the
+	 * destination, carrying every column of the original **including
+	 * `raw_key`** — the two rows share one R2 object rather than duplicating
+	 * the bytes. `imapExpunge` is the only thing that deletes those bytes and
+	 * it refuses to while any row still points at the key, so the sharing is
+	 * safe in both directions.
+	 *
+	 * Attachment rows are deliberately **not** copied. Attachment blobs live
+	 * at `attachments/{emailId}/{attachmentId}/{filename}` — the owning email
+	 * id is baked into the key — so a copied row could not address the
+	 * original's blobs, and duplicating rows without blobs would produce
+	 * attachments that 404 on download. For any message written since raw MIME
+	 * storage landed the copy still serves its attachments perfectly, because
+	 * `/raw` streams the shared R2 object. Only a legacy row (`raw_key` NULL,
+	 * served by reconstruction) loses attachment bodies in its copy.
+	 *
+	 * Flags are preserved, `\Deleted` included, per RFC 9051 §6.4.7.
+	 */
+	async imapCopyMessages(
+		folderKey: string,
+		destinationKey: string,
+		uids: number[],
+	): Promise<ImapRelocateResult> {
+		return this.#imapRelocateMessages(folderKey, destinationKey, uids, "copy");
+	}
+
+	/**
+	 * IMAP MOVE: relocate messages to another folder.
+	 *
+	 * Reuses `#moveEmailRow`, so the UID rule is identical to the app's own
+	 * move: a new UID in the destination, the source UID retired and never
+	 * handed out again.
+	 */
+	async imapMoveMessages(
+		folderKey: string,
+		destinationKey: string,
+		uids: number[],
+	): Promise<ImapRelocateResult> {
+		return this.#imapRelocateMessages(folderKey, destinationKey, uids, "move");
+	}
+
+	/**
+	 * IMAP EXPUNGE.
+	 *
+	 * **The DEV-671 semantics decision: expunging outside Trash moves the
+	 * message to Trash; expunging inside Trash destroys it.** Trash is the
+	 * only place in this mailbox where a message is actually destroyed.
+	 *
+	 * The reason is that `\Deleted` + EXPUNGE is how every mail client spells
+	 * "delete this", and users of every mail client expect delete to mean
+	 * "it is in the Trash now", not "it is gone". It is also what the rest of
+	 * this app already does — the UI's delete is a move to Trash — so routing
+	 * IMAP through the same model keeps the two views of the mailbox agreeing.
+	 * Emptying the Trash is then the one deliberate, destructive act, exactly
+	 * as it is in the UI.
+	 *
+	 * `\Deleted` on its own changes nothing about placement; it is just a
+	 * flag, and `imapStoreFlags` treats it as one. The flag is cleared when a
+	 * message is relocated to Trash: the expunge consumed it, and leaving it
+	 * set would arm every message in the Trash for destruction by the next
+	 * client that expunges there.
+	 *
+	 * `uids` follows RFC 4315 UID EXPUNGE: when given it *restricts* the set,
+	 * it does not extend it, so a uid named without `\Deleted` set is left
+	 * alone. `null`/omitted means every `\Deleted` message in the folder.
+	 *
+	 * Hard deletes report the R2 keys the caller should purge. A `raw_key` is
+	 * only reported once no row references it any more (a COPY makes that
+	 * possible), so the destructive path can never strand a live message
+	 * without its bytes.
+	 */
+	async imapExpunge(folderKey: string, uids?: number[] | null): Promise<ImapExpungeResult> {
+		const folder = this.#imapFolderRow(folderKey);
+		if (!folder) return { status: "no-folder" };
+
+		// null/undefined means "the whole \Deleted set". An explicit list that
+		// contains no usable uid means the caller asked for nothing.
+		const restrict = uids == null ? null : imapUidList(uids);
+		if (restrict !== null && restrict.length === 0) {
+			return { status: "ok", expunged: [], orphanedKeys: [] };
+		}
+
+		const isTrash = folder.id === Folders.TRASH;
+		const trash = isTrash ? folder : this.#imapFolderRow(Folders.TRASH);
+
+		return this.ctx.storage.transactionSync(() => {
+			// Every element of `restrict` came out of imapUidList, so the
+			// literal list cannot contain anything but digits. Bound
+			// parameters would be the reflex, but SQLite caps how many one
+			// statement may carry and this list is deliberately allowed to be
+			// as large as a whole page of messages.
+			const uidFilter = restrict === null ? "" : `AND uid IN (${restrict.join(", ")})`;
+			const targets = [
+				...this.ctx.storage.sql.exec(
+					`SELECT id, uid, raw_key
+					   FROM emails
+					  WHERE folder_id = ?1
+					    AND uid IS NOT NULL
+					    AND COALESCE(deleted, 0) = 1
+					    ${uidFilter}
+					  ORDER BY uid ASC
+					  LIMIT ?2`,
+					folder.id,
+					IMAP_EXPUNGE_MAX_MESSAGES,
+				),
+			] as unknown as { id: string; uid: number; raw_key: string | null }[];
+
+			if (targets.length === 0) return { status: "ok", expunged: [], orphanedKeys: [] };
+
+			const expunged = targets.map((row) => Number(row.uid));
+
+			if (!isTrash) {
+				// Trash is a system folder (migration 1) that deleteFolder
+				// refuses to remove, so this is unreachable in practice. If it
+				// ever happens, report nothing removed rather than falling
+				// back to destroying the mail.
+				if (!trash) return { status: "ok", expunged: [], orphanedKeys: [] };
+
+				for (const row of targets) {
+					this.#moveEmailRow(row.id, trash.id);
+					this.ctx.storage.sql.exec(
+						`UPDATE emails SET deleted = 0 WHERE id = ?1`,
+						row.id,
+					);
+				}
+				return { status: "ok", expunged, orphanedKeys: [] };
+			}
+
+			// ── Trash: the one destructive path ──
+			const orphanedKeys: string[] = [];
+			for (const row of targets) {
+				// Collected before the row goes: an attachment blob's key
+				// embeds its owning email id, so it is owned by exactly this
+				// message and nothing else can be referencing it.
+				const attachments = [
+					...this.ctx.storage.sql.exec(
+						`SELECT id, filename FROM attachments WHERE email_id = ?1`,
+						row.id,
+					),
+				] as unknown as { id: string; filename: string }[];
+				for (const att of attachments) {
+					orphanedKeys.push(`attachments/${row.id}/${att.id}/${att.filename}`);
+				}
+				// Attachment rows go with it via ON DELETE CASCADE.
+				this.ctx.storage.sql.exec(`DELETE FROM emails WHERE id = ?1`, row.id);
+			}
+
+			// Raw bytes are shared with any COPY of this message, so the key
+			// is only purgeable once the last row pointing at it is gone.
+			// Checked after the deletes, inside the same transaction.
+			const rawKeys = new Set(
+				targets.map((row) => row.raw_key).filter((key): key is string => !!key),
+			);
+			for (const key of rawKeys) {
+				const stillReferenced = [
+					...this.ctx.storage.sql.exec(
+						`SELECT 1 FROM emails WHERE raw_key = ?1 LIMIT 1`,
+						key,
+					),
+				];
+				if (stillReferenced.length === 0) orphanedKeys.push(key);
+			}
+
+			return { status: "ok", expunged, orphanedKeys };
+		});
+	}
+
+	/** Shared body of COPY and MOVE; they differ only in what they do per uid. */
+	#imapRelocateMessages(
+		folderKey: string,
+		destinationKey: string,
+		uids: number[],
+		mode: "copy" | "move",
+	): ImapRelocateResult {
+		const folder = this.#imapFolderRow(folderKey);
+		if (!folder) return { status: "no-folder" };
+
+		const destination = this.#imapFolderRow(destinationKey);
+		if (!destination) return { status: "no-destination" };
+
+		const wanted = imapUidList(uids);
+		if (wanted.length === 0) return { status: "ok", entries: [] };
+
+		return this.ctx.storage.transactionSync(() => {
+			const rows = [
+				...this.ctx.storage.sql.exec(
+					// Same provably-safe interpolation as imapStoreFlags: every
+					// element of `wanted` came out of imapUidList.
+					`SELECT id, uid
+					   FROM emails
+					  WHERE folder_id = ?1 AND uid IN (${wanted.join(", ")})
+					  ORDER BY uid ASC`,
+					folder.id,
+				),
+			] as unknown as { id: string; uid: number }[];
+
+			// Same folder: report the uid the message already has instead of
+			// churning it. A move to where the message already is has nothing
+			// to renumber, and a copy that minted a second uid for the same
+			// bytes in the same folder would be a surprise, not a duplicate
+			// anyone asked for.
+			if (folder.id === destination.id) {
+				return {
+					status: "ok",
+					entries: rows.map((row) => ({
+						sourceUid: Number(row.uid),
+						destUid: Number(row.uid),
+					})),
+				};
+			}
+
+			const entries: ImapRelocatedUid[] = [];
+			for (const row of rows) {
+				const destUid =
+					mode === "copy"
+						? this.#copyEmailRow(row.id, destination.id)
+						: this.#moveEmailRow(row.id, destination.id);
+				entries.push({ sourceUid: Number(row.uid), destUid });
+			}
+			return { status: "ok", entries };
+		});
+	}
+
+	/**
+	 * Duplicate one email row into another folder and return the copy's UID.
+	 *
+	 * INSERT ... SELECT rather than a read followed by a write: the column
+	 * list is the only thing that decides what a copy carries, and `raw_key`
+	 * is copied verbatim so both rows address the same R2 object.
+	 */
+	#copyEmailRow(sourceId: string, destinationFolderId: string): number {
+		const uid = this.#allocateUid(destinationFolderId);
+		this.ctx.storage.sql.exec(
+			`INSERT INTO emails (
+			     id, folder_id, subject, sender, recipient, cc, bcc, date,
+			     read, starred, body, in_reply_to, email_references, thread_id,
+			     message_id, raw_headers, uid, answered, deleted, flags,
+			     rfc822_size, raw_key
+			 )
+			 SELECT ?1, ?2, subject, sender, recipient, cc, bcc, date,
+			        read, starred, body, in_reply_to, email_references, thread_id,
+			        message_id, raw_headers, ?3, answered, deleted, flags,
+			        rfc822_size, raw_key
+			   FROM emails
+			  WHERE id = ?4`,
+			crypto.randomUUID(),
+			destinationFolderId,
+			uid,
+			sourceId,
+		);
+		return uid;
+	}
+
 	/** Resolve a folder by id (canonical) or, tolerantly, by display name. */
 	#imapFolderRow(folderKey: string): { id: string; uid_next: number } | undefined {
 		return [
@@ -1409,6 +1688,74 @@ export interface ImapUpdatedFlags {
  */
 export interface ImapFlagStoreResult {
 	updated: ImapUpdatedFlags[];
+}
+
+/**
+ * One relocated message: the uid it had in the source folder and the uid it
+ * now has in the destination. The gateway needs both — the source uid to emit
+ * the EXPUNGE/untagged responses for the selected folder, the destination uid
+ * for the COPYUID/MOVEUID response code.
+ */
+export interface ImapRelocatedUid {
+	sourceUid: number;
+	destUid: number;
+}
+
+/**
+ * Result of a COPY or MOVE batch.
+ *
+ * The two 404 cases are distinct so the route can tell "you selected a folder
+ * that does not exist" from "you named a destination that does not exist"
+ * without either answer revealing anything about the mailbox. Uids that did
+ * not resolve are simply absent from `entries`.
+ */
+export type ImapRelocateResult =
+	| { status: "no-folder" }
+	| { status: "no-destination" }
+	| { status: "ok"; entries: ImapRelocatedUid[] };
+
+/**
+ * Result of an EXPUNGE.
+ *
+ * `expunged` is the **source** uids removed from the selected folder, ascending
+ * — that is what an IMAP client needs, whether the message was relocated to
+ * Trash or destroyed. `orphanedKeys` is non-empty only on the destructive
+ * (in-Trash) path, and only for R2 objects nothing references any more; the
+ * route deletes them after the transaction commits.
+ */
+export type ImapExpungeResult =
+	| { status: "no-folder" }
+	| { status: "ok"; expunged: number[]; orphanedKeys: string[] };
+
+/**
+ * Most messages a single EXPUNGE will act on.
+ *
+ * An EXPUNGE with no uid list is unbounded by construction ("everything
+ * \Deleted in this folder"), and the whole batch runs in one synchronous
+ * transaction. Capping it keeps a pathological folder from spending the
+ * Durable Object's CPU budget in a single call; a client that expunges again
+ * simply converges, which is safe because the operation is idempotent.
+ */
+export const IMAP_EXPUNGE_MAX_MESSAGES = IMAP_MESSAGES_MAX_LIMIT;
+
+/**
+ * Normalise a caller-supplied uid list: drop anything that is not a possible
+ * uid, dedupe, and sort ascending.
+ *
+ * Ascending is not cosmetic. It is the order IMAP itself works in, it makes
+ * the destination uids a client receives monotonic in the source uids, and —
+ * because every survivor is a validated integer — it is what makes the list
+ * safe to interpolate into SQL, which is how a batch avoids SQLite's bound
+ * parameter ceiling.
+ */
+function imapUidList(uids: number[]): number[] {
+	const seen = new Set<number>();
+	for (const value of uids) {
+		const uid = imapStoreUid(value);
+		if (uid === null) continue;
+		seen.add(uid);
+	}
+	return [...seen].sort((a, b) => a - b);
 }
 
 /** Row shape of the state read in MailboxDO.imapStoreFlags. */
