@@ -32,17 +32,19 @@ MemoryDenyWriteExecute=true
 SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
 
-# The default listen port IS privileged: config.DefaultIMAPPort is 993 (the
-# IANA imaps port), which is what a mail client tries first and what the
-# service binds when AGENTIC_IMAP_ADDR is left unset. Running unprivileged
-# with an empty capability set would fail bind(2) with EACCES on a default
+# The default listen ports ARE privileged: 993 for IMAP, plus 465 and 587
+# for submission, all of which the service binds when the corresponding
+# AGENTIC_*_ADDR is left unset. They are the ports mail clients try, and
+# several clients offer no way to choose another. Running unprivileged with
+# an empty capability set would fail bind(2) with EACCES on a default
 # install and restart-loop, so CAP_NET_BIND_SERVICE is granted here.
 #
 # It is the whole grant: the bounding set allows nothing else, so the
 # service can bind a low port and do nothing further a root process could.
-# Setting a high port in AGENTIC_IMAP_ADDR and emptying both lines again is
-# a supported hardening step, at the cost of every client needing a
-# non-default port configured by hand.
+# Setting high ports in AGENTIC_IMAP_ADDR, AGENTIC_SMTP_ADDR and
+# AGENTIC_SMTP_STARTTLS_ADDR and emptying both lines again is a supported
+# hardening step, at the cost of every client needing non-default ports
+# configured by hand, which some clients cannot do at all.
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 

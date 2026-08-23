@@ -14,11 +14,26 @@
 //
 // # Transport
 //
-// Implicit TLS on 465 only. There is no cleartext port and no STARTTLS on
-// 587, because the entire security posture is that nothing listens
-// publicly and credentials never cross unencrypted. RequireTLS on the
-// listener is the default and AllowInsecureAuth is off, so a cleartext
-// connection is dropped before it can offer AUTH.
+// Two listeners, one session implementation:
+//
+//   - 465, implicit TLS. The listener terminates TLS, so the connection is
+//     already encrypted at accept time. STARTTLS is not offered because it
+//     would be meaningless on an encrypted link, and a connection that
+//     somehow is not TLS is dropped before it is greeted.
+//   - 587, the RFC 6409 submission port, with mandatory STARTTLS. The
+//     connection starts in the clear, as the port is specified to, and
+//     AUTH is neither advertised nor accepted until it has been upgraded.
+//
+// 587 exists because clients default to it. iOS Mail's account setup has
+// no outgoing port field at all: it tries 587 and nothing else, so a
+// gateway that serves only 465 is one the phone never reaches. Declining
+// to serve the port a client actually uses does not make anything safer.
+//
+// What makes 587 safe is that STARTTLS is mandatory rather than
+// opportunistic. AllowInsecureAuth stays false on both listeners, so
+// go-smtp refuses AUTH with 523 5.7.10 before it has even parsed the
+// mechanism, and the EHLO response omits AUTH entirely until the
+// connection is encrypted. A credential cannot reach the wire in clear.
 //
 // # Credentials
 //
@@ -69,7 +84,7 @@ type Backend interface {
 
 var _ Backend = (*backend.Client)(nil)
 
-// Options configures the submission server.
+// Options configures a submission server.
 type Options struct {
 	// Domain is the hostname announced in the greeting and EHLO response.
 	Domain string
@@ -84,9 +99,35 @@ type Options struct {
 	AllowInsecureAuth bool
 }
 
-// NewServer builds the submission server. Serve it on a TLS listener; see
-// WrapListener.
-func NewServer(be Backend, opts Options) *gosmtp.Server {
+// NewImplicitTLSServer builds the submission server for port 465, where
+// the listener has already terminated TLS.
+//
+// Its TLSConfig is deliberately left unset. In go-smtp that field exists
+// only to enable STARTTLS, and offering STARTTLS on a connection that is
+// already encrypted is meaningless. Serve it behind WrapListener, which
+// refuses anything that is not a *tls.Conn.
+func NewImplicitTLSServer(be Backend, opts Options) *gosmtp.Server {
+	return newServer(be, nil, opts)
+}
+
+// NewSTARTTLSServer builds the submission server for port 587, where the
+// connection begins in the clear and is upgraded in band.
+//
+// tlsConfig must not be nil: without it go-smtp advertises no STARTTLS,
+// and since AllowInsecureAuth stays false the listener would then accept
+// no authentication at all. Serve it on a plain listener, not a TLS one.
+//
+// STARTTLS here is mandatory rather than opportunistic. AUTH is absent
+// from the EHLO response and refused outright until the upgrade, so a
+// client cannot be talked into sending a password in the clear.
+func NewSTARTTLSServer(be Backend, tlsConfig *tls.Config, opts Options) *gosmtp.Server {
+	return newServer(be, tlsConfig, opts)
+}
+
+// newServer is the single builder behind both front doors. The session
+// logic, credential check, sender check, streaming and status mapping are
+// identical; only how the connection gets encrypted differs.
+func newServer(be Backend, tlsConfig *tls.Config, opts Options) *gosmtp.Server {
 	if opts.MaxMessageBytes <= 0 {
 		opts.MaxMessageBytes = DefaultMaxMessageBytes
 	}
@@ -105,10 +146,11 @@ func NewServer(be Backend, opts Options) *gosmtp.Server {
 	srv.MaxRecipients = DefaultMaxRecipients
 	srv.ReadTimeout = DefaultReadTimeout
 	srv.WriteTimeout = DefaultWriteTimeout
+	// Never true in production, on either listener. On 465 the link is
+	// already TLS; on 587 this is exactly what makes STARTTLS mandatory
+	// instead of optional.
 	srv.AllowInsecureAuth = opts.AllowInsecureAuth
-	// No TLSConfig: that field exists to enable STARTTLS, and this server
-	// is implicit TLS at the listener. Setting it would advertise STARTTLS
-	// on a connection that is already encrypted.
+	srv.TLSConfig = tlsConfig
 	srv.ErrorLog = slogSMTPLogger{opts.Logger}
 	return srv
 }

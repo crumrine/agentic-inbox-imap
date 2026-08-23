@@ -7,14 +7,23 @@ package smtp
 import (
 	"bufio"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"fmt"
 	"io"
 	"log/slog"
+	"math/big"
 	"net"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	gosmtp "github.com/emersion/go-smtp"
 
 	"github.com/crumrine/agentic-inbox/gateway/internal/backend"
 )
@@ -217,9 +226,12 @@ type rawClient struct {
 	greeting string
 }
 
-// startRawClient runs a real go-smtp server over a pipe and returns a
-// connected text client. AllowCleartext and AllowInsecureAuth are both
-// needed because a pipe is not TLS; production takes neither.
+// startRawClient runs the implicit-TLS server over a pipe and returns a
+// connected text client.
+//
+// AllowCleartext and AllowInsecureAuth stand in for the TLS that a real
+// 465 listener provides; a pipe is not TLS. Production sets neither. Tests
+// that care about the transport itself override them.
 func startRawClient(t *testing.T, be Backend, opts ...func(*Options)) *rawClient {
 	t.Helper()
 
@@ -227,12 +239,39 @@ func startRawClient(t *testing.T, be Backend, opts ...func(*Options)) *rawClient
 	for _, opt := range opts {
 		opt(&options)
 	}
+	return serveAndDial(t, NewImplicitTLSServer(be, options), true)
+}
+
+// startSTARTTLSClient runs the 587 server over a pipe, exactly as
+// configured in production: a plain listener, a real TLS config, and
+// AllowInsecureAuth off so STARTTLS is mandatory.
+func startSTARTTLSClient(t *testing.T, be Backend, opts ...func(*Options)) (*rawClient, *tls.Config) {
+	t.Helper()
+
+	serverTLS, clientTLS := testTLSConfigs(t)
+	options := Options{Domain: "gateway.test", Logger: newTestLogger(t)}
+	for _, opt := range opts {
+		opt(&options)
+	}
+	return serveAndDial(t, NewSTARTTLSServer(be, serverTLS, options), false), clientTLS
+}
+
+// serveAndDial runs srv on a pipe listener and returns a client connected
+// to it, having read the greeting.
+func serveAndDial(t *testing.T, srv *gosmtp.Server, requireWrapper bool) *rawClient {
+	t.Helper()
 
 	ln := newPipeListener()
-	srv := NewServer(be, options)
+
+	var listener net.Listener = ln
+	if requireWrapper {
+		// The implicit-TLS door refuses non-TLS connections, so a pipe has
+		// to opt in explicitly.
+		listener = WrapListener(ln, AllowCleartext())
+	}
 
 	served := make(chan error, 1)
-	go func() { served <- srv.Serve(WrapListener(ln, AllowCleartext())) }()
+	go func() { served <- srv.Serve(listener) }()
 
 	conn, err := ln.dial()
 	if err != nil {
@@ -251,6 +290,70 @@ func startRawClient(t *testing.T, be Backend, opts ...func(*Options)) *rawClient
 		t.Fatalf("greeting = %q, want 220", c.greeting)
 	}
 	return c
+}
+
+// testTLSConfigs builds a throwaway self-signed certificate and the server
+// and client configs that trust it.
+func testTLSConfigs(t *testing.T) (server, client *tls.Config) {
+	t.Helper()
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generating key: %v", err)
+	}
+	template := x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "gateway.test"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:              []string{"gateway.test"},
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("creating certificate: %v", err)
+	}
+	leaf, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatalf("parsing certificate: %v", err)
+	}
+
+	pool := x509.NewCertPool()
+	pool.AddCert(leaf)
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}},
+		MinVersion:   tls.VersionTLS12,
+	}, &tls.Config{
+		RootCAs:    pool,
+		ServerName: "gateway.test",
+		MinVersion: tls.VersionTLS12,
+	}
+}
+
+// startTLS performs the client half of a STARTTLS upgrade and replaces the
+// underlying connection, so subsequent commands run encrypted.
+func (c *rawClient) startTLS(clientTLS *tls.Config) {
+	c.t.Helper()
+
+	requireCode(c.t, c.do("STARTTLS"), 220)
+
+	if err := c.conn.SetDeadline(time.Now().Add(15 * time.Second)); err != nil {
+		c.t.Fatalf("SetDeadline: %v", err)
+	}
+	tlsConn := tls.Client(c.conn, clientTLS)
+	if err := tlsConn.Handshake(); err != nil {
+		c.t.Fatalf("TLS handshake: %v", err)
+	}
+	if err := c.conn.SetDeadline(time.Time{}); err != nil {
+		c.t.Fatalf("clearing deadline: %v", err)
+	}
+
+	c.conn = tlsConn
+	c.br = bufio.NewReader(tlsConn)
 }
 
 func (c *rawClient) readLine() string {

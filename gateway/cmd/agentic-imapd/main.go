@@ -145,22 +145,26 @@ func run() error {
 	// working IMAP deployment stops serving. Every failure below is logged
 	// and stepped over: a listener that cannot bind, a disabled address, a
 	// missing Tailscale interface. A client then gets connection refused on
-	// 465, which is loud, while mail keeps being readable.
-	smtpServer, smtpDone := startSubmission(cfg, backendClient, tlsConfig, logger)
+	// that port, which is loud, while mail keeps being readable.
+	//
+	// Two front doors, independently optional. 465 is implicit TLS; 587 is
+	// the RFC 6409 port with mandatory STARTTLS, which is what clients
+	// default to and what iOS Mail can reach at all.
+	submissions := startSubmission(cfg, backendClient, tlsConfig, logger)
 
 	shutdown := func() error {
 		logger.Info("shutdown signal received, closing listeners")
 
-		var smtpErr error
-		if smtpServer != nil {
-			// Graceful: let an in-flight submission finish rather than
-			// dropping a message the user already handed us.
+		// Graceful: let an in-flight submission finish rather than
+		// dropping a message the user already handed us.
+		for _, sub := range submissions {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), smtpShutdownGrace)
-			smtpErr = smtpServer.Shutdown(shutdownCtx)
+			err := sub.server.Shutdown(shutdownCtx)
 			cancel()
-			<-smtpDone
-			if smtpErr != nil {
-				logger.Error("smtp submission did not shut down cleanly", "err", smtpErr)
+			<-sub.done
+			if err != nil {
+				logger.Error("smtp submission did not shut down cleanly",
+					"listener", sub.name, "addr", sub.addr, "err", err)
 			}
 		}
 
@@ -188,55 +192,100 @@ func run() error {
 // finish once a shutdown starts.
 const smtpShutdownGrace = 30 * time.Second
 
-// startSubmission brings up the SMTP submission listener, or returns nil
-// when it is disabled or cannot be started. It never returns an error: see
-// the call site for why.
-func startSubmission(cfg *config.Config, be *backend.Client, tlsConfig *tls.Config, logger *slog.Logger) (*gosmtp.Server, <-chan struct{}) {
+// submissionListener is one running submission front door.
+type submissionListener struct {
+	name   string
+	addr   string
+	server *gosmtp.Server
+	done   <-chan struct{}
+}
+
+// startSubmission brings up the submission listeners that are configured
+// and can be bound. It never returns an error and never blocks startup:
+// see the call site for why.
+func startSubmission(cfg *config.Config, be *backend.Client, tlsConfig *tls.Config, logger *slog.Logger) []submissionListener {
+	var running []submissionListener
+
+	// 465: the listener terminates TLS, so the connection is encrypted
+	// before go-smtp sees it and STARTTLS is not offered.
+	if sub, ok := startOneSubmission(logger, "implicit-tls", cfg.SMTPAddr, config.EnvSMTPAddr,
+		func() (net.Listener, error) { return tls.Listen("tcp", cfg.SMTPAddr, tlsConfig) },
+		func() *gosmtp.Server {
+			return smtpsession.NewImplicitTLSServer(be, smtpsession.Options{
+				Domain: submissionDomain(cfg, cfg.SMTPAddr),
+				Logger: logger,
+			})
+		},
+		// Nothing that is not already TLS gets past the door.
+		func(ln net.Listener) net.Listener { return smtpsession.WrapListener(ln) },
+	); ok {
+		running = append(running, sub)
+	}
+
+	// 587: a plain listener, upgraded in band. AUTH is neither advertised
+	// nor accepted until STARTTLS has run, so this cannot leak a password.
+	if sub, ok := startOneSubmission(logger, "starttls", cfg.SMTPStartTLSAddr, config.EnvSMTPStartTLSAddr,
+		func() (net.Listener, error) { return net.Listen("tcp", cfg.SMTPStartTLSAddr) },
+		func() *gosmtp.Server {
+			return smtpsession.NewSTARTTLSServer(be, tlsConfig, smtpsession.Options{
+				Domain: submissionDomain(cfg, cfg.SMTPStartTLSAddr),
+				Logger: logger,
+			})
+		},
+		// No wrapper: the connection is cleartext by design until the
+		// client issues STARTTLS.
+		func(ln net.Listener) net.Listener { return ln },
+	); ok {
+		running = append(running, sub)
+	}
+
+	if len(running) == 0 {
+		logger.Warn("no smtp submission listener is running; outgoing mail will not work",
+			"hint", "set "+config.EnvSMTPAddr+" or "+config.EnvSMTPStartTLSAddr)
+	}
+	return running
+}
+
+func startOneSubmission(
+	logger *slog.Logger,
+	name, addr, envVar string,
+	listen func() (net.Listener, error),
+	build func() *gosmtp.Server,
+	wrap func(net.Listener) net.Listener,
+) (submissionListener, bool) {
+	if addr == "" {
+		logger.Info("smtp submission listener disabled",
+			"listener", name, "hint", "set "+envVar+" to enable")
+		return submissionListener{}, false
+	}
+
+	ln, err := listen()
+	if err != nil {
+		logger.Error("smtp submission listener could not bind, continuing without it",
+			"listener", name, "addr", addr, "err", err)
+		return submissionListener{}, false
+	}
+
+	server := build()
 	done := make(chan struct{})
 
-	if cfg.SMTPAddr == "" {
-		close(done)
-		logger.Info("smtp submission is disabled", "reason",
-			"no address configured and no Tailscale interface detected; set "+config.EnvSMTPAddr+" to enable")
-		return nil, done
-	}
-
-	listener, err := tls.Listen("tcp", cfg.SMTPAddr, tlsConfig)
-	if err != nil {
-		close(done)
-		logger.Error("smtp submission could not bind, continuing with IMAP only",
-			"addr", cfg.SMTPAddr, "err", err)
-		return nil, done
-	}
-
-	server := smtpsession.NewServer(be, smtpsession.Options{
-		Domain: submissionDomain(cfg),
-		Logger: logger,
-	})
-
 	logger.Info("smtp submission listening",
-		"addr", cfg.SMTPAddr, "max_message_bytes", server.MaxMessageBytes)
+		"listener", name, "addr", addr, "max_message_bytes", server.MaxMessageBytes)
 
 	go func() {
 		defer close(done)
-		// Implicit TLS at the listener, and the wrapper drops anything that
-		// somehow is not TLS before the greeting.
-		if err := server.Serve(smtpsession.WrapListener(listener)); err != nil {
-			logger.Error("smtp submission listener stopped", "err", err)
+		if err := server.Serve(wrap(ln)); err != nil {
+			logger.Error("smtp submission listener stopped", "listener", name, "err", err)
 		}
 	}()
 
-	return server, done
+	return submissionListener{name: name, addr: addr, server: server, done: done}, true
 }
 
-// submissionDomain is the hostname announced in the SMTP greeting. The TLS
-// certificate comes from `tailscale cert <magicdns-name>`, so its subject
-// is the right name to use; the listen host is the fallback.
-func submissionDomain(cfg *config.Config) string {
-	if len(cfg.TLSCertFile) > 0 {
-		if host, _, err := net.SplitHostPort(cfg.SMTPAddr); err == nil && host != "" {
-			return host
-		}
+// submissionDomain is the hostname announced in the SMTP greeting.
+func submissionDomain(cfg *config.Config, addr string) string {
+	if host, _, err := net.SplitHostPort(addr); err == nil && host != "" {
+		return host
 	}
 	return "agentic-imapd"
 }

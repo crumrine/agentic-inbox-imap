@@ -402,8 +402,11 @@ func TestAuthRefusedOnCleartextByGoSMTP(t *testing.T) {
 	}
 }
 
-func TestNewServerDoesNotEnableStartTLS(t *testing.T) {
-	srv := NewServer(newFakeBackend(), Options{})
+// TestImplicitTLSServerDoesNotEnableStartTLS guards the 465 posture. In
+// go-smtp TLSConfig exists only to enable STARTTLS, and offering it on a
+// link that is already encrypted is meaningless.
+func TestImplicitTLSServerDoesNotEnableStartTLS(t *testing.T) {
+	srv := NewImplicitTLSServer(newFakeBackend(), Options{})
 	if srv.TLSConfig != nil {
 		t.Error("TLSConfig is set, which advertises STARTTLS on an implicit-TLS listener")
 	}
@@ -412,6 +415,23 @@ func TestNewServerDoesNotEnableStartTLS(t *testing.T) {
 	}
 	if srv.MaxMessageBytes != DefaultMaxMessageBytes {
 		t.Errorf("MaxMessageBytes = %d, want %d", srv.MaxMessageBytes, DefaultMaxMessageBytes)
+	}
+}
+
+// TestSTARTTLSServerConfiguration is the mirror: 587 must offer STARTTLS
+// and must still refuse cleartext AUTH, which is what makes the upgrade
+// mandatory rather than optional.
+func TestSTARTTLSServerConfiguration(t *testing.T) {
+	serverTLS, _ := testTLSConfigs(t)
+	srv := NewSTARTTLSServer(newFakeBackend(), serverTLS, Options{})
+	if srv.TLSConfig == nil {
+		t.Error("TLSConfig is unset, so STARTTLS would not be offered and AUTH would be unreachable")
+	}
+	if srv.AllowInsecureAuth {
+		t.Error("AllowInsecureAuth is true, which would make STARTTLS optional")
+	}
+	if srv.MaxMessageBytes != DefaultMaxMessageBytes {
+		t.Errorf("MaxMessageBytes = %d, want the same cap as the other door", srv.MaxMessageBytes)
 	}
 }
 
@@ -435,7 +455,7 @@ func TestGracefulShutdownWaitsForAnInFlightSession(t *testing.T) {
 	slow := &blockingBackend{Backend: be, entered: entered, release: release}
 
 	ln := newPipeListener()
-	srv := NewServer(slow, Options{Domain: "gateway.test", AllowInsecureAuth: true, Logger: newTestLogger(t)})
+	srv := NewImplicitTLSServer(slow, Options{Domain: "gateway.test", AllowInsecureAuth: true, Logger: newTestLogger(t)})
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(WrapListener(ln, AllowCleartext())) }()
 

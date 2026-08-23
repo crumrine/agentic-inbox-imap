@@ -99,10 +99,12 @@ least visible.
 The `From:` header is **not** checked here, only the envelope sender. See
 `internal/smtp/smtp.go` for why.
 
-Submission is optional and can never stop IMAP from starting.
-`AGENTIC_SMTP_ADDR` defaults to the detected Tailscale address on 465; set
-it to `off` to disable, and if the listener cannot bind the daemon logs the
-failure and carries on serving IMAP.
+Both listeners are independently optional and neither can stop IMAP from
+starting. `AGENTIC_SMTP_ADDR` (465) and `AGENTIC_SMTP_STARTTLS_ADDR` (587)
+each default to the detected Tailscale address on their port; set either to
+`off` to disable it. If a listener cannot bind, the daemon logs the failure
+and carries on. The journal records which listeners came up, so a
+misconfiguration is visible there rather than only as a client error.
 
 Verified against iOS Mail over the tailnet with a live Worker: connect, full
 folder sync, UID SEARCH, UID FETCH with BODY.PEEK[HEADER] and partial ranges,
@@ -110,10 +112,14 @@ IDLE holding open until DONE, flag writes persisting, and COPY, MOVE and
 EXPUNGE against a real mailbox (COPYUID correct, descending EXPUNGE, no UID
 reuse). APPEND is covered against a fake backend and an in-process go-imap
 server, including appending a real message over the wire and reading it back
-out, but has not yet run against a real client. SMTP submission is covered
-against a fake backend and a real go-smtp server over a pipe, including a
-full AUTH/MAIL/RCPT/DATA/QUIT exchange, but has not yet carried a real
-message.
+out, but has not yet run against a real client.
+
+SMTP submission on 465 is verified live: a real send authenticated, queued,
+recorded a Sent copy with the client's Message-ID, and was delivered back
+into the inbox. The 587 STARTTLS door is covered against a fake backend and
+a real go-smtp server over a pipe, including a real TLS handshake and a
+full EHLO/STARTTLS/EHLO/AUTH/MAIL/RCPT/DATA/QUIT exchange, but has not yet
+carried a real message.
 
 ## Why Tailscale-only
 

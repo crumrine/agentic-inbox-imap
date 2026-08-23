@@ -24,6 +24,7 @@ const (
 	EnvAccessCookie       = "AGENTIC_ACCESS_COOKIE"
 	EnvIMAPAddr           = "AGENTIC_IMAP_ADDR"
 	EnvSMTPAddr           = "AGENTIC_SMTP_ADDR"
+	EnvSMTPStartTLSAddr   = "AGENTIC_SMTP_STARTTLS_ADDR"
 	EnvTLSCert            = "AGENTIC_TLS_CERT"
 	EnvTLSKey             = "AGENTIC_TLS_KEY"
 	EnvLogLevel           = "AGENTIC_LOG_LEVEL"
@@ -34,10 +35,16 @@ const (
 // interface address can be auto-detected.
 const DefaultIMAPPort = "993"
 
-// DefaultSMTPPort is used when AGENTIC_SMTP_ADDR is unset and a Tailscale
-// interface address can be auto-detected. 465 is implicit TLS submission;
-// there is deliberately no 587 STARTTLS path.
+// DefaultSMTPPort is the implicit-TLS submission port, used when
+// AGENTIC_SMTP_ADDR is unset and a Tailscale interface address can be
+// auto-detected.
 const DefaultSMTPPort = "465"
+
+// DefaultSMTPStartTLSPort is the RFC 6409 submission port, used when
+// AGENTIC_SMTP_STARTTLS_ADDR is unset. Clients default to it and several,
+// iOS Mail among them, offer no way to choose another, so serving only 465
+// means those clients never connect at all.
+const DefaultSMTPStartTLSPort = "587"
 
 // smtpDisabledValues turn the submission listener off explicitly. Leaving
 // AGENTIC_SMTP_ADDR unset enables it on the detected Tailscale address, so
@@ -74,11 +81,17 @@ type Config struct {
 	// connections, e.g. "100.64.1.2:993".
 	IMAPAddr string
 
-	// SMTPAddr is the address the submission listener binds, e.g.
-	// "100.64.1.2:465". Empty means submission is disabled, either because
-	// it was turned off explicitly or because no Tailscale address could
-	// be detected for it. IMAP runs either way.
+	// SMTPAddr is the address the implicit-TLS submission listener binds,
+	// e.g. "100.64.1.2:465". Empty means that listener is disabled, either
+	// because it was turned off explicitly or because no Tailscale address
+	// could be detected for it. IMAP runs either way.
 	SMTPAddr string
+
+	// SMTPStartTLSAddr is the address the STARTTLS submission listener
+	// binds, e.g. "100.64.1.2:587". Empty means disabled. It is
+	// independent of SMTPAddr: either, both or neither may run, and
+	// neither can stop IMAP from starting.
+	SMTPStartTLSAddr string
 
 	// TLSCertFile and TLSKeyFile are paths to `tailscale cert` output.
 	TLSCertFile string
@@ -173,7 +186,12 @@ func load(lookup lookupFunc) (*Config, error) {
 		return nil, fmt.Errorf("config: refusing to start: %w", err)
 	}
 
-	smtpAddr, err := loadSMTPAddr(lookup, allowPublicBind)
+	smtpAddr, err := loadSubmissionAddr(lookup, EnvSMTPAddr, DefaultSMTPPort, allowPublicBind)
+	if err != nil {
+		return nil, err
+	}
+
+	smtpStartTLSAddr, err := loadSubmissionAddr(lookup, EnvSMTPStartTLSAddr, DefaultSMTPStartTLSPort, allowPublicBind)
 	if err != nil {
 		return nil, err
 	}
@@ -190,6 +208,7 @@ func load(lookup lookupFunc) (*Config, error) {
 		AccessCookie:       accessCookie,
 		IMAPAddr:           addr,
 		SMTPAddr:           smtpAddr,
+		SMTPStartTLSAddr:   smtpStartTLSAddr,
 		TLSCertFile:        certFile,
 		TLSKeyFile:         keyFile,
 		LogLevel:           logLevel,
@@ -197,14 +216,16 @@ func load(lookup lookupFunc) (*Config, error) {
 	}, nil
 }
 
-// loadSMTPAddr resolves the submission listen address.
+// loadSubmissionAddr resolves one submission listen address.
 //
-// Unset means "the detected Tailscale address on 465", matching IMAP. If
-// no such address can be found the result is empty rather than an error:
-// submission is an addition, and it must never be the reason a working
-// IMAP deployment stops starting.
-func loadSMTPAddr(lookup lookupFunc, allowPublic bool) (string, error) {
-	raw, ok := lookup(EnvSMTPAddr)
+// Unset means "the detected Tailscale address on defaultPort", matching
+// IMAP. If no such address can be found the result is empty rather than an
+// error: submission is an addition, and it must never be the reason a
+// working IMAP deployment stops starting. A misconfigured address, on the
+// other hand, is a real mistake and does fail startup, because the
+// public-bind interlock has to be unskippable.
+func loadSubmissionAddr(lookup lookupFunc, envVar, defaultPort string, allowPublic bool) (string, error) {
+	raw, ok := lookup(envVar)
 	trimmed := strings.TrimSpace(raw)
 
 	if ok && smtpDisabledValues[strings.ToLower(trimmed)] {
@@ -212,7 +233,7 @@ func loadSMTPAddr(lookup lookupFunc, allowPublic bool) (string, error) {
 	}
 
 	if !ok || trimmed == "" {
-		detected, err := DefaultTailscaleAddrPort(DefaultSMTPPort)
+		detected, err := DefaultTailscaleAddrPort(defaultPort)
 		if err != nil {
 			// Not fatal, by design. See the doc comment.
 			return "", nil
@@ -221,7 +242,7 @@ func loadSMTPAddr(lookup lookupFunc, allowPublic bool) (string, error) {
 	}
 
 	if err := CheckBindAddr(trimmed, allowPublic); err != nil {
-		return "", fmt.Errorf("config: refusing to start: %s: %w", EnvSMTPAddr, err)
+		return "", fmt.Errorf("config: refusing to start: %s: %w", envVar, err)
 	}
 	return trimmed, nil
 }
@@ -361,8 +382,10 @@ func (c *Config) redacted() string {
 	}
 	return fmt.Sprintf(
 		"config.Config{InboxURL:%q, AccessClientID:%q, AccessClientSecret:%s, AccessCookie:%s, "+
-			"IMAPAddr:%q, SMTPAddr:%q, TLSCertFile:%q, TLSKeyFile:%q, LogLevel:%q, AllowPublicBind:%t}",
+			"IMAPAddr:%q, SMTPAddr:%q, SMTPStartTLSAddr:%q, TLSCertFile:%q, TLSKeyFile:%q, "+
+			"LogLevel:%q, AllowPublicBind:%t}",
 		c.InboxURL, c.AccessClientID, secret, cookie,
-		c.IMAPAddr, c.SMTPAddr, c.TLSCertFile, c.TLSKeyFile, c.LogLevel, c.AllowPublicBind,
+		c.IMAPAddr, c.SMTPAddr, c.SMTPStartTLSAddr, c.TLSCertFile, c.TLSKeyFile,
+		c.LogLevel, c.AllowPublicBind,
 	)
 }
