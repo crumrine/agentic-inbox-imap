@@ -245,12 +245,14 @@ a client moves a message in one round trip and gets a real COPYUID response
 back.
 
 APPEND is served too, with UIDPLUS APPENDUID. The Worker deduplicates on
-Message-ID everywhere except Sent, which is what stops a message appearing
-twice when a client saves its own copy of something it just submitted. The
-exception matters: a client edits a draft by re-APPENDing it with the *same*
-Message-ID and expunging the old copy, so deduplicating in Drafts would
-return the original uid without writing the new body, and the client would
-then expunge the copy it thought it had just replaced.
+Message-ID in Sent and nowhere else. Sent is the one folder with two writers:
+the app records a row on its own send path, and the client then APPENDs its
+own copy of the same message, so without dedup every sent message appears
+twice. Everywhere else always gets a new row, matching Message-ID or not,
+because a client edits a draft by re-APPENDing it with the *same* Message-ID
+and expunging the old copy. Deduplicating in Drafts would return the original
+uid without writing the new body, and the client would then expunge the copy
+it thought it had just replaced.
 
 Verified against iOS Mail over the tailnet with a live Worker: connect, full
 folder sync, UID SEARCH, UID FETCH with BODY.PEEK[HEADER] and partial ranges,
