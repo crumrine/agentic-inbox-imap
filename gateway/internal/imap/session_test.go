@@ -550,27 +550,20 @@ func TestSearchWithoutSelection(t *testing.T) {
 // Out-of-scope commands
 // ---------------------------------------------------------------------
 
-// TestOutOfScopeCommandsReturnCleanErrors exercises every mutating entry
-// point. None may panic, none may nil-deref, and all must produce an
-// *imap.Error the server can turn into a NO.
-func TestOutOfScopeCommandsReturnCleanErrors(t *testing.T) {
+// TestUnimplementedCommandsReturnCleanErrors exercises the mailbox
+// management commands, which remain unimplemented. None may panic, none may
+// nil-deref, and all must produce an *imap.Error the server turns into a
+// NO.
+func TestUnimplementedCommandsReturnCleanErrors(t *testing.T) {
 	calls := map[string]func(s *Session) error{
 		"Create":    func(s *Session) error { return s.Create("New", nil) },
 		"Delete":    func(s *Session) error { return s.Delete("Archive") },
 		"Rename":    func(s *Session) error { return s.Rename("Archive", "Old", nil) },
 		"Subscribe": func(s *Session) error { return s.Subscribe("Archive") },
 		"Unsubscr":  func(s *Session) error { return s.Unsubscribe("Archive") },
-		"Append": func(s *Session) error {
-			_, err := s.Append("INBOX", literalReader("hello"), nil)
-			return err
-		},
-		"AppendNilLiteral": func(s *Session) error {
-			_, err := s.Append("INBOX", nil, nil)
-			return err
-		},
-		// IDLE, STORE, COPY, MOVE and EXPUNGE are deliberately absent:
-		// they are implemented. See idle_test.go, store_test.go and
-		// mutate_test.go.
+		// IDLE, STORE, COPY, MOVE, EXPUNGE and APPEND are deliberately
+		// absent: they are implemented. See idle_test.go, store_test.go
+		// and mutate_test.go.
 	}
 
 	for name, call := range calls {
@@ -650,18 +643,6 @@ func TestCloseIsIdempotent(t *testing.T) {
 	if mailbox, sel := s.snapshot(); mailbox != "" || sel != nil {
 		t.Errorf("state survived Close: mailbox %q, selection %v", mailbox, sel)
 	}
-}
-
-// literalReader adapts a string to imap.LiteralReader for the APPEND test.
-type stringLiteral struct {
-	*strings.Reader
-	size int64
-}
-
-func (l stringLiteral) Size() int64 { return l.size }
-
-func literalReader(s string) imap.LiteralReader {
-	return stringLiteral{Reader: strings.NewReader(s), size: int64(len(s))}
 }
 
 // TestForEachResolvesStar covers "*" in a number set. It is a direct test

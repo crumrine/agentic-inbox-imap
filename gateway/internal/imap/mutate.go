@@ -5,6 +5,9 @@
 package imap
 
 import (
+	"context"
+	"math"
+
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapserver"
 
@@ -277,4 +280,127 @@ func asIMAPError(err error, target **imap.Error) bool {
 		*target = e
 	}
 	return ok
+}
+
+// Session advertises an APPEND size limit, which makes go-imap emit
+// APPENDLIMIT in CAPABILITY and, more usefully, refuse an oversize literal
+// with NO [TOOBIG] before a single byte of it is accepted.
+var _ imapserver.SessionAppendLimit = (*Session)(nil)
+
+// AppendLimit is the largest message APPEND will take, in bytes.
+func (s *Session) AppendLimit() uint32 {
+	limit := s.maxAppendBytes
+	if limit <= 0 {
+		limit = DefaultMaxAppendBytes
+	}
+	if limit > math.MaxUint32 {
+		limit = math.MaxUint32
+	}
+	return uint32(limit)
+}
+
+// Append implements APPEND, streaming the client's literal straight through
+// to the Worker.
+//
+// # The literal
+//
+// go-imap has already written the "+ Ready for literal data" continuation
+// by the time this is called, so the client is committed to sending the
+// body whatever happens here. It does not need draining on the error paths:
+// imapserver.handleAppend runs io.Copy(io.Discard, lit) unconditionally the
+// moment this returns, error or not, which is what keeps the connection in
+// sync. Draining here as well would only read the same bytes twice.
+//
+// The body is handed to the backend as a reader and never buffered. An
+// APPEND is the one request whose size the client chooses, so buffering it
+// is the single place a client could make this process allocate
+// arbitrarily. AppendLimit caps it besides, before the upload starts.
+func (s *Session) Append(mailbox string, r imap.LiteralReader, options *imap.AppendOptions) (*imap.AppendData, error) {
+	name, sel := s.snapshot()
+	if name == "" {
+		return nil, errNotAuthenticated
+	}
+	if r == nil {
+		return nil, errClientBug("APPEND requires a message literal")
+	}
+
+	// Resolving the destination is a small JSON call, so it keeps the
+	// session's ordinary bound.
+	lookupCtx, cancelLookup := s.context()
+	folder, err := s.lookupFolder(lookupCtx, name, mailbox)
+	cancelLookup()
+	if err != nil {
+		var imapErr *imap.Error
+		if ok := asIMAPError(err, &imapErr); ok && imapErr.Code == imap.ResponseCodeNonExistent {
+			// RFC 9051 section 6.3.12: TRYCREATE tells the client that
+			// creating the mailbox and retrying is worth doing.
+			return nil, &imap.Error{
+				Type: imap.StatusResponseTypeNo,
+				Code: imap.ResponseCodeTryCreate,
+				Text: "Destination mailbox does not exist",
+			}
+		}
+		return nil, err
+	}
+
+	var opts backend.AppendOptions
+	if options != nil {
+		opts.Flags = appendFlagStrings(options.Flags)
+		opts.Time = options.Time
+	}
+
+	// No session-level deadline on the upload itself. The transfer is
+	// bounded by the backend client's own upload timeout, which is sized
+	// for a body rather than for a round trip; wrapping it in the
+	// session's operation timeout would reimpose exactly the bound that is
+	// wrong here.
+	result, err := s.backend.Append(context.Background(), name, folderKey(folder), r, r.Size(), opts)
+	if err != nil {
+		return nil, mapBackendError(err, "Destination mailbox does not exist")
+	}
+
+	// Visibility in the selected folder is left to the ordinary refresh
+	// rather than grown here directly. Two reasons: the append response
+	// carries only a UID, so synthesising a snapshot entry would mean
+	// inventing an envelope, size and internal date that the metadata
+	// endpoint may later contradict; and refresh already holds every
+	// append-only invariant, which a second growth path would have to
+	// duplicate and could drift from.
+	//
+	// It is not deferred in practice. imapserver.handleAppend calls Poll
+	// immediately after this returns and before the tagged completion, so
+	// clearing the interval floor makes that poll do real work and the
+	// EXISTS arrives within the same command.
+	if sel != nil && sel.folderKey == folderKey(folder) {
+		s.invalidatePollFloor()
+	}
+
+	return &imap.AppendData{
+		UID:         imap.UID(result.UID),
+		UIDValidity: result.UIDValidity,
+	}, nil
+}
+
+// appendFlagStrings canonicalises the flags an APPEND may set.
+//
+// Unlike STORE this keeps \Draft: a STORE cannot change what kind of
+// message something is, because draft-ness follows the folder, but an
+// APPEND is creating the message and the client is describing what it is
+// creating. \Recent is still dropped, being unsettable by definition.
+func appendFlagStrings(flags []imap.Flag) []string {
+	out := make([]string, 0, len(flags))
+	seen := make(map[imap.Flag]struct{}, len(flags))
+	for _, raw := range flags {
+		f := normalizeFlag(string(raw))
+		if f == "" || canonicalFlag(f) == canonicalFlag(flagRecent) {
+			continue
+		}
+		key := canonicalFlag(f)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, string(f))
+	}
+	return out
 }

@@ -44,6 +44,19 @@ const (
 	// to RawMessage's streamed body — see ResponseHeaderTimeout below.
 	defaultRequestTimeout = 30 * time.Second
 
+	// defaultUploadTimeout bounds an APPEND, which streams a whole message
+	// up to the Worker. defaultRequestTimeout is the wrong bound here for
+	// the same reason it was wrong for RawMessage's download: it measures
+	// the transfer, not the server, so a large body on a slow link would
+	// be cut off mid-flight. The transport's ResponseHeaderTimeout still
+	// catches a Worker that goes quiet, because it only starts counting
+	// once the request body has been fully written.
+	//
+	// Five minutes matches go-imap's own literalReadTimeout, so the
+	// gateway never waits longer to push a literal upstream than it was
+	// willing to wait to read it.
+	defaultUploadTimeout = 5 * time.Minute
+
 	// defaultResponseHeaderTimeout bounds how long we wait for the Worker
 	// to start responding at all. This is what protects an IMAP session
 	// from wedging on a hung Worker; it does not limit how long a large
@@ -65,6 +78,9 @@ type Client struct {
 
 	// requestTimeout bounds JSON endpoints only; see defaultRequestTimeout.
 	requestTimeout time.Duration
+
+	// uploadTimeout bounds Append; see defaultUploadTimeout.
+	uploadTimeout time.Duration
 }
 
 // Option configures a Client constructed by New.
@@ -81,6 +97,12 @@ func WithHTTPClient(hc *http.Client) Option {
 // (Authenticate, Folders, Messages). It does not affect RawMessage.
 func WithRequestTimeout(d time.Duration) Option {
 	return func(c *Client) { c.requestTimeout = d }
+}
+
+// WithUploadTimeout overrides the timeout applied to Append, which streams
+// a whole message body. It does not affect the JSON endpoints.
+func WithUploadTimeout(d time.Duration) Option {
+	return func(c *Client) { c.uploadTimeout = d }
 }
 
 // New builds a Client for the Worker at baseURL, authenticating to it with
@@ -111,6 +133,7 @@ func New(baseURL, clientID, clientSecret string, opts ...Option) (*Client, error
 			// applied explicitly in doJSON via context.WithTimeout.
 		},
 		requestTimeout: defaultRequestTimeout,
+		uploadTimeout:  defaultUploadTimeout,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -211,7 +234,14 @@ func newTransportError(err error) *APIError {
 // c.requestTimeout. It decodes the response into out (which may be nil for
 // endpoints with no useful body) on success (2xx).
 func (c *Client) doJSON(ctx context.Context, method, path string, query url.Values, body io.Reader, contentType string, out any) error {
-	ctx, cancel := context.WithTimeout(ctx, c.requestTimeout)
+	return c.doRequest(ctx, c.requestTimeout, method, path, query, body, contentType, -1, out)
+}
+
+// doRequest is doJSON with the timeout and body length made explicit, so an
+// upload can pick a bound suited to a transfer rather than to a round trip.
+// A contentLength below zero leaves net/http to work it out.
+func (c *Client) doRequest(ctx context.Context, timeout time.Duration, method, path string, query url.Values, body io.Reader, contentType string, contentLength int64, out any) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	req, err := c.newRequest(ctx, method, path, query, body)
@@ -220,6 +250,12 @@ func (c *Client) doJSON(ctx context.Context, method, path string, query url.Valu
 	}
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
+	}
+	if contentLength >= 0 {
+		// A known length means a Content-Length header and a straight
+		// streamed body. Without it net/http would fall back to chunked
+		// encoding for a reader it cannot measure.
+		req.ContentLength = contentLength
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -405,6 +441,41 @@ func (c *Client) doUIDsRequest(ctx context.Context, path string, uids []uint32, 
 		return fmt.Errorf("backend: encoding request: %w", err)
 	}
 	return c.doJSON(ctx, http.MethodPost, path, nil, bytes.NewReader(payload), "application/json", out)
+}
+
+// AppendOptions carries the optional metadata an APPEND may specify.
+type AppendOptions struct {
+	// Flags are set on the stored message. Sent as a comma-separated,
+	// URL-encoded query parameter.
+	Flags []string
+	// Time is the message's internal date. Zero means "let the Worker
+	// decide", which it does by using the time of receipt.
+	Time time.Time
+}
+
+// Append calls POST /api/imap/v1/{mailbox}/{folder}/append, streaming a raw
+// RFC 5322 message into a folder.
+//
+// body is streamed straight to the Worker and never buffered here: an
+// APPEND is the one request whose size a client chooses, so buffering it
+// would let any client make this process allocate arbitrarily. size must be
+// the exact byte count, which becomes the Content-Length.
+func (c *Client) Append(ctx context.Context, mailbox, folder string, body io.Reader, size int64, opts AppendOptions) (*AppendResult, error) {
+	query := url.Values{}
+	if len(opts.Flags) > 0 {
+		query.Set("flags", strings.Join(opts.Flags, ","))
+	}
+	if !opts.Time.IsZero() {
+		query.Set("internalDate", opts.Time.UTC().Format(time.RFC3339))
+	}
+
+	var result AppendResult
+	path := mailboxPath(mailbox) + "/" + url.PathEscape(folder) + "/append"
+	err := c.doRequest(ctx, c.uploadTimeout, http.MethodPost, path, query, body, "message/rfc822", size, &result)
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
 // RawMessageReader is the streamed body of a raw message fetch. Callers

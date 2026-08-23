@@ -6,6 +6,7 @@ package imap
 
 import (
 	"context"
+	"io"
 
 	"github.com/emersion/go-imap/v2"
 
@@ -42,6 +43,9 @@ type Backend interface {
 	// actually removed. A nil uids slice means every message carrying
 	// \Deleted; a non-nil one restricts the operation to those UIDs.
 	Expunge(ctx context.Context, mailbox, folder string, uids []uint32) ([]uint32, error)
+	// Append streams a raw RFC 5322 message into a folder. body is read
+	// exactly size bytes; it must not be buffered by the caller.
+	Append(ctx context.Context, mailbox, folder string, body io.Reader, size int64, opts backend.AppendOptions) (*backend.AppendResult, error)
 }
 
 // Compile-time proof that the real client satisfies the interface, so a

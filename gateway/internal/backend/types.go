@@ -119,3 +119,16 @@ type MovePage struct {
 type ExpungePage struct {
 	Expunged []uint32 `json:"expunged"`
 }
+
+// AppendResult is the response body of POST
+// /api/imap/v1/{mailbox}/{folder}/append.
+//
+// Deduplicated reports that a message with the same Message-ID already
+// existed and its UID was returned instead of a new one being written.
+// Clients APPEND a Sent copy after submission and the app records its own,
+// so without that the folder would show every sent message twice.
+type AppendResult struct {
+	UID          uint32 `json:"uid"`
+	UIDValidity  uint32 `json:"uidValidity"`
+	Deduplicated bool   `json:"deduplicated"`
+}

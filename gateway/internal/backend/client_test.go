@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -782,4 +783,244 @@ func TestCopyMoveExpunge_HonourRequestTimeout(t *testing.T) {
 	if elapsed := time.Since(start); elapsed > 5*time.Second {
 		t.Errorf("Expunge took %v; the request timeout did not apply", elapsed)
 	}
+}
+
+func TestAppend_Success(t *testing.T) {
+	const body = "From: a@example.com\r\nSubject: hi\r\n\r\nbody\r\n"
+
+	var (
+		gotBody          string
+		gotContentType   string
+		gotContentLength int64
+		gotQuery         url.Values
+		gotChunked       bool
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requireAccessHeaders(t, r)
+		if r.Method != http.MethodPost || r.URL.Path != "/api/imap/v1/user@example.com/drafts/append" {
+			t.Errorf("%s %s", r.Method, r.URL.Path)
+		}
+		gotContentType = r.Header.Get("Content-Type")
+		gotContentLength = r.ContentLength
+		gotQuery = r.URL.Query()
+		for _, te := range r.TransferEncoding {
+			if te == "chunked" {
+				gotChunked = true
+			}
+		}
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"uid":5,"uidValidity":1787427939,"deduplicated":false}`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, srv)
+	when := time.Date(2026, 8, 22, 22, 5, 3, 0, time.UTC)
+	got, err := c.Append(context.Background(), "user@example.com", "drafts",
+		strings.NewReader(body), int64(len(body)),
+		AppendOptions{Flags: []string{`\Seen`, `\Draft`}, Time: when})
+	if err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	if got.UID != 5 || got.UIDValidity != 1787427939 || got.Deduplicated {
+		t.Errorf("result = %+v", got)
+	}
+	if gotBody != body {
+		t.Errorf("body = %q, want %q", gotBody, body)
+	}
+	if gotContentType != "message/rfc822" {
+		t.Errorf("Content-Type = %q", gotContentType)
+	}
+	// A known Content-Length rather than chunked: the size comes from the
+	// IMAP literal, so there is no reason to make the Worker guess.
+	if gotContentLength != int64(len(body)) {
+		t.Errorf("Content-Length = %d, want %d", gotContentLength, len(body))
+	}
+	if gotChunked {
+		t.Error("request was chunked, want a plain body with Content-Length")
+	}
+	if got := gotQuery.Get("flags"); got != `\Seen,\Draft` {
+		t.Errorf("flags = %q, want %q", got, `\Seen,\Draft`)
+	}
+	if got := gotQuery.Get("internalDate"); got != "2026-08-22T22:05:03Z" {
+		t.Errorf("internalDate = %q", got)
+	}
+}
+
+func TestAppend_OmitsAbsentOptions(t *testing.T) {
+	var gotQuery url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"uid":1,"uidValidity":2,"deduplicated":false}`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, srv)
+	if _, err := c.Append(context.Background(), "user@example.com", "sent", strings.NewReader("x"), 1, AppendOptions{}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if _, ok := gotQuery["flags"]; ok {
+		t.Errorf("flags was sent with no flags set: %v", gotQuery)
+	}
+	if _, ok := gotQuery["internalDate"]; ok {
+		t.Errorf("internalDate was sent with no time set: %v", gotQuery)
+	}
+}
+
+func TestAppend_Deduplicated(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"uid":42,"uidValidity":7,"deduplicated":true}`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, srv)
+	got, err := c.Append(context.Background(), "user@example.com", "sent", strings.NewReader("x"), 1, AppendOptions{})
+	if err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if !got.Deduplicated || got.UID != 42 {
+		t.Errorf("result = %+v, want the existing uid 42 flagged as deduplicated", got)
+	}
+}
+
+// TestAppend_DoesNotBufferTheBody: the request must be streamed. A body the
+// client chooses the size of is the one place this process could be made to
+// allocate arbitrarily.
+func TestAppend_DoesNotBufferTheBody(t *testing.T) {
+	const size = 8 << 20 // 8 MiB
+
+	started := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"uid":1,"uidValidity":1,"deduplicated":false}`))
+	}))
+	defer srv.Close()
+
+	// The reader blocks until the server has begun handling the request.
+	// If the client buffered the body first, it would never get there and
+	// this would deadlock into the test timeout.
+	src := &gatedReader{remaining: size, gate: started}
+
+	c := newTestClient(t, srv)
+	if _, err := c.Append(context.Background(), "user@example.com", "inbox", src, size, AppendOptions{}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if src.read != size {
+		t.Errorf("read %d bytes, want %d", src.read, size)
+	}
+	if src.maxChunk > 1<<20 {
+		t.Errorf("largest single Read was %d bytes; the body is not being streamed in chunks", src.maxChunk)
+	}
+}
+
+// gatedReader yields bytes only once its gate closes, and records how it
+// was read.
+type gatedReader struct {
+	remaining int
+	gate      <-chan struct{}
+	opened    bool
+	read      int
+	maxChunk  int
+}
+
+func (r *gatedReader) Read(p []byte) (int, error) {
+	if !r.opened {
+		<-r.gate
+		r.opened = true
+	}
+	if r.remaining == 0 {
+		return 0, io.EOF
+	}
+	n := len(p)
+	if n > r.remaining {
+		n = r.remaining
+	}
+	for i := range p[:n] {
+		p[i] = 'x'
+	}
+	r.remaining -= n
+	r.read += n
+	if n > r.maxChunk {
+		r.maxChunk = n
+	}
+	return n, nil
+}
+
+func TestAppend_ErrorMapping(t *testing.T) {
+	statuses := map[int]error{
+		http.StatusNotFound:            ErrNotFound,
+		http.StatusInternalServerError: ErrServer,
+		http.StatusUnauthorized:        ErrAuthFailed,
+	}
+	for status, want := range statuses {
+		t.Run(fmt.Sprintf("%d", status), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				io.Copy(io.Discard, r.Body)
+				w.WriteHeader(status)
+				w.Write([]byte(`{"error":"nope"}`))
+			}))
+			defer srv.Close()
+
+			c := newTestClient(t, srv)
+			_, err := c.Append(context.Background(), "user@example.com", "inbox", strings.NewReader("x"), 1, AppendOptions{})
+			if !errors.Is(err, want) {
+				t.Errorf("err = %v, want %v", err, want)
+			}
+		})
+	}
+}
+
+// TestAppend_UsesTheUploadTimeoutNotTheRequestTimeout is the RawMessage
+// lesson applied to the other direction: a slow upload must not be cut off
+// by the bound meant for a small JSON round trip.
+func TestAppend_UsesTheUploadTimeoutNotTheRequestTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"uid":1,"uidValidity":1,"deduplicated":false}`))
+	}))
+	defer srv.Close()
+
+	// A request timeout far shorter than the upload takes; the upload
+	// timeout is what must apply.
+	c := newTestClient(t, srv, WithRequestTimeout(30*time.Millisecond), WithUploadTimeout(30*time.Second))
+
+	body := &slowReader{chunks: 5, delay: 20 * time.Millisecond}
+	if _, err := c.Append(context.Background(), "user@example.com", "inbox", body, int64(body.total()), AppendOptions{}); err != nil {
+		t.Fatalf("Append: %v; the request timeout was applied to an upload", err)
+	}
+}
+
+// slowReader delivers a few chunks with a pause between them, so the whole
+// transfer outlasts a short request timeout.
+type slowReader struct {
+	chunks int
+	delay  time.Duration
+	sent   int
+}
+
+func (r *slowReader) total() int { return r.chunks * 16 }
+
+func (r *slowReader) Read(p []byte) (int, error) {
+	if r.sent == r.chunks {
+		return 0, io.EOF
+	}
+	time.Sleep(r.delay)
+	r.sent++
+	n := 16
+	if n > len(p) {
+		n = len(p)
+	}
+	for i := range p[:n] {
+		p[i] = 'y'
+	}
+	return n, nil
 }

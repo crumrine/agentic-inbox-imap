@@ -8,13 +8,13 @@
 //
 // Scope: CAPABILITY, NOOP, LOGOUT, AUTHENTICATE PLAIN, LOGIN, LIST, LSUB,
 // STATUS, SELECT, EXAMINE, CLOSE, UNSELECT, SEARCH, FETCH, IDLE, STORE of
-// message flags, COPY, MOVE and EXPUNGE. APPEND is the remaining gap and
-// answers NO.
+// message flags, COPY, MOVE, EXPUNGE and APPEND. Only mailbox management
+// (CREATE, DELETE, RENAME, SUBSCRIBE) still answers NO.
 //
 // The write commands are here because refusing them is not a survivable
-// degradation. iOS Mail sets \Seen on display and deletes with
-// \Deleted + EXPUNGE; a NO to either put it into a reconnect loop in which
-// no message ever rendered.
+// degradation. iOS Mail sets \Seen on display, deletes with
+// \Deleted + EXPUNGE, and APPENDs to save a draft; a NO to any of them put
+// it into a reconnect loop in which no message ever rendered.
 //
 // The session holds no durable state. The only thing it retains between
 // commands is the selected folder's sequence-number snapshot and a bounded
@@ -86,6 +86,16 @@ const (
 	// runs unattended for up to 29 minutes, and 30s is the freshness a
 	// mail client expects from a mailbox it is watching.
 	DefaultIdleInterval = 30 * time.Second
+
+	// DefaultMaxAppendBytes bounds a single APPEND. It matches
+	// DefaultMaxMessageBytes deliberately: a message the gateway will
+	// accept must also be one it can serve back, and the fetch path
+	// refuses anything larger.
+	//
+	// go-imap enforces it before the literal is accepted, so an oversize
+	// APPEND is refused with NO [TOOBIG] rather than uploaded and then
+	// rejected. See Session.AppendLimit.
+	DefaultMaxAppendBytes = DefaultMaxMessageBytes
 
 	// DefaultMaxFolderMessages bounds how many messages one selection may
 	// hold. IMAP requires the whole sequence-number mapping of the selected
@@ -363,6 +373,7 @@ type Session struct {
 	idleInterval        time.Duration
 	messagePageSize     int
 	maxFolderMessages   int
+	maxAppendBytes      int64
 
 	// logger records backend trouble that the session deliberately hides
 	// from the client, such as a failed refresh during Poll. It never
@@ -449,6 +460,15 @@ func WithMaxFolderMessages(n int) Option {
 	}
 }
 
+// WithMaxAppendBytes overrides the largest message APPEND will accept.
+func WithMaxAppendBytes(n int64) Option {
+	return func(s *Session) {
+		if n > 0 {
+			s.maxAppendBytes = n
+		}
+	}
+}
+
 // WithLogger sets the logger used for backend failures the session swallows
 // rather than surfacing to the client.
 func WithLogger(l *slog.Logger) Option {
@@ -473,6 +493,7 @@ func NewSession(b Backend, opts ...Option) *Session {
 		idleInterval:        DefaultIdleInterval,
 		messagePageSize:     DefaultMessagePageSize,
 		maxFolderMessages:   DefaultMaxFolderMessages,
+		maxAppendBytes:      DefaultMaxAppendBytes,
 		logger:              slog.New(slog.DiscardHandler),
 	}
 	for _, opt := range opts {
@@ -1013,6 +1034,16 @@ func (s *Session) poll(parent context.Context, w updateWriter) error {
 	return w.WriteNumMessages(grown.numMessages())
 }
 
+// invalidatePollFloor clears the interval floor so the very next Poll does
+// real work. Used after this session changes the selected folder itself,
+// where waiting out the floor would mean the client is told about its own
+// APPEND seconds late or not at all.
+func (s *Session) invalidatePollFloor() {
+	s.mu.Lock()
+	s.lastPoll = time.Time{}
+	s.mu.Unlock()
+}
+
 // beginPoll decides whether this Poll should do any work, and records the
 // attempt so the interval floor applies to failures too.
 func (s *Session) beginPoll() (mailbox string, sel *selection, ok bool) {
@@ -1489,15 +1520,6 @@ func (s *Session) Subscribe(mailbox string) error {
 
 func (s *Session) Unsubscribe(mailbox string) error {
 	return errNotYetSupported("UNSUBSCRIBE")
-}
-
-func (s *Session) Append(mailbox string, r imap.LiteralReader, options *imap.AppendOptions) (*imap.AppendData, error) {
-	// The literal is already on the wire by the time go-imap calls us; it
-	// has to be drained or the connection desynchronises.
-	if r != nil {
-		_, _ = discard(r)
-	}
-	return nil, errNotYetSupported("APPEND")
 }
 
 // Compile-time assertion that Session satisfies imapserver.Session, so a

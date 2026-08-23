@@ -109,7 +109,22 @@ type fakeBackend struct {
 	// it, so a caller that does not page sees only the oldest page.
 	maxLimit int
 
+	// appendCalls records every APPEND the session made.
+	appendCalls []appendCall
+
+	// dedupNext makes the next Append report a deduplicated hit rather
+	// than storing anything.
+	dedupNext *backend.AppendResult
+
+	// appendWatch is the literal a test handed to APPEND. The fake samples
+	// its consumption on entry, which is how buffering is detected. It is
+	// watched directly rather than type-asserted off the reader the
+	// backend receives, because a buffering gateway would hand over a
+	// different reader entirely and the assertion would pass vacuously.
+	appendWatch *trackingLiteral
+
 	// Injected failures.
+	appendErr   error
 	copyErr     error
 	moveErr     error
 	expungeErr  error
@@ -658,6 +673,152 @@ func (f *fakeBackend) uidsIn(folderID string) []uint32 {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	return out
+}
+
+// appendCall records one APPEND, including how much of the literal had
+// already been consumed when the backend was handed it. That last field is
+// what proves the gateway streams instead of buffering.
+type appendCall struct {
+	folder       string
+	flags        []string
+	internalDate time.Time
+	size         int64
+	body         string
+
+	// consumedAtEntry is how many bytes had been read out of the watched
+	// literal when the backend was called. Streaming leaves it at zero.
+	consumedAtEntry int64
+	// watchedReader is true when the reader handed over is the very
+	// literal the test created, rather than a copy of its contents.
+	watchedReader bool
+	// watched is true when a literal was being watched at all, so a test
+	// cannot pass by forgetting to set one up.
+	watched bool
+}
+
+func (f *fakeBackend) Append(ctx context.Context, mailbox, folder string, body io.Reader, size int64, opts backend.AppendOptions) (*backend.AppendResult, error) {
+	call := appendCall{
+		folder:       folder,
+		flags:        append([]string(nil), opts.Flags...),
+		internalDate: opts.Time,
+		size:         size,
+	}
+	f.mu.Lock()
+	injected := f.appendErr
+	dedup := f.dedupNext
+	watch := f.appendWatch
+	f.mu.Unlock()
+
+	if watch != nil {
+		call.watched = true
+		call.consumedAtEntry = watch.consumed()
+		call.watchedReader = body == io.Reader(watch)
+	}
+
+	if injected != nil {
+		// Record before returning so a test can still see the attempt, but
+		// leave the literal untouched: go-imap drains it.
+		f.mu.Lock()
+		f.appendCalls = append(f.appendCalls, call)
+		f.mu.Unlock()
+		return nil, injected
+	}
+
+	// Read the body the way a real client would: streamed, never assumed
+	// to fit anywhere in particular.
+	var buf strings.Builder
+	if _, err := io.Copy(&buf, body); err != nil {
+		return nil, err
+	}
+	call.body = buf.String()
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.appendCalls = append(f.appendCalls, call)
+
+	if dedup != nil {
+		f.dedupNext = nil
+		return dedup, nil
+	}
+
+	var dest *backend.Folder
+	for i := range f.folders {
+		if f.folders[i].ID == folder {
+			dest = &f.folders[i]
+			break
+		}
+	}
+	if dest == nil {
+		return nil, &backend.APIError{Kind: backend.ErrKindNotFound, StatusCode: 404}
+	}
+
+	uid := dest.UIDNext
+	msg := backend.Message{
+		UID:          uid,
+		Flags:        append([]string(nil), opts.Flags...),
+		InternalDate: opts.Time,
+		RFC822Size:   int64(len(call.body)),
+		Envelope: backend.Envelope{
+			Subject:   "appended",
+			From:      []backend.Address{{Address: "sender@example.com"}},
+			To:        []backend.Address{{Address: testMailbox}},
+			MessageID: "<appended-" + itoa(int(uid)) + "@example.com>",
+		},
+		HasRaw: true,
+	}
+	if msg.InternalDate.IsZero() {
+		msg.InternalDate = time.Now()
+	}
+	f.messages[folder] = append(f.messages[folder], msg)
+	if f.raw[folder] == nil {
+		f.raw[folder] = map[uint32]string{}
+	}
+	f.raw[folder][uid] = call.body
+	dest.UIDNext = uid + 1
+	dest.Exists++
+	if !newFlagSet(msg.Flags).has(imap.FlagSeen) {
+		dest.Unseen++
+	}
+
+	return &backend.AppendResult{UID: uid, UIDValidity: dest.UIDValidity}, nil
+}
+
+func (f *fakeBackend) lastAppend() (appendCall, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.appendCalls) == 0 {
+		return appendCall{}, false
+	}
+	return f.appendCalls[len(f.appendCalls)-1], true
+}
+
+// trackingLiteral is an imap.LiteralReader that counts what has been read
+// out of it, so a test can tell streaming from buffering.
+type trackingLiteral struct {
+	mu   sync.Mutex
+	src  *strings.Reader
+	size int64
+	n    int64
+}
+
+func newTrackingLiteral(body string) *trackingLiteral {
+	return &trackingLiteral{src: strings.NewReader(body), size: int64(len(body))}
+}
+
+func (l *trackingLiteral) Read(p []byte) (int, error) {
+	n, err := l.src.Read(p)
+	l.mu.Lock()
+	l.n += int64(n)
+	l.mu.Unlock()
+	return n, err
+}
+
+func (l *trackingLiteral) Size() int64 { return l.size }
+
+func (l *trackingLiteral) consumed() int64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.n
 }
 
 // ---------------------------------------------------------------------

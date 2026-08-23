@@ -21,9 +21,18 @@ entrypoint, deploy files, and the IMAP protocol session
 Serving now: CAPABILITY, NOOP, LOGOUT, AUTHENTICATE PLAIN, LOGIN, ID, LIST,
 LSUB, STATUS, SELECT, EXAMINE, CLOSE, UNSELECT, SEARCH, FETCH (including
 ENVELOPE, BODYSTRUCTURE, BODY[...] with HEADER.FIELDS and partial ranges),
-IDLE, STORE of message flags, COPY, MOVE and EXPUNGE. MOVE and UIDPLUS are
-advertised, so clients use one round trip to move a message and get real
-COPYUID response codes back.
+IDLE, STORE of message flags, COPY, MOVE, EXPUNGE and APPEND. MOVE and
+UIDPLUS are advertised, so clients use one round trip to move a message and
+get real COPYUID and APPENDUID response codes back.
+
+APPEND streams the client's literal straight through to the Worker and is
+never buffered here: it is the one request whose size a client chooses, so
+buffering it would be the one place this process could be made to allocate
+arbitrarily. APPENDLIMIT is advertised and matches the size the fetch path
+will serve back, so an oversize message is refused with NO [TOOBIG] before
+a byte of it is uploaded. The Worker deduplicates on Message-ID, which is
+what stops every sent message appearing twice when a client saves its own
+Sent copy after submission.
 
 New mail reaches a client two ways, both through the same append-only
 refresh: `Poll` runs after every command, and `Idle` runs it on a timer for
@@ -60,16 +69,17 @@ snapshot; it stays addressable and fails to fetch, because renumbering a
 mailbox under a client that was never sent an EXPUNGE is worse than a stale
 entry.
 
-Not served: APPEND answers NO and keeps the connection alive. SMTP
-submission (`internal/smtp`) is still an empty placeholder.
+Not served: mailbox management (CREATE, DELETE, RENAME, SUBSCRIBE) answers
+NO and keeps the connection alive. SMTP submission (`internal/smtp`) is
+still an empty placeholder.
 
 Verified against iOS Mail over the tailnet with a live Worker: connect, full
 folder sync, UID SEARCH, UID FETCH with BODY.PEEK[HEADER] and partial ranges,
-IDLE holding open until DONE, and flag writes persisting. COPY, MOVE and
-EXPUNGE are covered against a fake backend and an in-process go-imap server,
-including a replay of the swipe-to-delete sequence
-(`UID STORE +FLAGS (\Deleted)` then `UID EXPUNGE`), but have not yet run
-against a real client.
+IDLE holding open until DONE, flag writes persisting, and COPY, MOVE and
+EXPUNGE against a real mailbox (COPYUID correct, descending EXPUNGE, no UID
+reuse). APPEND is covered against a fake backend and an in-process go-imap
+server, including appending a real message over the wire and reading it back
+out, but has not yet run against a real client.
 
 ## Why Tailscale-only
 

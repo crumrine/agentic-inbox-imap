@@ -402,11 +402,11 @@ func TestStatusOverTheWire(t *testing.T) {
 	}
 }
 
-// TestWriteCommandsAnswerNoAndKeepTheConnection walks the out-of-scope
-// commands over the real protocol: each must produce a tagged NO, and the
-// connection must stay usable afterwards. A panic or a desynchronised
-// literal would show up here as a broken follow-up command.
-func TestWriteCommandsAnswerNoAndKeepTheConnection(t *testing.T) {
+// TestMailboxManagementAnswersNoAndKeepsTheConnection walks the commands
+// that remain unimplemented: creating, deleting, renaming and
+// subscribing to mailboxes. Each must produce a tagged NO, and the
+// connection must stay usable afterwards.
+func TestMailboxManagementAnswersNoAndKeepsTheConnection(t *testing.T) {
 	client := startTestServer(t, newFakeBackend(t))
 	loginAndSelect(t, client, "INBOX")
 
@@ -419,18 +419,6 @@ func TestWriteCommandsAnswerNoAndKeepTheConnection(t *testing.T) {
 		{"RENAME", func() error { return client.Rename("Archive", "Old", nil).Wait() }},
 		{"SUBSCRIBE", func() error { return client.Subscribe("Archive").Wait() }},
 		{"UNSUBSCRIBE", func() error { return client.Unsubscribe("Archive").Wait() }},
-		{"APPEND", func() error {
-			const body = "Subject: nope\r\n\r\nbody\r\n"
-			cmd := client.Append("INBOX", int64(len(body)), nil)
-			if _, err := cmd.Write([]byte(body)); err != nil {
-				return err
-			}
-			if err := cmd.Close(); err != nil {
-				return err
-			}
-			_, err := cmd.Wait()
-			return err
-		}},
 	}
 
 	for _, check := range checks {
