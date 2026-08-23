@@ -192,7 +192,19 @@ POST   /api/imap/v1/{mailbox}/{folder}/flags           batch flag updates
 POST   /api/imap/v1/{mailbox}/{folder}/copy            COPY
 POST   /api/imap/v1/{mailbox}/{folder}/move            MOVE
 POST   /api/imap/v1/{mailbox}/{folder}/expunge         EXPUNGE, relocate or hard-delete
+POST   /api/imap/v1/{mailbox}/{folder}/search          SEARCH push-down (DEV-682)
 ```
+
+`search` takes a JSON mirror of go-imap's `imap.SearchCriteria` and answers
+the part it can evaluate exactly from SQLite, reporting the rest. Its response
+carries `handled` / `unhandled` token lists and a `partial` flag: `uids` is
+the set matching the handled criteria and *only* those, so a caller finishes
+by applying the unhandled ones to that list. BODY and TEXT are deliberately
+unhandled — the `body` column is the parsed body the app rendered, not the
+message's parts — but the endpoint still turns a folder-wide raw download into
+a handful of fetches by narrowing on everything else first. The full contract,
+including why each unhandled criterion is unhandled, is in
+`workers/imap/search.ts`.
 
 The metadata endpoint returns everything a FETCH needs without touching the
 raw body: uid, flags, internaldate, rfc822_size, and envelope fields, so a

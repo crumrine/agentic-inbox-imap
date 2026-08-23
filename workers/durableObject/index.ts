@@ -14,6 +14,15 @@ import {
 	parseStoredBodyStructure,
 	type StoredBodyStructureEnvelope,
 } from "../imap/bodystructure";
+import {
+	buildSearchSql,
+	classifySearchCriteria,
+	IMAP_SEARCH_MAX_SCAN,
+	matchSearchRow,
+	type ImapSearchColumns,
+	type ImapSearchCriteria,
+	type ImapSearchRow,
+} from "../imap/search";
 
 /**
  * SQL expression to normalize email subjects by stripping common
@@ -1226,6 +1235,86 @@ export class MailboxDO extends DurableObject<Env> {
 	}
 
 	/**
+	 * Evaluate as much of an IMAP SEARCH as this mailbox can answer exactly
+	 * (DEV-682), returning the matching uids plus a precise account of which
+	 * criteria were applied.
+	 *
+	 * The gateway ANDs the criteria it is told were *not* applied onto the
+	 * returned uids, so this method's whole obligation is that `uids` is a
+	 * superset of the true answer. `workers/imap/search.ts` carries the
+	 * reasoning for every decision; the two jobs done here are projecting a
+	 * row into exactly the values the `/messages` payload would have carried
+	 * for it — same helpers, so a pushed-down search and a locally evaluated
+	 * one cannot disagree — and bounding the scan.
+	 *
+	 * Null for an unknown folder, which the route turns into a 404.
+	 */
+	async imapSearch(
+		folderKey: string,
+		criteria: ImapSearchCriteria,
+	): Promise<ImapSearchOutcome> {
+		const folder = this.#imapFolderRow(folderKey);
+		if (!folder) return { status: "no-folder" };
+
+		const isDraftFolder = folder.id === Folders.DRAFT;
+		const { handled, unhandled, tree } = classifySearchCriteria(criteria);
+
+		// ?1 is the folder; the builder numbers its own parameters from ?2.
+		const sql = buildSearchSql(tree, IMAP_SEARCH_COLUMNS, isDraftFolder, 2);
+		const where = ["e.folder_id = ?1", "e.uid IS NOT NULL", ...sql.conditions].join("\n\t\t\t\t    AND ");
+
+		// One row past the cap is enough to know the cap was crossed, and
+		// stops the isolate materialising a set it is going to refuse.
+		const rows = [
+			...this.ctx.storage.sql.exec(
+				`SELECT e.uid                                AS uid,
+				        COALESCE(e.read, 0)                  AS read,
+				        COALESCE(e.starred, 0)               AS starred,
+				        COALESCE(e.answered, 0)              AS answered,
+				        COALESCE(e.deleted, 0)               AS deleted,
+				        e.flags                              AS flags,
+				        e.date                               AS date,
+				        e.subject                            AS subject,
+				        e.sender                             AS sender,
+				        e.recipient                          AS recipient,
+				        e.cc                                 AS cc,
+				        e.bcc                                AS bcc,
+				        e.message_id                         AS message_id,
+				        e.in_reply_to                        AS in_reply_to,
+				        e.rfc822_size                        AS rfc822_size,
+				        ${IMAP_SIZE_ESTIMATE_SQL}            AS size_estimate,
+				        ${imapHeaderSql("from")}             AS hdr_from,
+				        ${imapHeaderSql("to")}               AS hdr_to,
+				        ${imapHeaderSql("cc")}               AS hdr_cc
+				   FROM emails e
+				  WHERE ${where}
+				  ORDER BY e.uid ASC
+				  LIMIT ${IMAP_SEARCH_MAX_SCAN + 1}`,
+				folder.id,
+				...sql.params,
+			),
+		] as unknown as ImapSearchRowShape[];
+
+		if (rows.length > IMAP_SEARCH_MAX_SCAN) return { status: "too-large" };
+
+		const uids: number[] = [];
+		for (const row of rows) {
+			if (matchSearchRow(imapSearchRowFromRow(row, isDraftFolder), tree)) {
+				uids.push(Number(row.uid));
+			}
+		}
+
+		return {
+			status: "ok",
+			uids,
+			handled,
+			unhandled,
+			partial: unhandled.length > 0,
+			scanned: rows.length,
+		};
+	}
+
+	/**
 	 * Everything needed to serve one message's raw bytes: the R2 key when the
 	 * message has stored raw MIME, and the fields to rebuild an equivalent
 	 * message when it does not (see the legacy path in the route).
@@ -1960,6 +2049,78 @@ export interface ImapAddress {
 	address: string;
 }
 
+/**
+ * The IMAP ENVELOPE the metadata endpoint serves.
+ *
+ * ## Where this can disagree with BODY[HEADER] (DEV-683)
+ *
+ * The gateway builds ENVELOPE from this object and BODYSTRUCTURE / BODY[...]
+ * by parsing the raw `.eml`. Two sources, one message, so it is worth being
+ * exact about when they can differ — and about the fact that the answer is
+ * "much less often than the shape of the code suggests".
+ *
+ * **Agreeing by construction.** `from`, `to`, `cc` and `date` are read out of
+ * `raw_headers` (see `imapHeaderSql`), not out of the address columns. On
+ * every path where a message arrives as bytes — inbound Email Routing, IMAP
+ * APPEND, IMAP SUBMIT — `raw_headers` is postal-mime's parse of *the very
+ * bytes stored in R2*, with each value kept as written — unfolded and with
+ * runs of whitespace collapsed, but never decoded.
+ * So for those messages the envelope and the served header block are the same
+ * text, and `parseAddressList` decoding an encoded word or stripping a
+ * quoted-string is the normal decoded-envelope / encoded-header relationship
+ * every IMAP server has, not a contradiction. `subject` is likewise the
+ * decoded value against an RFC 2047 encoded header, which is correct.
+ *
+ * **Not agreeing by construction.** Two write paths — the compose endpoint in
+ * `workers/index.ts` and reply/forward in `workers/routes/reply-forward.ts` —
+ * build `raw_headers` by hand from the same inputs they hand to
+ * `buildRawMime`, rather than from the bytes it produced. The two formatters
+ * then differ:
+ *
+ *   - `Date`: the hand-built header is `new Date().toISOString()`, the raw
+ *     message carries RFC 5322 (`Tue, 22 Aug 2026 10:00:00 +0000`). Same
+ *     instant, different text, and both parse — the gateway's `parseDate`
+ *     accepts either.
+ *   - A display name needing a quoted-string. `buildRawMime.formatMailbox`
+ *     emits `"Smith, John" <j@example.com>`; the hand-built header stores it
+ *     unquoted, and `parseAddressList` then splits on that comma and reports
+ *     one address where the header has one address with a comma in its name.
+ *     This one is a real, visible disagreement.
+ *   - A non-ASCII display name is RFC 2047-encoded in the raw and stored
+ *     plain here, which is the benign decoded/encoded case again.
+ *
+ * A legacy row (`raw_key` NULL) has its raw synthesized from these same
+ * fields, so the two are rebuilt from one source and track each other — with
+ * one exception: `imapRawSource` keeps only the first address of `From`,
+ * because `buildRawMime` takes a single sender, so a legacy row whose `From`
+ * header listed several addresses lists one in the synthesized message.
+ *
+ * ## Why there is no derived `envelope` column
+ *
+ * The obvious fix, and the one `body_structure` sets a precedent for, is to
+ * derive the envelope from the raw bytes once at the `storeRawMime` seam and
+ * store it exact-or-absent. It was considered and rejected here, on three
+ * grounds:
+ *
+ *   1. The messages that would benefit are only the ones the app composed
+ *      itself. Everything that arrived as bytes already agrees.
+ *   2. "Exact or absent" for an RFC 5322 address list is the same class of
+ *      problem as it was for MIME — groups, comments, quoted strings, obsolete
+ *      syntax, RFC 2231 — and `bodystructure.ts` is 800 lines because that
+ *      class of problem is unforgiving. A second address parser that must
+ *      agree with both go-imap's ENVELOPE extraction *and* the
+ *      `parseAddressList` above is two more things to keep in step.
+ *   3. The payoff would be a differently formatted `Date` in the Sent folder
+ *      and a comma in a display name. `body_structure` removed an R2 GET per
+ *      message from first sync; this removes neither work nor a failure a user
+ *      can hit by accident. The value-for-risk is not comparable.
+ *
+ * The cheaper fix, if the display-name case ever bites, is at the writer: have
+ * those two send paths derive `raw_headers` from the bytes `buildRawMime`
+ * already returned instead of rebuilding them by hand. That is a few lines in
+ * files this note deliberately does not touch, and it fixes every consumer of
+ * `raw_headers` at once rather than adding a second column to keep in sync.
+ */
 export interface ImapEnvelope {
 	subject: string;
 	from: ImapAddress[];
@@ -2002,6 +2163,31 @@ export interface ImapMessagesPage {
 	messages: ImapMessage[];
 	uidNext: number;
 }
+
+/**
+ * What `MailboxDO.imapSearch` reports back (DEV-682).
+ *
+ * `partial` is the honest half of the contract: true means the server could
+ * not evaluate everything it was asked, `unhandled` names exactly what is
+ * left, and `uids` is therefore a **superset** of the true answer that the
+ * caller must filter itself. False means `uids` is the answer.
+ *
+ * `scanned` is diagnostics — how many rows the matcher had to look at after
+ * SQL narrowing. It exists so the narrowing can be observed (and regressions
+ * in it caught) rather than assumed. Nothing about the result depends on it
+ * and a caller must not.
+ */
+export type ImapSearchOutcome =
+	| { status: "no-folder" }
+	| { status: "too-large" }
+	| {
+			status: "ok";
+			uids: number[];
+			handled: string[];
+			unhandled: string[];
+			partial: boolean;
+			scanned: number;
+	  };
 
 export interface ImapRawAttachment {
 	id: string;
@@ -2370,6 +2556,80 @@ const IMAP_SIZE_ESTIMATE_SQL = `(
 	+ ${IMAP_LEGACY_MIME_OVERHEAD_BYTES}
 )`;
 
+/**
+ * The SQL expressions `imapSearch` narrows on, handed to
+ * `workers/imap/search.ts` so that module never has to import this one.
+ *
+ * Each entry is the same expression the metadata projection uses for the
+ * value the matcher will compare — including the header-with-column fallback
+ * for the address fields — so the SQL prefilter and the exact matcher are
+ * looking at the same string.
+ */
+const IMAP_SEARCH_COLUMNS: ImapSearchColumns = {
+	uid: "e.uid",
+	internalDate: "e.date",
+	size: `COALESCE(e.rfc822_size, ${IMAP_SIZE_ESTIMATE_SQL})`,
+	read: "e.read",
+	answered: "e.answered",
+	starred: "e.starred",
+	deleted: "e.deleted",
+	subject: "e.subject",
+	from: `COALESCE(${imapHeaderSql("from")}, e.sender)`,
+	to: `COALESCE(${imapHeaderSql("to")}, e.recipient)`,
+	cc: `COALESCE(${imapHeaderSql("cc")}, e.cc)`,
+	bcc: "e.bcc",
+	messageId: "e.message_id",
+	inReplyTo: "e.in_reply_to",
+};
+
+/** Row shape of the candidate query in MailboxDO.imapSearch. */
+interface ImapSearchRowShape {
+	uid: number;
+	read: number;
+	starred: number;
+	answered: number;
+	deleted: number;
+	flags: string | null;
+	date: string | null;
+	subject: string | null;
+	sender: string | null;
+	recipient: string | null;
+	cc: string | null;
+	bcc: string | null;
+	message_id: string | null;
+	in_reply_to: string | null;
+	rfc822_size: number | null;
+	size_estimate: number;
+	hdr_from: string | null;
+	hdr_to: string | null;
+	hdr_cc: string | null;
+}
+
+/**
+ * Project a candidate row into the values the `/messages` payload would have
+ * carried for it.
+ *
+ * Every line here mirrors `imapMessageFromRow`, deliberately and by reusing
+ * the same helpers rather than by resembling them: a search that matched on
+ * some *other* rendering of an address or some other flag derivation would
+ * return uids the gateway then fails to reconcile with what it displays.
+ */
+function imapSearchRowFromRow(row: ImapSearchRowShape, isDraftFolder: boolean): ImapSearchRow {
+	return {
+		uid: Number(row.uid),
+		internalDate: toRfc3339(row.date),
+		size: Number(row.rfc822_size ?? row.size_estimate ?? 0),
+		flags: deriveImapFlags(row, isDraftFolder),
+		subject: row.subject ?? "",
+		from: addressTexts(parseAddressList(row.hdr_from ?? row.sender)),
+		to: addressTexts(parseAddressList(row.hdr_to ?? row.recipient)),
+		cc: addressTexts(parseAddressList(row.hdr_cc ?? row.cc)),
+		bcc: addressTexts(parseAddressList(row.bcc)),
+		messageId: row.message_id ?? "",
+		inReplyTo: row.in_reply_to ?? "",
+	};
+}
+
 /** Row shape of `IMAP_FOLDER_STATUS_SQL`. */
 interface ImapFolderStatusRow {
 	id: string;
@@ -2598,6 +2858,25 @@ export function parseAddressList(value: string | null | undefined): ImapAddress[
 	return out;
 }
 
+/**
+ * Render envelope addresses back to header-ish text, so a substring search
+ * hits either the display name or the address.
+ *
+ * This is the JS twin of the gateway's `addressTexts` in
+ * `gateway/internal/imap/search.go`, and must stay one: it is what makes a
+ * SEARCH the Worker answered and a SEARCH the gateway answered locally return
+ * the same messages.
+ */
+export function addressTexts(addresses: ImapAddress[]): string[] {
+	const out: string[] = [];
+	for (const { name, address } of addresses) {
+		if (name && address) out.push(`${name} <${address}>`);
+		else if (address) out.push(address);
+		else if (name) out.push(name);
+	}
+	return out;
+}
+
 // ── Flags ──────────────────────────────────────────────────────────────
 
 /**
@@ -2656,9 +2935,11 @@ function imapMessageFromRow(row: ImapMessageRow, isDraftFolder: boolean): ImapMe
 		rfc822Size: Number(row.rfc822_size ?? row.size_estimate ?? 0),
 		envelope: {
 			subject: row.subject ?? "",
-			// Prefer the stored headers, which are the same bytes the raw
-			// endpoint serves, so ENVELOPE and BODY[HEADER] cannot disagree.
-			// The columns are only a fallback for rows with no headers.
+			// Prefer the stored headers over the address columns. For every
+			// message that arrived as bytes those headers *are* the header
+			// block the raw endpoint serves, parsed. For the app's own send
+			// paths they are a hand-built approximation of it — see the
+			// divergence note on ImapEnvelope for exactly where that shows.
 			from: parseAddressList(row.hdr_from ?? row.sender),
 			to: parseAddressList(row.hdr_to ?? row.recipient),
 			cc: parseAddressList(row.hdr_cc ?? row.cc),

@@ -49,6 +49,11 @@ import {
 	type ImapRelocateResult,
 	type MailboxDO,
 } from "../durableObject";
+import {
+	checkSearchCriteriaSize,
+	ImapSearchCriteriaSchema,
+	type ImapSearchCriteria,
+} from "../imap/search";
 import { authRateLimiter } from "../durableObject/authRateLimit";
 import { normalizeMailboxId, verifyAppPassword } from "../lib/credentials";
 import {
@@ -166,6 +171,17 @@ const FOLDER_NOT_FOUND_BODY = { error: "Folder not found" } as const;
 const MESSAGE_NOT_FOUND_BODY = { error: "Message not found" } as const;
 const INVALID_REQUEST_BODY = { error: "Invalid request" } as const;
 const MESSAGE_TOO_LARGE_BODY = { error: "Message too large to reconstruct" } as const;
+const SEARCH_TOO_LARGE_BODY = { error: "Search too large" } as const;
+
+/**
+ * The search request envelope.
+ *
+ * Strict at both levels: an unrecognised key here or inside `criteria` is a
+ * 400, because the alternative is silently ignoring a term the caller
+ * believed was applied. Absent or empty `criteria` means "every message in
+ * the folder", which is what `SEARCH ALL` asks for.
+ */
+const SearchBody = z.object({ criteria: ImapSearchCriteriaSchema.optional() }).strict();
 
 const MessagesQuery = z.object({
 	sinceUid: z.coerce.number().int().min(0).max(IMAP_MAX_UID).optional(),
@@ -392,6 +408,85 @@ imapApi.get("/:mailboxId/messages/:uid/raw", async (c) => {
 			"content-type": "message/rfc822",
 			"content-length": String(bytes.byteLength),
 		},
+	});
+});
+
+// ── Read API: search ─────────────────────────────────────
+
+/**
+ * POST /api/imap/v1/{mailbox}/{folder}/search
+ *   { "criteria": { "since": "2026-08-01", "header": [{ "key": "from", "value": "alice" }] } }
+ *   -> 200 { "uids": [3, 7, 12], "partial": false, "handled": [...], "unhandled": [], "scanned": 12 }
+ *   -> 400 { "error": "Invalid request" }
+ *   -> 404 { "error": "Not found" | "Folder not found" }
+ *   -> 413 { "error": "Search too large" }
+ *
+ * The push-down half of IMAP SEARCH (DEV-682). The gateway evaluates SEARCH
+ * locally today and downloads the raw message for anything the metadata
+ * payload cannot answer — BODY, TEXT, BCC, a custom header — with a hard
+ * budget of 2000 fetches before it gives up with `NO [LIMIT]`. Answering the
+ * cheap half here leaves it a handful of candidates instead of a folder.
+ *
+ * ## The contract
+ *
+ * `criteria` mirrors go-imap's `imap.SearchCriteria` field for field, minus
+ * `SeqNum` (a property of the gateway's snapshot, not of the mailbox) and
+ * `ModSeq` (no CONDSTORE to push down). An unknown key is a 400, never a
+ * shrug: a criterion nobody applied and nobody reported is exactly the wrong
+ * answer this endpoint is supposed to prevent.
+ *
+ * **`uids` is the set satisfying every criterion in `handled`, and only
+ * those.** Top-level IMAP search keys are a conjunction, so when `partial` is
+ * true the caller finishes the job by applying the `unhandled` criteria to
+ * `uids` and to nothing else — sound because `uids` is then a superset of the
+ * true answer. `handled` and `unhandled` are positional tokens (`"since"`,
+ * `"header[1]"`, `"flag[0]"`, `"or[0]"`) naming the exact terms that were
+ * sent, so two terms sharing a key stay distinguishable.
+ *
+ * `workers/imap/search.ts` documents which criteria are answered and why the
+ * rest are not — the short version is that BODY and TEXT are *not*, because
+ * the `body` column holds the parsed body the app rendered rather than the
+ * message's parts, and a search over it is neither sound nor complete.
+ *
+ * ## Additive by construction
+ *
+ * A gateway that never calls this endpoint keeps working exactly as it does
+ * now: nothing else on this router changed, and this route is the only way
+ * into it.
+ *
+ * Auth is the Access service token, like every other route here.
+ */
+imapApi.post("/:mailboxId/:folder/search", async (c) => {
+	let criteria: ImapSearchCriteria;
+	try {
+		const body = SearchBody.parse(await c.req.json());
+		criteria = body.criteria ?? {};
+	} catch {
+		// Never `err.message`: a zod error echoes the input, and the input to
+		// this route is what the user typed into their mail client's search box.
+		return c.json(INVALID_REQUEST_BODY, 400);
+	}
+	if (!checkSearchCriteriaSize(criteria)) return c.json(INVALID_REQUEST_BODY, 400);
+
+	const stub = await resolveMailbox(c.env, c.req.param("mailboxId"));
+	if (!stub) return c.json(NOT_FOUND_BODY, 404);
+
+	const result = await stub.imapSearch(c.req.param("folder"), criteria);
+	if (result.status === "no-folder") return c.json(FOLDER_NOT_FOUND_BODY, 404);
+	if (result.status === "too-large") {
+		// Refused rather than truncated. The response has no way to say "these
+		// uids plus some others", so a shortened list would read as a complete
+		// answer. The gateway still has its own local evaluation to fall back
+		// on, and its own NO [LIMIT] when that runs out too.
+		return c.json(SEARCH_TOO_LARGE_BODY, 413);
+	}
+
+	return c.json({
+		uids: result.uids,
+		partial: result.partial,
+		handled: result.handled,
+		unhandled: result.unhandled,
+		scanned: result.scanned,
 	});
 });
 
