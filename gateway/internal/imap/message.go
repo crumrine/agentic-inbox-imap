@@ -12,7 +12,7 @@ import (
 
 	"github.com/emersion/go-imap/v2"
 
-	"github.com/crumrine/agentic-inbox/gateway/internal/backend"
+	"github.com/crumrine/agentic-inbox-imap/gateway/internal/backend"
 )
 
 // systemFlagByName maps a bare flag name (no leading backslash, lower

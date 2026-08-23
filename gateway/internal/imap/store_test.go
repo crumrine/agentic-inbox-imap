@@ -13,7 +13,7 @@ import (
 
 	"github.com/emersion/go-imap/v2"
 
-	"github.com/crumrine/agentic-inbox/gateway/internal/backend"
+	"github.com/crumrine/agentic-inbox-imap/gateway/internal/backend"
 )
 
 // storeSilent runs a STORE with .SILENT so no FetchWriter is needed.

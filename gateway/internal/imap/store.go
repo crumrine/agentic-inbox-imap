@@ -10,7 +10,7 @@ import (
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapserver"
 
-	"github.com/crumrine/agentic-inbox/gateway/internal/backend"
+	"github.com/crumrine/agentic-inbox-imap/gateway/internal/backend"
 )
 
 // storeTarget is one message selected by a STORE, paired with the sequence

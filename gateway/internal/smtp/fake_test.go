@@ -25,7 +25,7 @@ import (
 
 	gosmtp "github.com/emersion/go-smtp"
 
-	"github.com/crumrine/agentic-inbox/gateway/internal/backend"
+	"github.com/crumrine/agentic-inbox-imap/gateway/internal/backend"
 )
 
 const (

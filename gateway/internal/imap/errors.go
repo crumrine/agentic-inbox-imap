@@ -10,7 +10,7 @@ import (
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapserver"
 
-	"github.com/crumrine/agentic-inbox/gateway/internal/backend"
+	"github.com/crumrine/agentic-inbox-imap/gateway/internal/backend"
 )
 
 // errMessageTooLarge is returned by the message store when a raw message

@@ -38,10 +38,10 @@ import (
 	"github.com/emersion/go-imap/v2/imapserver"
 	gosmtp "github.com/emersion/go-smtp"
 
-	"github.com/crumrine/agentic-inbox/gateway/internal/backend"
-	"github.com/crumrine/agentic-inbox/gateway/internal/config"
-	imapsession "github.com/crumrine/agentic-inbox/gateway/internal/imap"
-	smtpsession "github.com/crumrine/agentic-inbox/gateway/internal/smtp"
+	"github.com/crumrine/agentic-inbox-imap/gateway/internal/backend"
+	"github.com/crumrine/agentic-inbox-imap/gateway/internal/config"
+	imapsession "github.com/crumrine/agentic-inbox-imap/gateway/internal/imap"
+	smtpsession "github.com/crumrine/agentic-inbox-imap/gateway/internal/smtp"
 	"io"
 )
 

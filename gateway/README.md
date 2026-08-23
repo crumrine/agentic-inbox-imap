@@ -144,7 +144,7 @@ loopback or in the Tailscale CGNAT range, unless
 
 ```
 gateway/
-  go.mod                     separate Go module: github.com/crumrine/agentic-inbox/gateway
+  go.mod                     separate Go module: github.com/crumrine/agentic-inbox-imap/gateway
   cmd/agentic-imapd/main.go  entrypoint: load config, build backend client, start listener, graceful shutdown
   internal/config/           configuration from environment, with validation and the public-bind guard
   internal/backend/          typed HTTP client for the Worker's IMAP-gateway API

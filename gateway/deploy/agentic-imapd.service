@@ -1,6 +1,6 @@
 [Unit]
 Description=agentic-inbox IMAP/SMTP gateway
-Documentation=https://github.com/crumrine/agentic-inbox/blob/main/gateway/README.md
+Documentation=https://github.com/crumrine/agentic-inbox-imap/blob/main/gateway/README.md
 After=network-online.target tailscaled.service
 Wants=network-online.target
 Requires=tailscaled.service

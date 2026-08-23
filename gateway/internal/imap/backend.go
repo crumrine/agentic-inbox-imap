@@ -10,7 +10,7 @@ import (
 
 	"github.com/emersion/go-imap/v2"
 
-	"github.com/crumrine/agentic-inbox/gateway/internal/backend"
+	"github.com/crumrine/agentic-inbox-imap/gateway/internal/backend"
 )
 
 // Backend is the subset of the Worker API the IMAP session depends on. It

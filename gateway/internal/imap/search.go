@@ -17,7 +17,7 @@ import (
 	gomessage "github.com/emersion/go-message"
 	"github.com/emersion/go-message/mail"
 
-	"github.com/crumrine/agentic-inbox/gateway/internal/backend"
+	"github.com/crumrine/agentic-inbox-imap/gateway/internal/backend"
 )
 
 // errMessageVanished unwinds the match of a message that disappeared from

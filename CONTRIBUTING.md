@@ -7,7 +7,7 @@ Two components, deliberately separable:
 - **Worker + SPA** at the repository root. TypeScript, Cloudflare Workers,
   React Router, Durable Objects, R2.
 - **`gateway/`** is a **separate Go module**
-  (`github.com/crumrine/agentic-inbox/gateway`) with its own `LICENSE` and
+  (`github.com/crumrine/agentic-inbox-imap/gateway`) with its own `LICENSE` and
   `NOTICE`. It has no *code* dependency on the Worker, but it is not useful
   without one: it is a client of the `/api/imap/v1` HTTP contract, and every
   IMAP command it serves needs a matching Worker endpoint. The two are

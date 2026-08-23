@@ -1,4 +1,4 @@
-module github.com/crumrine/agentic-inbox/gateway
+module github.com/crumrine/agentic-inbox-imap/gateway
 
 go 1.24
 

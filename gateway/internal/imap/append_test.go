@@ -12,7 +12,7 @@ import (
 
 	"github.com/emersion/go-imap/v2"
 
-	"github.com/crumrine/agentic-inbox/gateway/internal/backend"
+	"github.com/crumrine/agentic-inbox-imap/gateway/internal/backend"
 )
 
 const appendBody = "From: me@example.com\r\n" +
