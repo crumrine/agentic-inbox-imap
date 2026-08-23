@@ -213,7 +213,7 @@ gateway/
   internal/imap/             imapserver.Session: FETCH, SEARCH (local eval in search.go,
                              server push-down in searchpush.go), append-only Poll, plus
                              STORE/COPY/MOVE/EXPUNGE/APPEND mutations (mutate.go)
-  internal/smtp/             empty package placeholder (phase 2)
+  internal/smtp/             go-smtp submission: 465 implicit TLS, 587 mandatory STARTTLS
   deploy/                    systemd unit + example env file
 ```
 

@@ -2,14 +2,15 @@
 
 Design and build record for exposing Agentic Inbox mailboxes to standard mail
 clients (Apple Mail, Thunderbird, mobile clients) over IMAP, with SMTP
-submission still to come.
+submission on 465 and 587.
 
-Status: phases 0 and 1 are done and verified against a live iOS Mail client
-over a real Worker. Most of phase 2 (STORE, COPY, MOVE, EXPUNGE) landed early
-too, for reasons explained below. What remains is APPEND, SMTP submission, a
-real push channel for IDLE, an app-password management UI, and open-source
-packaging. See "What actually shipped" for the detailed state and "Where this
-went wrong" for the three production-only failures that shaped it.
+Status: phases 0 through 2 are done. IMAP reads, flag writes, COPY, MOVE,
+EXPUNGE, APPEND and SMTP submission are all implemented. The read, flag-write
+and submission paths are verified against a live iOS Mail client over a real
+Worker; the rest is covered against a fake backend and an in-process go-imap
+server. What remains is a real push channel for IDLE, which polls today. See
+"What actually shipped" for the detailed state and "Where this went wrong"
+for the three production-only failures that shaped it.
 
 ## Why a gateway exists at all
 
@@ -70,7 +71,7 @@ closed these gaps:
 | No UID / UIDVALIDITY | ids were `crypto.randomUUID()` | `uid`, `uid_validity`, `uid_next` in migration `9_imap_uid_flags` |
 | Flags were two ints | `read`, `starred` in `workers/db/schema.ts` | `answered`, `deleted`, `flags` (JSON keyword array) added alongside them |
 | No message size | not stored | `rfc822_size` |
-| No APPEND path | n/a | still open, see below |
+| No APPEND path | n/a | `POST .../append`, deduplicated on Message-ID outside Sent |
 | Access JWT was the only auth | `workers/app.ts` middleware | app passwords, see Authentication |
 
 ### Raw MIME retention
@@ -180,8 +181,7 @@ A dedicated surface at `IMAP_API_BASE = "/api/imap/v1"` (`workers/routes/imap-ap
 mounted before the React Router catch-all, alongside `/mcp` and `/agents/*`.
 The endpoint list changed from the original plan in one concrete way: there
 is no WebSocket `/events` endpoint, because IDLE turned out not to need one
-yet (see below), and APPEND has no endpoint yet because it has no client side
-to call it.
+yet (see below).
 
 ```
 POST   /api/imap/v1/auth                              verify app password
@@ -193,6 +193,8 @@ POST   /api/imap/v1/{mailbox}/{folder}/copy            COPY
 POST   /api/imap/v1/{mailbox}/{folder}/move            MOVE
 POST   /api/imap/v1/{mailbox}/{folder}/expunge         EXPUNGE, relocate or hard-delete
 POST   /api/imap/v1/{mailbox}/{folder}/search          SEARCH push-down (DEV-682)
+POST   /api/imap/v1/{mailbox}/{folder}/append          APPEND, dedup on Message-ID
+POST   /api/imap/v1/{mailbox}/submit                   SMTP submission
 ```
 
 `search` takes a JSON mirror of go-imap's `imap.SearchCriteria` and answers
@@ -242,20 +244,65 @@ of message flags, COPY, MOVE, and EXPUNGE. MOVE and UIDPLUS are advertised, so
 a client moves a message in one round trip and gets a real COPYUID response
 back.
 
-Not served: APPEND answers NO and keeps the connection alive. SMTP submission
-(`internal/smtp`) is still an empty placeholder.
+APPEND is served too, with UIDPLUS APPENDUID. The Worker deduplicates on
+Message-ID everywhere except Sent, which is what stops a message appearing
+twice when a client saves its own copy of something it just submitted. The
+exception matters: a client edits a draft by re-APPENDing it with the *same*
+Message-ID and expunging the old copy, so deduplicating in Drafts would
+return the original uid without writing the new body, and the client would
+then expunge the copy it thought it had just replaced.
 
 Verified against iOS Mail over the tailnet with a live Worker: connect, full
 folder sync, UID SEARCH, UID FETCH with BODY.PEEK[HEADER] and partial ranges,
-IDLE holding open until DONE, and flag writes persisting. That run predates
-the SEARCH push-down, which is covered against a fake backend (happy path,
-partial results applied to exactly the returned uids, positional token
-mapping, 413 and transport errors falling back) but has not yet been
-exercised against a live Worker. COPY, MOVE, and
-EXPUNGE are covered against a fake backend and an in-process go-imap server,
+IDLE holding open until DONE, flag writes persisting, and sending through
+submission. That run predates the SEARCH push-down, which is covered against
+a fake backend (happy path, partial results applied to exactly the returned
+uids, positional token mapping, 413 and transport errors falling back) but
+has not yet been exercised against a live Worker. COPY, MOVE, EXPUNGE and
+APPEND are covered against a fake backend and an in-process go-imap server,
 including a replay of the exact swipe-to-delete sequence
 (`UID STORE +FLAGS (\Deleted)` then `UID EXPUNGE`), but have not yet run
 against a real client.
+
+### SMTP submission
+
+Two listeners, one session implementation (`gateway/internal/smtp`). 465 is
+implicit TLS: the listener terminates TLS, so the connection is already
+encrypted at accept time and STARTTLS is not offered, because it would be
+meaningless on an encrypted link. 587 is the RFC 6409 submission port,
+starting in the clear as that port is specified to, with mandatory STARTTLS.
+
+587 exists because clients default to it. iOS Mail's account setup has no
+outgoing port field at all: it tries 587 and nothing else, so a gateway
+serving only 465 is one the phone never reaches. That was the third of the
+three production-only failures below, and it is the same lesson each time.
+
+What makes 587 safe is that STARTTLS is mandatory rather than opportunistic.
+`AllowInsecureAuth` stays false on both listeners, so go-smtp refuses AUTH
+with 523 5.7.10 before it has parsed the mechanism, and the EHLO response
+omits AUTH entirely until the connection is encrypted. A credential cannot
+reach the wire in the clear.
+
+Scope is deliberately narrow: a submission server, not an MTA. It accepts
+mail only from an authenticated mailbox and hands every message to exactly
+one upstream, `POST /api/imap/v1/{mailbox}/submit`. No queue, no relay, no
+local delivery. AUTH PLAIN goes against the same `/auth` endpoint and the
+same app passwords as IMAP; there is deliberately no second credential
+system.
+
+Going through the Worker rather than straight out is the point: it is what
+puts a submitted message through `validateSender`, the per-mailbox rate
+limit, Sent recording, and threading. **Do not point clients at
+`smtp.mx.cloudflare.net` directly.** It works, but the password is a
+Cloudflare API token authorized for every address on the domain, and mail
+sent that way never enters the app, so the Sent folder silently diverges.
+
+A message with no `Message-ID:` gets one generated and inserted into the
+bytes, as RFC 4409 8.1 asks a submission server to do. Note the client's
+later APPEND of its own Sent copy still carries no Message-ID, so that one
+copy genuinely cannot dedup and appears twice. Every real client sets the
+header; the path exists so a message without one is delivered rather than
+refused.
 
 ### Flag writes could not be optional
 
@@ -450,7 +497,7 @@ gateway/
   go.mod                        separate module; the Node build never sees it
   cmd/agentic-imapd/             entrypoint, TLS listener, ID-proxy wiring
   internal/imap/                 go-imap session: fetch, search, store, mutate (copy/move/expunge), idproxy
-  internal/smtp/                 empty package placeholder (submission not built yet)
+  internal/smtp/                 go-smtp submission: 465 implicit TLS, 587 mandatory STARTTLS
   internal/backend/              HTTP client for /api/imap/v1
   internal/config/               env config, validation, public-bind guard
   README.md                      build, configure, deploy
@@ -470,25 +517,11 @@ must not claim Cloudflare copyright. Before publishing:
 
 ## What remains
 
-- **APPEND.** No endpoint and no gateway handler. Needed for clients that
-  save their own Sent and Drafts copies rather than relying on the app's
-  send path to populate them.
-- **SMTP submission.** `internal/smtp` is still an empty placeholder. Needs
-  to authenticate against the same app passwords and hand off to the
-  existing Worker send path so `validateSender`, the per-mailbox rate limit,
-  Sent recording, and threading all still apply. Do not point clients at
-  `smtp.mx.cloudflare.net` directly: it works, but the password is a
-  Cloudflare API token authorized for every address on the domain, and mail
-  sent that way never enters the app, so the Sent folder silently diverges.
 - **IDLE via real push**, replacing the 30-second poll, tracked as Trellis
   DEV-674. Use the hibernatable WebSocket API so an idle client does not
   hold the Durable Object in memory and accrue duration charges. The
   inbound-mail hook that already fires the agent's auto-draft is the natural
   broadcast point.
-- **App-password management UI** in Settings. Passwords can be minted today
-  with `scripts/mint-app-password.mjs`; there is no in-app flow yet.
-- **Open-source packaging**: the licensing and attribution checklist above,
-  plus whatever else falls out of actually publishing the fork.
 - **CONDSTORE/QRESYNC**, if client resync cost ends up justifying it. Not
   started, not blocking anything today.
 
@@ -508,11 +541,12 @@ must not claim Cloudflare copyright. Before publishing:
   that can reach every mailbox, not just the one currently connected. The
   tailnet-only bind is the only thing standing between a compromised gateway
   host and every mailbox on the Worker.
-- **5 MiB outbound limit**, once SMTP submission exists. Cloudflare Email
-  Service caps total message size, including attachments, at 5 MiB. Mail
-  clients do not know this and will attach a 12 MB photo. Surface the
-  failure clearly at submission time.
-- **Two writers to Drafts**, once auto-draft and client-side APPEND coexist.
+- **5 MiB outbound limit.** Cloudflare Email Service caps total message
+  size, including attachments, at 5 MiB. Mail clients do not know this and
+  will attach a 12 MB photo, so the failure has to read clearly at
+  submission time rather than as a generic error.
+- **Two writers to Drafts**, now that auto-draft and client-side APPEND
+  coexist.
   UID assignment is centralized in the Durable Object, so this stays
   consistent, but clients will occasionally resync.
 - **DO duration billing** if a future push-based IDLE holds connections
