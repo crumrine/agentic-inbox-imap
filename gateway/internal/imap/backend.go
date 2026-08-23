@@ -29,6 +29,12 @@ type Backend interface {
 	Messages(ctx context.Context, mailbox, folder string, opts backend.MessagesOptions) (*backend.MessagesPage, error)
 	// RawMessage streams the original RFC822 bytes of one message.
 	RawMessage(ctx context.Context, mailbox, folder string, uid uint32) (*backend.RawMessageReader, error)
+	// Search asks the Worker to evaluate the part of an IMAP SEARCH it can
+	// answer from its own storage. The result names which criteria it
+	// actually applied, so the caller can finish the rest itself; see
+	// backend.SearchPage. Every error is recoverable — the caller falls
+	// back to evaluating the whole search locally.
+	Search(ctx context.Context, mailbox, folder string, criteria *backend.SearchCriteria) (*backend.SearchPage, error)
 	// SetFlags applies a batch of per-message flag changes and returns each
 	// message's complete resulting flag set. UIDs the Worker does not know
 	// are omitted from the result rather than reported as an error.

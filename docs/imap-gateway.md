@@ -206,6 +206,29 @@ a handful of fetches by narrowing on everything else first. The full contract,
 including why each unhandled criterion is unhandled, is in
 `workers/imap/search.ts`.
 
+The gateway calls it from `internal/imap/searchpush.go`, and only when the
+call can pay for itself: local evaluation would otherwise have to download
+messages *and* there is something the endpoint can narrow on. Everything
+else — `SEARCH ALL`, `SEARCH UNSEEN`, an envelope-header search — is already
+free locally and never leaves the process. Sequence numbers are resolved
+against the gateway's own snapshot and never sent; a NOT or OR branch that
+cannot be expressed whole is not sent at all, since a half-applied negation
+turns the superset into a subset. On return the gateway checks that every
+term it sent came back exactly once, in `handled` or in `unhandled`, and
+applies only the unhandled ones to the uids it was given. Any error, any
+timeout, a 413 (the search would examine more than 20,000 rows and is
+refused rather than truncated), or a response that fails that accounting
+falls back to full local evaluation: this is an optimisation, and the
+recurring lesson below is that a command a real client relies on must not
+answer NO.
+
+One answer legitimately differs between the two paths. The endpoint reads
+BCC from the stored column; the gateway's local path parses the Bcc header
+out of the raw message, which a recipient's copy usually does not carry at
+all. The column is the authoritative record of who was blind-copied, so a
+pushed-down BCC search is both cheaper and more correct, and the gateway
+does not re-evaluate it.
+
 The metadata endpoint returns everything a FETCH needs without touching the
 raw body: uid, flags, internaldate, rfc822_size, and envelope fields, so a
 full sync never pulls raw bytes just to answer a size or envelope query.
@@ -224,7 +247,11 @@ Not served: APPEND answers NO and keeps the connection alive. SMTP submission
 
 Verified against iOS Mail over the tailnet with a live Worker: connect, full
 folder sync, UID SEARCH, UID FETCH with BODY.PEEK[HEADER] and partial ranges,
-IDLE holding open until DONE, and flag writes persisting. COPY, MOVE, and
+IDLE holding open until DONE, and flag writes persisting. That run predates
+the SEARCH push-down, which is covered against a fake backend (happy path,
+partial results applied to exactly the returned uids, positional token
+mapping, 413 and transport errors falling back) but has not yet been
+exercised against a live Worker. COPY, MOVE, and
 EXPUNGE are covered against a fake backend and an in-process go-imap server,
 including a replay of the exact swipe-to-delete sequence
 (`UID STORE +FLAGS (\Deleted)` then `UID EXPUNGE`), but have not yet run

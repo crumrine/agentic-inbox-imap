@@ -202,3 +202,77 @@ type SubmitResult struct {
 	SentUID         uint32 `json:"sentUid"`
 	SentUIDValidity uint32 `json:"sentUidValidity"`
 }
+
+// ── SEARCH push-down ──────────────────────────────────────────────────
+//
+// SearchCriteria mirrors go-imap's imap.SearchCriteria field for field, so
+// the gateway can hand the endpoint the criteria it was already given. Two
+// of go-imap's fields are deliberately absent, matching
+// workers/imap/search.ts:
+//
+//   - SeqNum, because sequence numbers are a property of the gateway's
+//     snapshot rather than of the mailbox. The gateway resolves them
+//     itself.
+//   - ModSeq, because there is no CONDSTORE support to push down.
+//
+// Every field is omitempty. The endpoint validates strictly — an empty
+// date string or an unknown key is a 400, not a shrug — so a field that
+// carries no criterion must not appear on the wire at all.
+
+// SearchUIDRange is one inclusive uid range in a SearchCriteria. Unlike
+// go-imap's UIDRange there is no dynamic form: "*" is resolved against the
+// gateway's snapshot before the request is built.
+type SearchUIDRange struct {
+	Start uint32 `json:"start"`
+	End   uint32 `json:"end"`
+}
+
+// SearchHeaderField is one HEADER <key> <value> term. FROM, TO, CC, BCC and
+// SUBJECT all arrive as these.
+type SearchHeaderField struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+// SearchCriteria is the request body's "criteria" object.
+//
+// Since, Before, SentSince and SentBefore are dates formatted "2006-01-02";
+// the endpoint compares whole UTC days, as RFC 9051 requires.
+type SearchCriteria struct {
+	UID        []SearchUIDRange    `json:"uid,omitempty"`
+	Since      string              `json:"since,omitempty"`
+	Before     string              `json:"before,omitempty"`
+	SentSince  string              `json:"sentSince,omitempty"`
+	SentBefore string              `json:"sentBefore,omitempty"`
+	Flag       []string            `json:"flag,omitempty"`
+	NotFlag    []string            `json:"notFlag,omitempty"`
+	Larger     int64               `json:"larger,omitempty"`
+	Smaller    int64               `json:"smaller,omitempty"`
+	Header     []SearchHeaderField `json:"header,omitempty"`
+	Body       []string            `json:"body,omitempty"`
+	Text       []string            `json:"text,omitempty"`
+	Not        []SearchCriteria    `json:"not,omitempty"`
+	Or         [][2]SearchCriteria `json:"or,omitempty"`
+}
+
+// SearchPage is the response body of POST
+// /api/imap/v1/{mailbox}/{folder}/search.
+//
+// UIDs is the set of messages satisfying every criterion named in Handled
+// and NOTHING else. Top-level IMAP search keys are a conjunction, so UIDs
+// is a superset of the true answer and the caller finishes the job by
+// applying the Unhandled criteria to UIDs and to nothing wider. Applying
+// them to anything wider is wasted work; applying them to anything
+// narrower is a wrong answer.
+//
+// Handled and Unhandled are positional tokens naming the exact terms that
+// were sent — "uid", "since", "flag[0]", "header[1]", "not[0]", "or[0]" —
+// so two terms sharing a key stay distinguishable.
+type SearchPage struct {
+	UIDs      []uint32 `json:"uids"`
+	Partial   bool     `json:"partial"`
+	Handled   []string `json:"handled"`
+	Unhandled []string `json:"unhandled"`
+	// Scanned is diagnostics only. Nothing about correctness depends on it.
+	Scanned int `json:"scanned"`
+}

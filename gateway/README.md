@@ -34,6 +34,23 @@ a byte of it is uploaded. The Worker deduplicates on Message-ID, which is
 what stops every sent message appearing twice when a client saves its own
 Sent copy after submission.
 
+SEARCH is pushed down to the Worker where it can be. Criteria the metadata
+payload cannot answer — BODY, TEXT, BCC, a custom header — otherwise force a
+raw download per message, bounded at 2000 fetches before the gateway gives
+up with `NO [LIMIT]`. `POST .../search` answers the half the Worker can
+evaluate from SQLite and reports, as positional tokens, exactly which
+criteria it applied; the gateway then applies the rest to the uids it got
+back and to nothing else, which is sound because that set is a superset of
+the true answer. Anything at all going wrong — a 400, a 404 from a Worker
+that never deployed the endpoint, a 413 for a search too large to answer, a
+transport error, a response whose tokens do not account for what was sent —
+falls back to full local evaluation. It is an optimisation and never a
+failure mode; `WithSearchPushdown(false)` turns it off. One result
+legitimately differs between the two paths: BCC is answered from the stored
+column, which is the authoritative record of who was blind-copied, rather
+than from a Bcc header that a recipient's copy does not carry. See
+`internal/imap/searchpush.go`.
+
 New mail reaches a client two ways, both through the same append-only
 refresh: `Poll` runs after every command, and `Idle` runs it on a timer for
 as long as the client holds an IDLE open. Neither ever renumbers or removes
@@ -193,7 +210,8 @@ gateway/
   cmd/agentic-imapd/main.go  entrypoint: load config, build backend client, start listener, graceful shutdown
   internal/config/           configuration from environment, with validation and the public-bind guard
   internal/backend/          typed HTTP client for the Worker's IMAP-gateway API
-  internal/imap/             imapserver.Session: FETCH, SEARCH, append-only Poll, plus
+  internal/imap/             imapserver.Session: FETCH, SEARCH (local eval in search.go,
+                             server push-down in searchpush.go), append-only Poll, plus
                              STORE/COPY/MOVE/EXPUNGE/APPEND mutations (mutate.go)
   internal/smtp/             empty package placeholder (phase 2)
   deploy/                    systemd unit + example env file

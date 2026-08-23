@@ -400,6 +400,12 @@ type Session struct {
 	maxFolderMessages   int
 	maxAppendBytes      int64
 
+	// searchPushdown enables the server-side SEARCH endpoint. It is on by
+	// default and is purely a performance switch: with it off, and with a
+	// Worker that has never deployed the endpoint, SEARCH behaves
+	// identically, only slower. See searchpush.go.
+	searchPushdown bool
+
 	// logger records backend trouble that the session deliberately hides
 	// from the client, such as a failed refresh during Poll. It never
 	// receives a password: Login is the only method handed one, and it
@@ -445,6 +451,16 @@ func WithOperationTimeout(d time.Duration) Option {
 // SEARCH may perform before returning NO [LIMIT].
 func WithMaxSearchRawFetches(n int) Option {
 	return func(s *Session) { s.maxSearchRawFetches = n }
+}
+
+// WithSearchPushdown enables or disables asking the Worker to evaluate the
+// part of a SEARCH it can answer from its own storage.
+//
+// It is on by default. Turning it off costs speed and nothing else: the
+// gateway then evaluates every SEARCH locally, exactly as it did before the
+// endpoint existed.
+func WithSearchPushdown(enabled bool) Option {
+	return func(s *Session) { s.searchPushdown = enabled }
 }
 
 // WithPollInterval overrides the minimum time between refreshes of the
@@ -522,6 +538,7 @@ func NewSession(b Backend, opts ...Option) *Session {
 		ownedCache:          store.cache,
 		opTimeout:           DefaultOperationTimeout,
 		maxSearchRawFetches: DefaultMaxSearchRawFetches,
+		searchPushdown:      true,
 		pollInterval:        DefaultPollInterval,
 		idleInterval:        DefaultIdleInterval,
 		messagePageSize:     DefaultMessagePageSize,

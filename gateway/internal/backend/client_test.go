@@ -1024,3 +1024,165 @@ func (r *slowReader) Read(p []byte) (int, error) {
 	}
 	return n, nil
 }
+
+// ── SEARCH push-down ──────────────────────────────────────────────────
+
+func TestSearch_Success(t *testing.T) {
+	var body []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requireAccessHeaders(t, r)
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != "/api/imap/v1/user@example.com/inbox/search" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			t.Errorf("Content-Type = %q", ct)
+		}
+		body, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"uids":[3,7,12],"partial":true,"handled":["since","flag[0]"],"unhandled":["body[0]"],"scanned":42}`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, srv)
+	page, err := c.Search(context.Background(), "user@example.com", "inbox", &SearchCriteria{
+		Since: "2026-08-01",
+		Flag:  []string{"\\Seen"},
+		Body:  []string{"invoice"},
+	})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+
+	// The endpoint rejects an unknown key with a 400, so the request must
+	// carry exactly the fields that hold a criterion and nothing else.
+	want := `{"criteria":{"since":"2026-08-01","flag":["\\Seen"],"body":["invoice"]}}`
+	if string(body) != want {
+		t.Errorf("request body = %s, want %s", body, want)
+	}
+
+	if len(page.UIDs) != 3 || page.UIDs[0] != 3 || page.UIDs[2] != 12 {
+		t.Errorf("uids = %v", page.UIDs)
+	}
+	if !page.Partial {
+		t.Error("partial = false, want true")
+	}
+	if len(page.Handled) != 2 || page.Handled[1] != "flag[0]" {
+		t.Errorf("handled = %v", page.Handled)
+	}
+	if len(page.Unhandled) != 1 || page.Unhandled[0] != "body[0]" {
+		t.Errorf("unhandled = %v", page.Unhandled)
+	}
+	if page.Scanned != 42 {
+		t.Errorf("scanned = %d, want 42", page.Scanned)
+	}
+}
+
+// TestSearch_NilCriteriaIsSearchAll: absent criteria means "every message
+// in the folder", and the envelope still has to be present and valid.
+func TestSearch_NilCriteriaIsSearchAll(t *testing.T) {
+	var body []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"uids":[],"partial":false,"handled":[],"unhandled":[],"scanned":0}`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, srv)
+	if _, err := c.Search(context.Background(), "user@example.com", "inbox", nil); err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if string(body) != `{"criteria":{}}` {
+		t.Errorf("request body = %s, want {\"criteria\":{}}", body)
+	}
+}
+
+// TestSearch_NestedCriteriaShape pins the two shapes a plain struct marshal
+// could get wrong: a uid range object and an OR pair as a two-element JSON
+// array, which is what the endpoint's tuple schema expects.
+func TestSearch_NestedCriteriaShape(t *testing.T) {
+	var body []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"uids":[],"partial":false,"handled":[],"unhandled":[],"scanned":0}`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, srv)
+	_, err := c.Search(context.Background(), "user@example.com", "inbox", &SearchCriteria{
+		UID: []SearchUIDRange{{Start: 3, End: 9}},
+		Not: []SearchCriteria{{Flag: []string{"\\Deleted"}}},
+		Or: [][2]SearchCriteria{{
+			{Header: []SearchHeaderField{{Key: "From", Value: "alice"}}},
+			{Header: []SearchHeaderField{{Key: "From", Value: "bob"}}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+
+	want := `{"criteria":{"uid":[{"start":3,"end":9}],` +
+		`"not":[{"flag":["\\Deleted"]}],` +
+		`"or":[[{"header":[{"key":"From","value":"alice"}]},{"header":[{"key":"From","value":"bob"}]}]]}}`
+	if string(body) != want {
+		t.Errorf("request body = %s, want %s", body, want)
+	}
+}
+
+func TestSearch_ErrorMapping(t *testing.T) {
+	tests := []struct {
+		name   string
+		status int
+		body   string
+		kind   ErrorKind
+	}{
+		{"invalid request", 400, `{"error":"Invalid request"}`, ErrKindUnknown},
+		{"no such mailbox", 404, `{"error":"Not found"}`, ErrKindNotFound},
+		{"no such folder", 404, `{"error":"Folder not found"}`, ErrKindNotFound},
+		{"too large", 413, `{"error":"Search too large"}`, ErrKindUnknown},
+		{"worker error", 500, ``, ErrKindServer},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				fmt.Fprint(w, tc.body)
+			}))
+			defer srv.Close()
+
+			c := newTestClient(t, srv)
+			_, err := c.Search(context.Background(), "user@example.com", "inbox", &SearchCriteria{})
+			var apiErr *APIError
+			if !errors.As(err, &apiErr) {
+				t.Fatalf("err = %#v, want *APIError", err)
+			}
+			if apiErr.StatusCode != tc.status {
+				t.Errorf("StatusCode = %d, want %d", apiErr.StatusCode, tc.status)
+			}
+			if apiErr.Kind != tc.kind {
+				t.Errorf("Kind = %v, want %v", apiErr.Kind, tc.kind)
+			}
+		})
+	}
+}
+
+func TestSearch_HonoursRequestTimeout(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release
+	}))
+	defer srv.Close()
+	defer close(release)
+
+	c := newTestClient(t, srv, WithRequestTimeout(50*time.Millisecond))
+	_, err := c.Search(context.Background(), "user@example.com", "inbox", &SearchCriteria{})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %#v, want context.DeadlineExceeded", err)
+	}
+}

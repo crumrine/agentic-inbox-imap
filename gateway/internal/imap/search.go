@@ -77,6 +77,17 @@ func (s *Session) Search(kind imapserver.NumKind, criteria *imap.SearchCriteria,
 
 	budget := s.maxSearchRawFetches
 
+	// Ask the Worker to answer the half it can from its own storage, which
+	// turns a folder-wide raw download into a handful of fetches. What
+	// comes back narrows the candidate set to keep and leaves the criteria
+	// it did not evaluate in effective; see searchpush.go. A nil result
+	// means the push-down was skipped or failed, and nothing below changes.
+	effective := criteria
+	var keep map[uint32]struct{}
+	if pushed := s.pushDownSearch(ctx, mailbox, sel, criteria); pushed != nil {
+		keep, effective = pushed.keep, pushed.residual
+	}
+
 	var (
 		data   imap.SearchData
 		seqSet imap.SeqSet
@@ -85,6 +96,15 @@ func (s *Session) Search(kind imapserver.NumKind, criteria *imap.SearchCriteria,
 
 	for i, msg := range sel.msgs {
 		seqNum := uint32(i + 1)
+		if keep != nil {
+			// The endpoint's uids satisfy every criterion it applied, and
+			// only those, so the rest of the search runs against exactly
+			// this set: anything wider is wasted work, anything narrower is
+			// a wrong answer.
+			if _, ok := keep[msg.UID]; !ok {
+				continue
+			}
+		}
 		mc := &messageCriteria{
 			ctx:     ctx,
 			store:   s.store,
@@ -96,7 +116,7 @@ func (s *Session) Search(kind imapserver.NumKind, criteria *imap.SearchCriteria,
 			budget:  &budget,
 		}
 
-		ok, err := mc.match(criteria)
+		ok, err := mc.match(effective)
 		if err != nil {
 			if errors.Is(err, errMessageVanished) {
 				continue

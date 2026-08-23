@@ -3,8 +3,10 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 // Package backend implements a typed HTTP client for the agentic-inbox
-// Worker's IMAP-gateway API (POST /api/imap/v1/auth, GET .../folders,
-// GET .../messages, GET .../messages/{uid}/raw).
+// Worker's IMAP-gateway API under /api/imap/v1: POST /auth,
+// GET {mailbox}/folders, GET {mailbox}/{folder}/messages,
+// GET {mailbox}/messages/{uid}/raw, POST {mailbox}/{folder}/search, and the
+// write endpoints flags, copy, move, expunge, append and submit.
 //
 // The client is stateless: it holds no mailbox data, only an HTTP
 // connection pool and the Cloudflare Access service-token credentials used
@@ -352,6 +354,42 @@ func (c *Client) Messages(ctx context.Context, mailbox, folder string, opts Mess
 	var page MessagesPage
 	path := mailboxPath(mailbox) + "/" + url.PathEscape(folder) + "/messages"
 	if err := c.doJSON(ctx, http.MethodGet, path, query, nil, "", &page); err != nil {
+		return nil, err
+	}
+	return &page, nil
+}
+
+// Search calls POST /api/imap/v1/{mailbox}/{folder}/search, asking the
+// Worker to evaluate the part of an IMAP SEARCH it can answer from its own
+// storage so the gateway does not have to download messages to answer it.
+//
+// A nil criteria means "every message in the folder", which is what
+// SEARCH ALL asks for.
+//
+// The result is only half an answer: SearchPage.UIDs satisfies the criteria
+// named in Handled and nothing else, so the caller must apply the Unhandled
+// criteria to those uids itself. See SearchPage.
+//
+// Every failure mode is the caller's cue to evaluate the whole search
+// locally instead: a 400 (criteria this build sent that the Worker does not
+// know), a 404 (no such mailbox or folder), a 413 (the search would examine
+// too many rows to answer at all), or any transport error. This endpoint is
+// an optimisation, and a mail client hanging or seeing a NO is far worse
+// than a slow search.
+func (c *Client) Search(ctx context.Context, mailbox, folder string, criteria *SearchCriteria) (*SearchPage, error) {
+	if criteria == nil {
+		criteria = &SearchCriteria{}
+	}
+	payload, err := json.Marshal(struct {
+		Criteria *SearchCriteria `json:"criteria"`
+	}{Criteria: criteria})
+	if err != nil {
+		return nil, fmt.Errorf("backend: encoding search request: %w", err)
+	}
+
+	var page SearchPage
+	path := mailboxPath(mailbox) + "/" + url.PathEscape(folder) + "/search"
+	if err := c.doJSON(ctx, http.MethodPost, path, nil, bytes.NewReader(payload), "application/json", &page); err != nil {
 		return nil, err
 	}
 	return &page, nil

@@ -123,6 +123,14 @@ type fakeBackend struct {
 	// different reader entirely and the assertion would pass vacuously.
 	appendWatch *trackingLiteral
 
+	// searchFunc answers the SEARCH push-down endpoint. Nil means the
+	// Worker has no such endpoint, which is what the fake reports by
+	// default so every pre-existing test still exercises the local path.
+	searchFunc func(criteria *backend.SearchCriteria) (*backend.SearchPage, error)
+
+	// searchRequests records every criteria object put on the wire.
+	searchRequests []*backend.SearchCriteria
+
 	// Injected failures.
 	appendErr   error
 	copyErr     error
@@ -404,6 +412,31 @@ func (f *fakeBackend) RawMessage(ctx context.Context, mailbox, folder string, ui
 // SetFlags mirrors the Worker: add then remove, per message, returning the
 // complete resulting flag set. Unknown UIDs are silently omitted from the
 // result, which is how a deleted message reports itself.
+// Search answers the SEARCH push-down endpoint.
+//
+// With no searchFunc configured it reports 404, the way a Worker that never
+// deployed the endpoint would, so the session must fall back to evaluating
+// the whole search locally.
+func (f *fakeBackend) Search(ctx context.Context, mailbox, folder string, criteria *backend.SearchCriteria) (*backend.SearchPage, error) {
+	f.mu.Lock()
+	f.searchRequests = append(f.searchRequests, criteria)
+	fn := f.searchFunc
+	f.mu.Unlock()
+
+	if fn == nil {
+		return nil, &backend.APIError{Kind: backend.ErrKindNotFound, StatusCode: 404, Body: `{"error":"Not found"}`}
+	}
+	return fn(criteria)
+}
+
+// searchCalls returns every criteria object the session sent to the search
+// endpoint, in order.
+func (f *fakeBackend) searchCalls() []*backend.SearchCriteria {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]*backend.SearchCriteria(nil), f.searchRequests...)
+}
+
 func (f *fakeBackend) SetFlags(ctx context.Context, mailbox, folder string, updates []backend.FlagUpdate) ([]backend.FlagResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
