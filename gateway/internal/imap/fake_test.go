@@ -821,6 +821,21 @@ func (l *trackingLiteral) consumed() int64 {
 	return l.n
 }
 
+// setBodyStructure attaches a precomputed BODYSTRUCTURE to a stored
+// message, the way the Worker's /messages payload now carries one.
+func (f *fakeBackend) setBodyStructure(folderID string, uid uint32, node *backend.BodyStructureNode) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	msgs := f.messages[folderID]
+	for i := range msgs {
+		if msgs[i].UID == uid {
+			msgs[i].BodyStructure = node
+			return
+		}
+	}
+	panic("fake: no such uid to attach a body structure to")
+}
+
 // ---------------------------------------------------------------------
 // In-memory server harness
 // ---------------------------------------------------------------------

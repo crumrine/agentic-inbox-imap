@@ -1439,9 +1439,12 @@ func (sel *selection) forEach(numSet imap.NumSet, f func(seqNum uint32, msg *bac
 // fetchNeedsRaw reports whether any requested item can only be answered
 // from the original message bytes. Metadata-only FETCHes must never trigger
 // a raw download; a full-folder sync in Apple Mail is exactly that.
+//
+// BODYSTRUCTURE is deliberately not in this list. It may or may not need
+// the message depending on whether the Worker precomputed one, and only
+// the MessageStore knows; asking it is what decides.
 func fetchNeedsRaw(options *imap.FetchOptions) bool {
-	return options.BodyStructure != nil ||
-		len(options.BodySection) > 0 ||
+	return len(options.BodySection) > 0 ||
 		len(options.BinarySection) > 0 ||
 		len(options.BinarySectionSize) > 0
 }
@@ -1486,6 +1489,22 @@ func (s *Session) Fetch(w *imapserver.FetchWriter, numSet imap.NumSet, options *
 
 	return sel.forEach(numSet, func(seqNum uint32, msg *backend.Message) error {
 		var entry rawData
+
+		// Ask for the structure first. When the Worker precomputed one it
+		// costs nothing, and when it did not the raw message lands in the
+		// cache, so a body section requested alongside it is then free.
+		if options.BodyStructure != nil {
+			bs, err := s.store.BodyStructure(ctx, mailbox, sel.folderKey, msg)
+			if err != nil {
+				if vanished(err) {
+					s.logVanished(mailbox, sel.folderKey, msg.UID)
+					return nil
+				}
+				return mapBackendError(err, "Message no longer exists")
+			}
+			entry.bs = bs
+		}
+
 		if needRaw {
 			raw, err := s.store.Raw(ctx, mailbox, sel.folderKey, msg.UID)
 			if err != nil {
@@ -1496,17 +1515,6 @@ func (s *Session) Fetch(w *imapserver.FetchWriter, numSet imap.NumSet, options *
 				return mapBackendError(err, "Message no longer exists")
 			}
 			entry.raw = raw
-			if options.BodyStructure != nil {
-				bs, err := s.store.BodyStructure(ctx, mailbox, sel.folderKey, msg.UID)
-				if err != nil {
-					if vanished(err) {
-						s.logVanished(mailbox, sel.folderKey, msg.UID)
-						return nil
-					}
-					return mapBackendError(err, "Message no longer exists")
-				}
-				entry.bs = bs
-			}
 		}
 
 		// CreateMessage takes the connection's write lock; Close releases

@@ -13,6 +13,8 @@ import (
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapserver"
+
+	"github.com/crumrine/agentic-inbox-imap/gateway/internal/backend"
 )
 
 // Defaults for the per-session raw-message cache. The gateway is
@@ -41,7 +43,15 @@ const (
 // by Raw is shared with the cache and must not be modified by callers.
 type MessageStore interface {
 	Raw(ctx context.Context, mailbox, folder string, uid uint32) ([]byte, error)
-	BodyStructure(ctx context.Context, mailbox, folder string, uid uint32) (imap.BodyStructure, error)
+
+	// BodyStructure returns the structure of one message.
+	//
+	// It takes the whole metadata row rather than a UID because the row is
+	// where the Worker's precomputed structure arrives. This is the swap
+	// the interface was introduced for: an implementation can answer from
+	// the payload when it is there and read the message when it is not,
+	// without the session knowing which happened.
+	BodyStructure(ctx context.Context, mailbox, folder string, msg *backend.Message) (imap.BodyStructure, error)
 }
 
 // rawKey identifies a cached message. Folder is part of the key because
@@ -240,8 +250,24 @@ func (s *cachedStore) Raw(ctx context.Context, mailbox, folder string, uid uint3
 	return e.raw, nil
 }
 
-func (s *cachedStore) BodyStructure(ctx context.Context, mailbox, folder string, uid uint32) (imap.BodyStructure, error) {
-	e, err := s.entry(ctx, mailbox, folder, uid)
+// BodyStructure prefers the Worker's precomputed structure and derives one
+// from the raw message when there is none.
+//
+// The fallback is not an edge case. The field is additive, nothing was
+// backfilled, and the deriver declines rather than approximating whenever a
+// message is outside what it can represent exactly, so most of an existing
+// mailbox still takes the slow path. Both paths must produce the same
+// bytes on the wire; TestPrecomputedMatchesDerived pins that.
+func (s *cachedStore) BodyStructure(ctx context.Context, mailbox, folder string, msg *backend.Message) (imap.BodyStructure, error) {
+	if msg == nil {
+		return nil, errMessageVanished
+	}
+	if bs := decodeBodyStructure(msg.BodyStructure); bs != nil {
+		// No R2 GET, no parse. This is the whole point of the field.
+		return bs, nil
+	}
+
+	e, err := s.entry(ctx, mailbox, folder, msg.UID)
 	if err != nil {
 		return nil, err
 	}

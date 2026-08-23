@@ -80,6 +80,26 @@ snapshot is not renumbered or shrunk on the way, the connection survives,
 and both SELECT and CLOSE clear the fault. A transient backend failure does
 *not* poison: it says nothing about the folder, so the snapshot is kept.
 
+### BODYSTRUCTURE
+
+A FETCH of BODYSTRUCTURE is answered from the Worker's precomputed
+structure when there is one, and by reading the raw message and deriving it
+otherwise. The fallback is not an edge case: the field is additive, nothing
+was backfilled, and the deriver returns nothing rather than approximating
+whenever a message is outside what it can represent exactly, so most of an
+existing mailbox still takes the slow path.
+
+Both paths must produce identical bytes on the wire, or a client would see
+a different structure depending on when the message arrived and would have
+no way to notice. `TestPrecomputedMatchesDerived` builds one message,
+answers it both ways, and compares the emitted FETCH response.
+
+An unrecognised format version falls back whole rather than being partially
+decoded, and the decoder refuses several shapes go-imap's writer *panics*
+on rather than rejects: a nil `Extended` on any node, a multipart with no
+children, and a `message/rfc822` part whose nested envelope the payload does
+not carry.
+
 ### Folder size ceiling
 
 IMAP sequence numbers are positional, so the whole mapping has to be known

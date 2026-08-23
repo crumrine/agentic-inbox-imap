@@ -141,7 +141,11 @@ func TestFetchNeedsRaw(t *testing.T) {
 		want    bool
 	}{
 		{"metadata only", imap.FetchOptions{UID: true, Flags: true, InternalDate: true, RFC822Size: true, Envelope: true}, false},
-		{"body structure", imap.FetchOptions{BodyStructure: &imap.FetchItemBodyStructure{}}, true},
+		// BODYSTRUCTURE is deliberately absent from this decision. Whether
+		// it needs the message depends on the Worker having precomputed
+		// one, which only the MessageStore knows; Fetch asks it rather
+		// than pre-emptively downloading.
+		{"body structure alone does not force a raw fetch", imap.FetchOptions{BodyStructure: &imap.FetchItemBodyStructure{}}, false},
 		{"body section", imap.FetchOptions{BodySection: []*imap.FetchItemBodySection{{}}}, true},
 		{"binary section", imap.FetchOptions{BinarySection: []*imap.FetchItemBinarySection{{}}}, true},
 		{"binary size", imap.FetchOptions{BinarySectionSize: []*imap.FetchItemBinarySectionSize{{}}}, true},

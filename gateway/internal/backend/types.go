@@ -40,6 +40,57 @@ type Envelope struct {
 	Date      string    `json:"date"`
 }
 
+// BodyStructureVersion is the storage format the gateway understands. A
+// payload carrying any other version is ignored in favour of deriving the
+// structure from the raw message, rather than risking a partial decode of
+// a shape this build does not know.
+//
+// It mirrors BODY_STRUCTURE_VERSION in workers/imap/bodystructure.ts.
+const BodyStructureVersion = 1
+
+// BodyStructureDisposition is a Content-Disposition, mirroring
+// StoredDisposition on the Worker side.
+type BodyStructureDisposition struct {
+	Value  string            `json:"value"`
+	Params map[string]string `json:"params,omitempty"`
+}
+
+// BodyStructureNode is one node of a precomputed BODYSTRUCTURE, mirroring
+// StoredSinglePart and StoredMultiPart in workers/imap/bodystructure.ts.
+//
+// The two are one Go struct because the wire format distinguishes them by
+// the presence of children rather than by a discriminant field: a single
+// part's type is an arbitrary token, so "multipart" is not something to
+// switch on.
+//
+// Version is set only on the root, which is where the envelope wraps it.
+// Absent optional fields decode to the Go zero value, which is exactly what
+// the Worker's format assumes.
+type BodyStructureNode struct {
+	// Version is the envelope's "v", present on the root node only.
+	Version int `json:"v,omitempty"`
+
+	Type    string            `json:"type"`
+	Subtype string            `json:"subtype"`
+	Params  map[string]string `json:"params,omitempty"`
+
+	// Single-part fields.
+	ID          string `json:"id,omitempty"`
+	Description string `json:"description,omitempty"`
+	Encoding    string `json:"encoding,omitempty"`
+	Size        uint32 `json:"size,omitempty"`
+	// NumLines is present only for text/*.
+	NumLines int64 `json:"numLines,omitempty"`
+
+	// Extended fields, carried on both kinds of node.
+	Disposition *BodyStructureDisposition `json:"disposition,omitempty"`
+	Language    []string                  `json:"language,omitempty"`
+	Location    string                    `json:"location,omitempty"`
+
+	// Children is non-empty for a multipart and absent otherwise.
+	Children []BodyStructureNode `json:"children,omitempty"`
+}
+
 // Message is one message summary, as returned by
 // GET /api/imap/v1/{mailbox}/{folder}/messages.
 type Message struct {
@@ -49,6 +100,14 @@ type Message struct {
 	RFC822Size   int64     `json:"rfc822Size"`
 	Envelope     Envelope  `json:"envelope"`
 	HasRaw       bool      `json:"hasRaw"`
+
+	// BodyStructure is the Worker's precomputed BODYSTRUCTURE, or nil.
+	//
+	// It is additive and exact-or-absent: the deriver returns nothing
+	// rather than approximating, and nothing was backfilled, so most
+	// messages have none. Nil is the ordinary case, not an error, and the
+	// gateway falls back to deriving the structure from the raw message.
+	BodyStructure *BodyStructureNode `json:"bodyStructure,omitempty"`
 }
 
 // MessagesPage is the response body of

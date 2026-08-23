@@ -39,11 +39,11 @@ func TestCachedStoreParsesBodyStructureOnce(t *testing.T) {
 	store := newCachedStore(be, DefaultMaxCachedMessages, DefaultMaxCacheBytes, DefaultMaxMessageBytes)
 	ctx := context.Background()
 
-	first, err := store.BodyStructure(ctx, testMailbox, "inbox", 9)
+	first, err := store.BodyStructure(ctx, testMailbox, "inbox", &backend.Message{UID: 9})
 	if err != nil {
 		t.Fatalf("BodyStructure: %v", err)
 	}
-	second, err := store.BodyStructure(ctx, testMailbox, "inbox", 9)
+	second, err := store.BodyStructure(ctx, testMailbox, "inbox", &backend.Message{UID: 9})
 	if err != nil {
 		t.Fatalf("BodyStructure: %v", err)
 	}
@@ -211,7 +211,7 @@ func (s *countingStore) Raw(ctx context.Context, mailbox, folder string, uid uin
 	return []byte(s.raw), nil
 }
 
-func (s *countingStore) BodyStructure(ctx context.Context, mailbox, folder string, uid uint32) (imap.BodyStructure, error) {
+func (s *countingStore) BodyStructure(ctx context.Context, mailbox, folder string, msg *backend.Message) (imap.BodyStructure, error) {
 	s.calls++
 	return nil, nil
 }
