@@ -5,6 +5,7 @@
 package imap
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -61,7 +62,7 @@ func TestPollWithNoChangeMakesNoMetadataCall(t *testing.T) {
 	_, foldersAfterSelect, messagesAfterSelect, _ := be.counters()
 
 	for i := 0; i < 3; i++ {
-		if err := s.poll(&recordingUpdateWriter{}); err != nil {
+		if err := s.poll(context.Background(), &recordingUpdateWriter{}); err != nil {
 			t.Fatalf("poll: %v", err)
 		}
 	}
@@ -82,7 +83,7 @@ func TestPollWithNoChangeMakesNoMetadataCall(t *testing.T) {
 func TestPollWithNoChangeEmitsNoExists(t *testing.T) {
 	s := newSelectedSession(t, newFakeBackend(t), WithPollInterval(0))
 	w := &recordingUpdateWriter{}
-	if err := s.poll(w); err != nil {
+	if err := s.poll(context.Background(), w); err != nil {
 		t.Fatalf("poll: %v", err)
 	}
 	if len(w.exists) != 0 {
@@ -110,7 +111,7 @@ func TestPollAppendsNewMailWithoutRenumbering(t *testing.T) {
 	}
 
 	w := &recordingUpdateWriter{}
-	if err := s.poll(w); err != nil {
+	if err := s.poll(context.Background(), w); err != nil {
 		t.Fatalf("poll: %v", err)
 	}
 
@@ -161,7 +162,7 @@ func TestPollAppendsSeveralMessagesInUIDOrder(t *testing.T) {
 	second := be.deliver(t, "inbox", newMessage("two", "b@example.com", time.Now()), rawMsg12)
 
 	w := &recordingUpdateWriter{}
-	if err := s.poll(w); err != nil {
+	if err := s.poll(context.Background(), w); err != nil {
 		t.Fatalf("poll: %v", err)
 	}
 	if len(w.exists) != 1 || w.exists[0] != 5 {
@@ -217,7 +218,7 @@ func TestPollBackendErrorReturnsNilAndKeepsSnapshot(t *testing.T) {
 			tc.break_(be)
 
 			w := &recordingUpdateWriter{}
-			if err := s.poll(w); err != nil {
+			if err := s.poll(context.Background(), w); err != nil {
 				t.Fatalf("poll returned %v; a backend failure must not fail the client's command", err)
 			}
 			if len(w.exists) != 0 {
@@ -252,7 +253,7 @@ func TestPollDoesNotShrinkOnRemoval(t *testing.T) {
 	be.deliver(t, "inbox", newMessage("after the removal", "f@example.com", time.Now()), rawMsg5)
 
 	w := &recordingUpdateWriter{}
-	if err := s.poll(w); err != nil {
+	if err := s.poll(context.Background(), w); err != nil {
 		t.Fatalf("poll: %v", err)
 	}
 
@@ -280,7 +281,7 @@ func TestPollIgnoresUIDValidityChange(t *testing.T) {
 	be.setUIDValidity("inbox", 999)
 
 	w := &recordingUpdateWriter{}
-	if err := s.poll(w); err != nil {
+	if err := s.poll(context.Background(), w); err != nil {
 		t.Fatalf("poll: %v", err)
 	}
 	if len(w.exists) != 0 {
@@ -318,7 +319,7 @@ func TestPollSkipsOutOfOrderUID(t *testing.T) {
 	be.mu.Unlock()
 
 	w := &recordingUpdateWriter{}
-	if err := s.poll(w); err != nil {
+	if err := s.poll(context.Background(), w); err != nil {
 		t.Fatalf("poll: %v", err)
 	}
 	if len(w.exists) != 0 {
@@ -348,7 +349,7 @@ func TestPollIntervalThrottlesBackendCalls(t *testing.T) {
 
 	_, foldersAfterSelect, _, _ := be.counters()
 	for i := 0; i < 10; i++ {
-		if err := s.poll(&recordingUpdateWriter{}); err != nil {
+		if err := s.poll(context.Background(), &recordingUpdateWriter{}); err != nil {
 			t.Fatalf("poll: %v", err)
 		}
 	}
@@ -362,7 +363,7 @@ func TestPollIntervalThrottlesBackendCalls(t *testing.T) {
 	s.lastPoll = time.Now().Add(-2 * time.Hour)
 	s.mu.Unlock()
 
-	if err := s.poll(&recordingUpdateWriter{}); err != nil {
+	if err := s.poll(context.Background(), &recordingUpdateWriter{}); err != nil {
 		t.Fatalf("poll: %v", err)
 	}
 	if _, folders, _, _ := be.counters(); folders != foldersAfterSelect+1 {
@@ -375,7 +376,7 @@ func TestPollWithoutSelectionDoesNothing(t *testing.T) {
 	s := newLoggedInSession(t, be, WithPollInterval(0))
 
 	_, foldersBefore, messagesBefore, _ := be.counters()
-	if err := s.poll(&recordingUpdateWriter{}); err != nil {
+	if err := s.poll(context.Background(), &recordingUpdateWriter{}); err != nil {
 		t.Fatalf("poll: %v", err)
 	}
 	_, folders, messages, _ := be.counters()

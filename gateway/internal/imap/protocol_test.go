@@ -39,7 +39,7 @@ func startRawClient(t *testing.T, be Backend, opts ...Option) *rawClient {
 			return NewSession(be, opts...), nil, nil
 		},
 		InsecureAuth: true,
-		Logger:       testLogger{t},
+		Logger:       newTestLogger(t),
 	})
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(WrapListener(ln, AllowCleartext())) }()
@@ -186,6 +186,8 @@ func TestExamineIsReadOnly(t *testing.T) {
 	requireOK(t, lines)
 	joined := strings.Join(lines, "\n")
 
+	// An examined mailbox advertises no permanent flags: nothing about it
+	// can be changed until the client reselects with SELECT.
 	for _, want := range []string{"* 3 EXISTS", "[UIDVALIDITY 1712345678]", "[UIDNEXT 13]", "[PERMANENTFLAGS ()]", "[READ-ONLY]"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("EXAMINE response %q is missing %q", joined, want)
@@ -193,19 +195,26 @@ func TestExamineIsReadOnly(t *testing.T) {
 	}
 }
 
-// TestSelectAdvertisesNoPermanentFlags documents the one thing this go-imap
-// version will not let the session control: SELECT is always answered with
-// [READ-WRITE]. Empty PERMANENTFLAGS is how the read-only nature reaches
-// the client instead.
-func TestSelectAdvertisesNoPermanentFlags(t *testing.T) {
+// TestSelectAdvertisesStorableFlags pins the advertisement STORE depends
+// on. A client reads PERMANENTFLAGS to decide whether a flag change is
+// worth attempting, so it has to match what Store accepts.
+func TestSelectAdvertisesStorableFlags(t *testing.T) {
 	c := startRawClient(t, newFakeBackend(t))
 	requireOK(t, c.do("LOGIN %s %s", testMailbox, testPassword))
 
 	lines := c.do("SELECT INBOX")
 	requireOK(t, lines)
 	joined := strings.Join(lines, "\n")
-	if !strings.Contains(joined, "[PERMANENTFLAGS ()]") {
-		t.Errorf("SELECT response %q must advertise no permanent flags", joined)
+
+	if !strings.Contains(joined, `[PERMANENTFLAGS (\Seen \Answered \Flagged \Deleted \*)]`) {
+		t.Errorf("SELECT response %q must advertise the storable flags", joined)
+	}
+	// \Draft is advertised in FLAGS (messages can have it) but is not
+	// storable, so it must not appear in PERMANENTFLAGS.
+	permIdx := strings.Index(joined, "[PERMANENTFLAGS")
+	permEnd := strings.Index(joined[permIdx:], "]")
+	if strings.Contains(joined[permIdx:permIdx+permEnd], `\Draft`) {
+		t.Errorf("PERMANENTFLAGS lists \\Draft, which STORE ignores: %q", joined[permIdx:permIdx+permEnd])
 	}
 }
 
@@ -287,8 +296,11 @@ func TestCloseAndUnselect(t *testing.T) {
 	requireOK(t, c.do("NOOP"))
 }
 
-func TestIdleIsRefusedCleanly(t *testing.T) {
-	c := startRawClient(t, newFakeBackend(t))
+// TestIdleCompletesOnDone covers the shape of the exchange that hung iOS
+// Mail: the client is committed to idling the moment go-imap writes
+// "+ idling", so IDLE must block until DONE and then complete OK.
+func TestIdleCompletesOnDone(t *testing.T) {
+	c := startRawClient(t, newFakeBackend(t), WithPollInterval(0), WithIdleInterval(50*time.Millisecond))
 	requireOK(t, c.do("LOGIN %s %s", testMailbox, testPassword))
 	requireOK(t, c.do("SELECT INBOX"))
 
@@ -301,16 +313,57 @@ func TestIdleIsRefusedCleanly(t *testing.T) {
 	if !strings.HasPrefix(cont, "+ ") {
 		t.Fatalf("IDLE continuation = %q, want a + line", cont)
 	}
+
 	if _, err := c.conn.Write([]byte("DONE\r\n")); err != nil {
 		t.Fatalf("writing DONE: %v", err)
 	}
 	final := c.readLine()
-	if !strings.Contains(final, " NO") {
-		t.Errorf("IDLE completion = %q, want NO (IDLE is out of scope in phase 1)", final)
+	if !strings.Contains(final, " OK") {
+		t.Fatalf("IDLE completion = %q, want OK", final)
 	}
 
-	// The connection must remain usable after the refusal.
 	requireOK(t, c.do("NOOP"))
+}
+
+// TestIdleDeliversNewMailUnprompted is the behaviour iOS Mail depends on:
+// an EXISTS arrives while the client is idling and has sent nothing.
+func TestIdleDeliversNewMailUnprompted(t *testing.T) {
+	be := newFakeBackend(t)
+	c := startRawClient(t, be, WithPollInterval(0), WithIdleInterval(20*time.Millisecond))
+	requireOK(t, c.do("LOGIN %s %s", testMailbox, testPassword))
+	requireOK(t, c.do("SELECT INBOX"))
+
+	c.seq++
+	tag := fmt.Sprintf("t%d", c.seq)
+	if _, err := c.conn.Write([]byte(tag + " IDLE\r\n")); err != nil {
+		t.Fatalf("writing IDLE: %v", err)
+	}
+	if cont := c.readLine(); !strings.HasPrefix(cont, "+ ") {
+		t.Fatalf("IDLE continuation = %q", cont)
+	}
+
+	be.deliver(t, "inbox", newMessage("while idling", "idle@example.com", time.Now()), rawMsg12)
+
+	// No further client input: the next line must be the unsolicited
+	// EXISTS produced by the idle refresh.
+	line := c.readLine()
+	if line != "* 4 EXISTS" {
+		t.Fatalf("unsolicited update = %q, want \"* 4 EXISTS\"", line)
+	}
+
+	if _, err := c.conn.Write([]byte("DONE\r\n")); err != nil {
+		t.Fatalf("writing DONE: %v", err)
+	}
+	if final := c.readLine(); !strings.Contains(final, " OK") {
+		t.Fatalf("IDLE completion = %q, want OK", final)
+	}
+
+	// The message delivered during IDLE is addressable straight away.
+	fetch := c.do("FETCH 4 (UID)")
+	requireOK(t, fetch)
+	if !strings.Contains(strings.Join(fetch, "\n"), "UID 13") {
+		t.Errorf("FETCH 4 = %q, want UID 13", fetch)
+	}
 }
 
 func TestLogoutOverTheWire(t *testing.T) {

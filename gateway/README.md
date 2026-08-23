@@ -18,20 +18,48 @@ Phase 1, read-only IMAP. Configuration, the backend HTTP client, the process
 entrypoint, deploy files, and the IMAP protocol session
 (`internal/imap.Session`) are all implemented.
 
-Serving now: CAPABILITY, NOOP, LOGOUT, AUTHENTICATE PLAIN, LOGIN, LIST, LSUB,
-STATUS, SELECT (read-only), EXAMINE, CLOSE, UNSELECT, SEARCH and FETCH
-(including ENVELOPE, BODYSTRUCTURE, BODY[...] with HEADER.FIELDS and partial
-ranges). `Poll` refreshes the selected folder append-only, so new mail appears
-after a client NOOP.
+Serving now: CAPABILITY, NOOP, LOGOUT, AUTHENTICATE PLAIN, LOGIN, ID, LIST,
+LSUB, STATUS, SELECT, EXAMINE, CLOSE, UNSELECT, SEARCH, FETCH (including
+ENVELOPE, BODYSTRUCTURE, BODY[...] with HEADER.FIELDS and partial ranges),
+IDLE and STORE of message flags.
 
-Not served: STORE, APPEND, COPY, MOVE, EXPUNGE and IDLE all answer NO and keep
-the connection alive. Writes are phase 2 (Trellis DEV-670 through DEV-673) and
-IDLE needs a push channel from the Durable Object (DEV-674). SMTP submission
-(`internal/smtp`) is still an empty placeholder for phase 2.
+New mail reaches a client two ways, both through the same append-only
+refresh: `Poll` runs after every command, and `Idle` runs it on a timer for
+as long as the client holds an IDLE open. Neither ever renumbers or removes
+a message inside a selection, so a deletion made elsewhere stays visible
+until the client reselects.
 
-Nothing here has yet been exercised against a real mail client or a live
-Worker. Every test runs against a fake backend and an in-process go-imap
-server.
+IDLE is polling, not push. `DefaultIdleInterval` is 30s, which is the
+freshness a client watching a mailbox gets. A push channel from the Durable
+Object (Trellis DEV-674) is the better answer and is still open.
+
+ID is answered but not advertised: go-imap has no handler for it and builds
+CAPABILITY from a fixed list, so the gateway intercepts it below the library
+(`internal/imap/idproxy.go`) rather than rewriting responses on the way out.
+Clients send it unsolicited, which is the case that matters.
+
+Flag writes are served because refusing them is not survivable. iOS Mail
+sets `\Seen` the moment it displays a message; a NO to that was treated as a
+fatal server error, and the client tore the connection down and reconnected
+in a loop without ever rendering the message. `+FLAGS`, `-FLAGS` and `FLAGS`
+all work, in both the `.SILENT` and echoing forms. `\Draft` and `\Recent`
+are ignored rather than rejected: `\Draft` is a property of the folder in
+this data model, and nothing is ever reported as recent. PERMANENTFLAGS
+advertises exactly what STORE will persist, and an EXAMINE'd mailbox
+advertises none and refuses STORE, as RFC 9051 requires.
+
+Not served: APPEND, COPY, MOVE and EXPUNGE all answer NO and keep the
+connection alive (Trellis DEV-670 through DEV-673). One consequence worth
+knowing: `\Deleted` can now be set but nothing expunges it, so CLOSE
+unselects without removing anything and those messages persist. SMTP
+submission (`internal/smtp`) is still an empty placeholder for phase 2.
+
+Verified against iOS Mail over the tailnet with a live Worker: connect, full
+folder sync, UID SEARCH, UID FETCH with BODY.PEEK[HEADER] and partial ranges,
+and IDLE holding open until DONE. Flag writes are covered against a fake
+backend and an in-process go-imap server, including a replay of the exact
+`UID FETCH` / `UID STORE .SILENT` / `IDLE` sequence the live client sends,
+but have not yet run against a real client.
 
 ## Why Tailscale-only
 

@@ -2,20 +2,28 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-// Package imap implements the read-only IMAP protocol session for
-// agentic-imapd. It plugs the Worker-backed client in internal/backend into
+// Package imap implements the IMAP protocol session for agentic-imapd. It
+// plugs the Worker-backed client in internal/backend into
 // github.com/emersion/go-imap/v2/imapserver.
 //
-// Scope (DEV-668, phase 1): CAPABILITY, NOOP, LOGOUT, AUTHENTICATE PLAIN,
-// LOGIN, LIST, LSUB, STATUS, SELECT (served read-only), EXAMINE, CLOSE,
-// UNSELECT, SEARCH and FETCH. Every mutating command answers NO; nothing in
-// this package ever writes to the Worker.
+// Scope: CAPABILITY, NOOP, LOGOUT, AUTHENTICATE PLAIN, LOGIN, LIST, LSUB,
+// STATUS, SELECT, EXAMINE, CLOSE, UNSELECT, SEARCH, FETCH, IDLE and STORE
+// of message flags. Moving, copying, appending and expunging messages are
+// phase 2 and answer NO.
+//
+// Flag writes are here rather than in phase 2 because refusing them is not
+// a survivable degradation: iOS Mail sets \Seen on display, and a NO to
+// that put it into a reconnect loop in which no message ever rendered.
 //
 // The session holds no durable state. The only thing it retains between
 // commands is the selected folder's sequence-number snapshot and a bounded
 // in-memory LRU of raw message bodies, both of which die with the
-// connection. The snapshot grows append-only as Poll notices new mail; it
-// never shrinks or renumbers within a selection.
+// connection. The snapshot grows append-only; it never shrinks or renumbers
+// within a selection.
+//
+// Two things grow it, and they share one implementation on purpose: Poll,
+// which go-imap calls after every command, and Idle, which runs the same
+// refresh on a timer while a client holds an IDLE open. See poll.
 package imap
 
 import (
@@ -64,6 +72,13 @@ const (
 	// on the default silently truncates any larger folder.
 	DefaultMessagePageSize = 1000
 
+	// DefaultIdleInterval is how often an IDLE refreshes the selected
+	// folder. It is much slower than DefaultPollInterval on purpose: a
+	// command-driven poll is a floor on bursty traffic, whereas this one
+	// runs unattended for up to 29 minutes, and 30s is the freshness a
+	// mail client expects from a mailbox it is watching.
+	DefaultIdleInterval = 30 * time.Second
+
 	// DefaultMaxFolderMessages bounds how many messages one selection may
 	// hold. IMAP requires the whole sequence-number mapping of the selected
 	// folder to be known up front, so the snapshot cannot be lazy; this is
@@ -83,6 +98,41 @@ var systemFlags = []imap.Flag{
 	imap.FlagDraft,
 }
 
+// storableSystemFlags are the system flags STORE will persist.
+//
+// \Draft is absent because draft-ness is a property of the folder in the
+// Worker's model, not a per-message flag, and \Recent is absent because it
+// is not settable by definition (RFC 9051 section 2.3.2) and this gateway
+// reports zero recent messages anyway. Both are ignored rather than
+// rejected: a client that sets them is not doing anything wrong, and
+// failing the command over one unsupported flag is how iOS Mail ends up in
+// a reconnect loop.
+var storableSystemFlags = []imap.Flag{
+	imap.FlagSeen,
+	imap.FlagAnswered,
+	imap.FlagFlagged,
+	imap.FlagDeleted,
+}
+
+// permanentFlags is the PERMANENTFLAGS list sent on SELECT/EXAMINE: the
+// flags STORE persists, plus \* meaning custom keywords are accepted too.
+//
+// This is what a client reads to decide whether to attempt a STORE at all,
+// so it has to match what Store actually does.
+var permanentFlags = append(append([]imap.Flag{}, storableSystemFlags...), imap.FlagWildcard)
+
+// storable reports whether STORE will act on a flag.
+func storable(f imap.Flag) bool {
+	if f == "" {
+		return false
+	}
+	switch canonicalFlag(f) {
+	case canonicalFlag(imap.FlagDraft), canonicalFlag(flagRecent):
+		return false
+	}
+	return true
+}
+
 // selection is the frozen view of a folder taken at SELECT/EXAMINE time.
 //
 // IMAP sequence numbers are positions within the selected folder and must
@@ -97,6 +147,11 @@ type selection struct {
 
 	uidValidity uint32
 	uidNext     uint32
+
+	// readOnly records that the client used EXAMINE rather than SELECT.
+	// RFC 9051 section 6.3.2 makes an examined mailbox read-only, so STORE
+	// is refused for the life of such a selection.
+	readOnly bool
 
 	msgs  []*backend.Message
 	byUID map[uint32]*backend.Message
@@ -140,6 +195,54 @@ func (sel *selection) appending(newMsgs []*backend.Message, uidNext uint32) *sel
 		name:        sel.name,
 		uidValidity: sel.uidValidity,
 		uidNext:     uidNext,
+		readOnly:    sel.readOnly,
+		msgs:        msgs,
+		byUID:       byUID,
+	}
+}
+
+// withFlags returns a copy of the snapshot with the given messages' flags
+// replaced, so a FETCH FLAGS after a STORE in the same session agrees with
+// what was just written.
+//
+// It never mutates an existing *backend.Message. A Fetch, Search or Idle
+// already walking the previous selection holds pointers into it, and
+// rewriting flags underneath them would be a data race; instead the
+// affected entries are replaced with fresh values and the whole selection
+// is swapped. Messages not named in results keep their existing pointer.
+func (sel *selection) withFlags(results []backend.FlagResult) *selection {
+	if len(results) == 0 {
+		return sel
+	}
+	byResult := make(map[uint32][]string, len(results))
+	for _, r := range results {
+		byResult[r.UID] = r.Flags
+	}
+
+	msgs := make([]*backend.Message, len(sel.msgs))
+	byUID := make(map[uint32]*backend.Message, len(sel.msgs))
+	changed := false
+	for i, msg := range sel.msgs {
+		if flags, ok := byResult[msg.UID]; ok {
+			updated := *msg
+			updated.Flags = append([]string(nil), flags...)
+			msgs[i] = &updated
+			changed = true
+		} else {
+			msgs[i] = msg
+		}
+		byUID[msgs[i].UID] = msgs[i]
+	}
+	if !changed {
+		return sel
+	}
+
+	return &selection{
+		folderKey:   sel.folderKey,
+		name:        sel.name,
+		uidValidity: sel.uidValidity,
+		uidNext:     sel.uidNext,
+		readOnly:    sel.readOnly,
 		msgs:        msgs,
 		byUID:       byUID,
 	}
@@ -171,6 +274,7 @@ type Session struct {
 	opTimeout           time.Duration
 	maxSearchRawFetches int
 	pollInterval        time.Duration
+	idleInterval        time.Duration
 	messagePageSize     int
 	maxFolderMessages   int
 
@@ -224,6 +328,20 @@ func WithPollInterval(d time.Duration) Option {
 	}
 }
 
+// WithIdleInterval overrides how often IDLE refreshes the selected folder.
+//
+// The refresh still passes through the WithPollInterval floor, which is a
+// global minimum spacing between backend refreshes of one folder. Setting
+// an idle interval below that floor therefore does nothing useful; tests
+// that want a fast idle should set both.
+func WithIdleInterval(d time.Duration) Option {
+	return func(s *Session) {
+		if d > 0 {
+			s.idleInterval = d
+		}
+	}
+}
+
 // WithMessagePageSize overrides the page size used when listing folder
 // metadata. Values above the Worker's own ceiling are harmless: the paging
 // loop terminates on an empty page, not on a short one.
@@ -266,6 +384,7 @@ func NewSession(b Backend, opts ...Option) *Session {
 		opTimeout:           DefaultOperationTimeout,
 		maxSearchRawFetches: DefaultMaxSearchRawFetches,
 		pollInterval:        DefaultPollInterval,
+		idleInterval:        DefaultIdleInterval,
 		messagePageSize:     DefaultMessagePageSize,
 		maxFolderMessages:   DefaultMaxFolderMessages,
 		logger:              slog.New(slog.DiscardHandler),
@@ -469,7 +588,7 @@ func (s *Session) listMessages(ctx context.Context, mailbox, folder string, sinc
 	return all, uidNext, nil
 }
 
-// Select implements SELECT and EXAMINE. Both are served read-only.
+// Select implements SELECT and EXAMINE.
 //
 // This is where the sequence-number snapshot is built. Nothing else in the
 // session may reorder or resize it.
@@ -524,6 +643,7 @@ func (s *Session) Select(mailbox string, options *imap.SelectOptions) (*imap.Sel
 		name:        folderIMAPName(folder),
 		uidValidity: folder.UIDValidity,
 		uidNext:     uidNext,
+		readOnly:    options != nil && options.ReadOnly,
 		msgs:        msgs,
 		byUID:       byUID,
 	}
@@ -535,13 +655,17 @@ func (s *Session) Select(mailbox string, options *imap.SelectOptions) (*imap.Sel
 	s.lastPoll = time.Now()
 	s.mu.Unlock()
 
+	// An examined mailbox cannot be changed, so it must not claim
+	// otherwise: PERMANENTFLAGS is what a client reads to decide whether to
+	// attempt a STORE at all.
+	permanent := permanentFlags
+	if sel.readOnly {
+		permanent = []imap.Flag{}
+	}
+
 	return &imap.SelectData{
-		Flags: systemFlags,
-		// Empty PERMANENTFLAGS, with no \*, is the only way this go-imap
-		// version lets a session tell a client that no flag change will
-		// stick: handleSelect hardcodes the [READ-WRITE] response code for
-		// SELECT and does not consult the session.
-		PermanentFlags:    []imap.Flag{},
+		Flags:             systemFlags,
+		PermanentFlags:    permanent,
 		NumMessages:       sel.numMessages(),
 		NumRecent:         0,
 		FirstUnseenSeqNum: sel.firstUnseenSeqNum(),
@@ -745,11 +869,9 @@ type updateWriter interface {
 	WriteNumMessages(n uint32) error
 }
 
-// Poll delivers unilateral updates. go-imap calls it after every command in
-// the authenticated and selected states, which makes it the only mechanism
-// this read-only gateway has for telling a client that new mail arrived:
-// IDLE is refused in phase 1, so clients fall back to periodic NOOP and
-// this is what answers them.
+// Poll delivers unilateral updates after a command. go-imap calls it after
+// every command in the authenticated and selected states, which is how a
+// client that is not idling learns that new mail arrived.
 //
 // It refreshes the selected folder append-only. New messages extend the
 // snapshot and produce an EXISTS; nothing already in the snapshot is ever
@@ -767,16 +889,25 @@ func (s *Session) Poll(w *imapserver.UpdateWriter, allowExpunge bool) error {
 	if w != nil {
 		uw = w
 	}
-	return s.poll(uw)
+	return s.poll(context.Background(), uw)
 }
 
-func (s *Session) poll(w updateWriter) error {
+// poll is the single implementation of "refresh the selection and tell the
+// client if it grew". Both Poll and Idle go through it, deliberately: two
+// copies of the append-only growth rules would drift, and the failure that
+// drift produces is a client showing the wrong message for a sequence
+// number.
+//
+// parent lets a caller cancel an in-flight refresh. Poll passes a
+// background context because go-imap is waiting on it anyway; Idle passes
+// one wired to its stop channel so a DONE is not held up by a slow backend.
+func (s *Session) poll(parent context.Context, w updateWriter) error {
 	mailbox, sel, ok := s.beginPoll()
 	if !ok {
 		return nil
 	}
 
-	ctx, cancel := s.context()
+	ctx, cancel := context.WithTimeout(parent, s.opTimeout)
 	defer cancel()
 
 	grown, ok := s.refresh(ctx, mailbox, sel)
@@ -789,8 +920,10 @@ func (s *Session) poll(w updateWriter) error {
 	if w == nil || grown.numMessages() == sel.numMessages() {
 		return nil
 	}
-	// A write failure here is a dead connection, not a backend problem, so
-	// unlike everything else in Poll it is worth propagating.
+	// A write failure is a broken connection, not a backend problem: the
+	// response stream may now be half-written, and continuing to write
+	// into a desynchronised stream is worse than stopping. Unlike every
+	// other error here, it propagates.
 	return w.WriteNumMessages(grown.numMessages())
 }
 
@@ -953,15 +1086,85 @@ func (s *Session) installGrown(previous, grown *selection) {
 	s.mu.Unlock()
 }
 
-// Idle is refused. Real IDLE needs a push channel from the Durable Object
-// (tracked as DEV-674); until then clients fall back to periodic NOOP,
-// which Poll answers with an EXISTS when new mail has arrived.
+// Idle implements IDLE by polling the backend until the client sends DONE.
 //
-// The capability cannot be withheld: imapserver advertises IDLE
-// unconditionally whenever IMAP4rev1 is enabled, so a client will try it
-// and must get a clean NO.
+// It must block until stop closes. go-imap writes the "+ idling"
+// continuation before calling this and then waits on the socket for DONE,
+// so an Idle that returns early does not reach the client: the response
+// sits undelivered until the client gives up waiting for updates and sends
+// DONE anyway, at which point it receives a completion for a command it
+// thought was healthy. Returning an error here is what hung iOS Mail on
+// "Checking for Mail".
+//
+// Refusing IDLE is not an option either. imapserver.availableCaps()
+// appends it unconditionally whenever IMAP4rev1 is enabled, so real
+// clients will always use it.
+//
+// The polling is the same refresh Poll performs, on a slower timer.
+// DEV-674 tracks replacing it with a push channel from the Durable Object,
+// which is the right answer; this is the one that makes clients work now.
 func (s *Session) Idle(w *imapserver.UpdateWriter, stop <-chan struct{}) error {
-	return errUnsupported("IDLE")
+	var uw updateWriter
+	if w != nil {
+		uw = w
+	}
+	return s.idle(uw, stop)
+}
+
+func (s *Session) idle(w updateWriter, stop <-chan struct{}) error {
+	if stop == nil {
+		// go-imap always supplies a channel. A nil one would mean blocking
+		// forever with no way out, so fail fast rather than wedge a
+		// connection.
+		return nil
+	}
+
+	interval := s.idleInterval
+	if interval <= 0 {
+		interval = DefaultIdleInterval
+	}
+
+	// Bind a context to stop so a refresh already in flight is abandoned
+	// when DONE arrives, instead of making the client wait out a slow
+	// backend call. The watcher exits by either branch, so it cannot leak.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-stop:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		// Check stop before doing any work, so a DONE that arrives during
+		// the previous refresh is honoured immediately.
+		select {
+		case <-stop:
+			return nil
+		default:
+		}
+
+		// One refresh on entry as well as on every tick: mail may already
+		// have arrived between SELECT and IDLE, and the post-SELECT Poll
+		// would have been inside the interval floor and skipped it.
+		if err := s.poll(ctx, w); err != nil {
+			// Only a failed write reaches here; a backend failure is
+			// swallowed inside poll. The connection is unusable, so there
+			// is nothing to keep idling for.
+			return err
+		}
+
+		select {
+		case <-stop:
+			return nil
+		case <-ticker.C:
+		}
+	}
 }
 
 // ---------------------------------------------------------------------
@@ -1183,23 +1386,23 @@ func writeMessage(rw *imapserver.FetchResponseWriter, msg *backend.Message, opti
 // ---------------------------------------------------------------------
 
 func (s *Session) Create(mailbox string, options *imap.CreateOptions) error {
-	return errReadOnly("CREATE")
+	return errNotYetSupported("CREATE")
 }
 
 func (s *Session) Delete(mailbox string) error {
-	return errReadOnly("DELETE")
+	return errNotYetSupported("DELETE")
 }
 
 func (s *Session) Rename(mailbox, newName string, options *imap.RenameOptions) error {
-	return errReadOnly("RENAME")
+	return errNotYetSupported("RENAME")
 }
 
 func (s *Session) Subscribe(mailbox string) error {
-	return errReadOnly("SUBSCRIBE")
+	return errNotYetSupported("SUBSCRIBE")
 }
 
 func (s *Session) Unsubscribe(mailbox string) error {
-	return errReadOnly("UNSUBSCRIBE")
+	return errNotYetSupported("UNSUBSCRIBE")
 }
 
 func (s *Session) Append(mailbox string, r imap.LiteralReader, options *imap.AppendOptions) (*imap.AppendData, error) {
@@ -1208,15 +1411,11 @@ func (s *Session) Append(mailbox string, r imap.LiteralReader, options *imap.App
 	if r != nil {
 		_, _ = discard(r)
 	}
-	return nil, errReadOnly("APPEND")
-}
-
-func (s *Session) Store(w *imapserver.FetchWriter, numSet imap.NumSet, flags *imap.StoreFlags, options *imap.StoreOptions) error {
-	return errReadOnly("STORE")
+	return nil, errNotYetSupported("APPEND")
 }
 
 func (s *Session) Copy(numSet imap.NumSet, dest string) (*imap.CopyData, error) {
-	return nil, errReadOnly("COPY")
+	return nil, errNotYetSupported("COPY")
 }
 
 // Expunge is reached two ways: the explicit EXPUNGE / UID EXPUNGE commands,
@@ -1224,14 +1423,19 @@ func (s *Session) Copy(numSet imap.NumSet, dest string) (*imap.CopyData, error) 
 // followed by Unselect.
 //
 // The session cannot tell CLOSE apart from a bare EXPUNGE at this
-// interface, and CLOSE is in scope, so the nil-UID case is a no-op that
-// reports nothing expunged. That answer is truthful rather than merely
-// convenient: nothing in a read-only mailbox can carry \Deleted, so the
-// correct number of messages to expunge is always zero. UID EXPUNGE, which
-// can only come from an explicit client command, is refused outright.
+// interface, and CLOSE is in scope, so the nil-UID case unselects without
+// expunging anything.
+//
+// That used to be justified by nothing being able to carry \Deleted in a
+// read-only mailbox. STORE now sets \Deleted, so it no longer is: a client
+// that marks messages deleted and closes the mailbox will find them still
+// there. Removal needs the expunge endpoint, which is phase 2; until then
+// this is a known gap rather than a correct answer. UID EXPUNGE, which can
+// only come from an explicit client command, is refused outright so at
+// least the explicit case is honest.
 func (s *Session) Expunge(w *imapserver.ExpungeWriter, uids *imap.UIDSet) error {
 	if uids != nil {
-		return errReadOnly("UID EXPUNGE")
+		return errNotYetSupported("UID EXPUNGE")
 	}
 	return nil
 }

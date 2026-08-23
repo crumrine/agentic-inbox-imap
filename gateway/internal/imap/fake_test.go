@@ -110,10 +110,15 @@ type fakeBackend struct {
 	maxLimit int
 
 	// Injected failures.
+	setFlagsErr error
 	authErr     error
 	foldersErr  error
 	messagesErr error
 	rawErr      error
+
+	// setFlagsCalls records every batch handed to SetFlags, so tests can
+	// assert on the exact add/remove pairs put on the wire.
+	setFlagsCalls [][]backend.FlagUpdate
 
 	// Counters.
 	authCalls     int
@@ -372,6 +377,89 @@ func (f *fakeBackend) RawMessage(ctx context.Context, mailbox, folder string, ui
 	}, nil
 }
 
+// SetFlags mirrors the Worker: add then remove, per message, returning the
+// complete resulting flag set. Unknown UIDs are silently omitted from the
+// result, which is how a deleted message reports itself.
+func (f *fakeBackend) SetFlags(ctx context.Context, mailbox, folder string, updates []backend.FlagUpdate) ([]backend.FlagResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.setFlagsCalls = append(f.setFlagsCalls, append([]backend.FlagUpdate(nil), updates...))
+	if f.setFlagsErr != nil {
+		return nil, f.setFlagsErr
+	}
+
+	msgs, ok := f.messages[folder]
+	if !ok {
+		return nil, &backend.APIError{Kind: backend.ErrKindNotFound, StatusCode: 404}
+	}
+
+	results := make([]backend.FlagResult, 0, len(updates))
+	for _, u := range updates {
+		idx := -1
+		for i := range msgs {
+			if msgs[i].UID == u.UID {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			continue // unknown uid: omitted, not an error
+		}
+
+		set := map[string]string{} // canonical -> as stored
+		for _, existing := range msgs[idx].Flags {
+			set[strings.ToLower(existing)] = existing
+		}
+		for _, add := range u.Add {
+			set[strings.ToLower(add)] = add
+		}
+		for _, remove := range u.Remove {
+			delete(set, strings.ToLower(remove))
+		}
+
+		flags := make([]string, 0, len(set))
+		for _, v := range set {
+			flags = append(flags, v)
+		}
+		sort.Strings(flags)
+
+		msgs[idx].Flags = flags
+		results = append(results, backend.FlagResult{UID: u.UID, Flags: flags})
+	}
+	f.messages[folder] = msgs
+	return results, nil
+}
+
+// flagsFor reports a message's stored flags, for asserting that a STORE
+// actually reached the backend.
+func (f *fakeBackend) flagsFor(folderID string, uid uint32) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, m := range f.messages[folderID] {
+		if m.UID == uid {
+			return append([]string(nil), m.Flags...)
+		}
+	}
+	return nil
+}
+
+// lastFlagUpdates returns the most recent batch sent to SetFlags.
+func (f *fakeBackend) lastFlagUpdates() []backend.FlagUpdate {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.setFlagsCalls) == 0 {
+		return nil
+	}
+	return f.setFlagsCalls[len(f.setFlagsCalls)-1]
+}
+
+func (f *fakeBackend) setFlagsCallCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.setFlagsCalls)
+}
+
 // ---------------------------------------------------------------------
 // In-memory server harness
 // ---------------------------------------------------------------------
@@ -419,9 +507,43 @@ func (l *pipeListener) dial() (net.Conn, error) {
 	}
 }
 
-type testLogger struct{ t *testing.T }
+// testLogger forwards imapserver's log output to the test, and stops doing
+// so once the test is over.
+//
+// That second half is load-bearing. go-imap serves each connection on its
+// own goroutine which the harness cannot join: srv.Close() unblocks Serve
+// but says nothing about the per-connection goroutines, and one of them
+// will log "failed to read command: closed pipe" as it notices the
+// teardown. Calling t.Logf after the test function has returned is a
+// runtime panic, so this drops those late lines instead.
+//
+// The mutex is held across the Logf call and taken again by the disabling
+// cleanup, so a log already in flight completes before the cleanup returns
+// and none can start after it.
+type testLogger struct {
+	t    *testing.T
+	mu   sync.Mutex
+	done bool
+}
 
-func (l testLogger) Printf(format string, args ...interface{}) {
+func newTestLogger(t *testing.T) *testLogger {
+	l := &testLogger{t: t}
+	// Registered before any cleanup that tears down connections, so it runs
+	// last: after this returns, nothing can reach t.Logf.
+	t.Cleanup(func() {
+		l.mu.Lock()
+		l.done = true
+		l.mu.Unlock()
+	})
+	return l
+}
+
+func (l *testLogger) Printf(format string, args ...interface{}) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.done {
+		return
+	}
 	l.t.Logf("imapserver: "+format, args...)
 }
 
@@ -438,7 +560,7 @@ func startTestServer(t *testing.T, be Backend, opts ...Option) *imapclient.Clien
 			return NewSession(be, opts...), nil, nil
 		},
 		InsecureAuth: true,
-		Logger:       testLogger{t},
+		Logger:       newTestLogger(t),
 	})
 
 	// Serve through the same ID proxy production uses, so every test in
