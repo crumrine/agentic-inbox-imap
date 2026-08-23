@@ -10,6 +10,7 @@
  */
 import type { MailboxDO } from "../durableObject";
 import type { EmailFull } from "./schemas";
+import { type AliasEnv, normalizeAddress, resolveAlias } from "./aliases";
 import { Folders } from "../../shared/folders";
 import type { Env } from "../types";
 import { formatQuotedDate } from "../../shared/dates";
@@ -49,16 +50,34 @@ export async function listMailboxes(
 /**
  * Normalise to/from addresses and validate the sender matches the mailbox.
  * Returns the normalised values or throws with a user-facing message.
+ *
+ * `allowedSenders` widens the invariant from "From must equal the mailbox" to
+ * "the mailbox, or one of these addresses". It is a caller-supplied list of
+ * addresses **already verified** to alias to this mailbox — never a pattern,
+ * never a domain. Nothing in here infers membership; a caller that does not
+ * pass the list gets the original, strictest behaviour, so every existing call
+ * site (including the SMTP submission path in workers/routes/imap-api.ts) keeps
+ * exactly the strictness it had.
+ *
+ * The verification itself is async, so it cannot happen inside this function
+ * without changing its signature for every caller. `validateSenderWithAliases`
+ * below is the async front door that does the registry read and then delegates
+ * here; this stays synchronous and stays the single definition of "the sender
+ * matches".
  */
 export function validateSender(
 	to: string | string[],
 	from: string | { email: string; name: string },
 	mailboxId: string,
+	allowedSenders: readonly string[] = [],
 ): { toStr: string; fromEmail: string; fromDomain: string } {
 	const toStr = (Array.isArray(to) ? to.join(", ") : to).toLowerCase();
 	const fromEmail = (typeof from === "string" ? from : from.email).toLowerCase();
 
-	if (fromEmail !== mailboxId.toLowerCase()) {
+	const permitted =
+		fromEmail === mailboxId.toLowerCase() ||
+		allowedSenders.some((a) => a.trim().toLowerCase() === fromEmail);
+	if (!permitted) {
 		throw new SenderValidationError("From address must match the mailbox email address");
 	}
 
@@ -68,6 +87,35 @@ export function validateSender(
 	}
 
 	return { toStr, fromEmail, fromDomain };
+}
+
+/**
+ * `validateSender`, plus one registry read that lets the mailbox send as an
+ * address verified to alias to it.
+ *
+ * The verification is a keyed read of `aliases/{from}.json` and a comparison of
+ * what it points at against this mailbox. It is deliberately *not* a check that
+ * the address is on a configured domain: that would let anyone past the Access
+ * gate send as any address the deployment owns, which is precisely the spoof
+ * the equality check was there to stop. Send is not a hot path, so the read is
+ * affordable — and it is skipped entirely when From already equals the mailbox.
+ */
+export async function validateSenderWithAliases(
+	env: AliasEnv,
+	to: string | string[],
+	from: string | { email: string; name: string },
+	mailboxId: string,
+): Promise<{ toStr: string; fromEmail: string; fromDomain: string }> {
+	const fromEmail = normalizeAddress(typeof from === "string" ? from : from.email);
+	const mailbox = normalizeAddress(mailboxId);
+
+	const allowedSenders: string[] = [];
+	if (fromEmail !== mailbox) {
+		const owner = await resolveAlias(env, fromEmail);
+		if (owner === mailbox) allowedSenders.push(fromEmail);
+	}
+
+	return validateSender(to, from, mailboxId, allowedSenders);
 }
 
 export class SenderValidationError extends Error {

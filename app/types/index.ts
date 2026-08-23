@@ -48,6 +48,17 @@ export interface CreatedAppPassword {
 	metadata: AppPassword;
 }
 
+/**
+ * An address that delivers into a mailbox and that the mailbox may send as.
+ *
+ * Mirrors `AliasRecord` in workers/lib/aliases.ts.
+ */
+export interface Alias {
+	address: string;
+	mailbox: string;
+	createdAt: string;
+}
+
 export interface Email {
 	id: string;
 	thread_id?: string | null;

@@ -6,6 +6,7 @@ import { Badge, Button, Input, Loader, useKumoToastManager } from "@cloudflare/k
 import { RobotIcon, ArrowCounterClockwiseIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
+import AliasSettings from "~/components/AliasSettings";
 import AppPasswordSettings from "~/components/AppPasswordSettings";
 import { useMailbox, useUpdateMailbox } from "~/queries/mailboxes";
 
@@ -126,6 +127,9 @@ export default function SettingsRoute() {
 						It controls the agent's personality, writing style, and behavior rules.
 					</p>
 				</div>
+
+				{/* Address aliases */}
+				{mailboxId && <AliasSettings mailboxId={mailboxId} />}
 
 				{/* App passwords */}
 				{mailboxId && <AppPasswordSettings mailboxId={mailboxId} />}

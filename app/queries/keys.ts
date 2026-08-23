@@ -28,5 +28,8 @@ export const queryKeys = {
 		// under this key, or anywhere else in the cache.
 		list: (mailboxId: string) => ["app-passwords", mailboxId] as const,
 	},
+	aliases: {
+		list: (mailboxId: string) => ["aliases", mailboxId] as const,
+	},
 	config: ["config"] as const,
 };

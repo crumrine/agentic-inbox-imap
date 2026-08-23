@@ -3,6 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import type {
+	Alias,
 	AppPassword,
 	CreatedAppPassword,
 	Email,
@@ -175,6 +176,14 @@ const api = {
 		post<CreatedAppPassword>(`/api/v1/mailboxes/${mailboxId}/app-passwords`, { label }),
 	revokeAppPassword: (mailboxId: string, id: string) =>
 		del<void>(`/api/v1/mailboxes/${mailboxId}/app-passwords/${id}`),
+
+	// Aliases
+	listAliases: (mailboxId: string) =>
+		get<Alias[]>(`/api/v1/mailboxes/${mailboxId}/aliases`),
+	createAlias: (mailboxId: string, address: string) =>
+		post<Alias>(`/api/v1/mailboxes/${mailboxId}/aliases`, { address }),
+	deleteAlias: (mailboxId: string, address: string) =>
+		del<void>(`/api/v1/mailboxes/${mailboxId}/aliases/${encodeURIComponent(address)}`),
 
 	// Search
 	searchEmails: (mailboxId: string, params: Record<string, string>) =>

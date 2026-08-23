@@ -9,13 +9,21 @@ import { z } from "zod";
 import { sendEmail } from "./email-sender";
 import { storeAttachments, type StoredAttachment } from "./lib/attachments";
 import {
-	validateSender,
+	validateSenderWithAliases,
 	SenderValidationError,
 	generateMessageId,
 	buildThreadingHeaders,
 	listMailboxes,
 	toClientEmail,
 } from "./lib/email-helpers";
+import {
+	createAlias,
+	deleteAlias,
+	isAlias,
+	listAliases,
+	normalizeAddress,
+	resolveInboundDelivery,
+} from "./lib/aliases";
 import {
 	createAppPassword,
 	listAppPasswords,
@@ -41,6 +49,16 @@ const CreateMailboxBody = z.object({
 
 const AppPasswordBody = z.object({
 	label: z.string().trim().min(1).max(128),
+});
+
+const AliasBody = z.object({
+	address: z.string().trim().email().max(254),
+	/**
+	 * Re-point an alias that already exists. Absent or false, an existing
+	 * alias is refused rather than silently overwritten — moving inbound mail
+	 * to a different mailbox should take saying so.
+	 */
+	repoint: z.boolean().optional(),
 });
 
 const DraftBody = z.object({
@@ -120,6 +138,15 @@ app.post("/api/v1/mailboxes", async (c) => {
 	}
 	const key = `mailboxes/${email}.json`;
 	if (await c.env.BUCKET.head(key)) return c.json({ error: "Mailbox already exists" }, 409);
+	// The other half of the alias collision check. `createAlias` refuses an
+	// alias that shadows a mailbox; this refuses a mailbox that shadows an
+	// alias. Only checking one direction leaves the other creation order
+	// broken, and that order is the one that steals another mailbox's mail:
+	// `resolveInboundDelivery` prefers a mailbox at the address over an alias
+	// at it, so a mailbox created on top of a live alias silently diverts it.
+	if (await isAlias(c.env, email)) {
+		return c.json({ error: "That address is already an alias for another mailbox" }, 409);
+	}
 	const defaultSettings = { fromName: name, forwarding: { enabled: false, email: "" }, signature: { enabled: false, text: "" }, autoReply: { enabled: false, subject: "", message: "" } };
 	const finalSettings = { ...defaultSettings, ...settings };
 	await c.env.BUCKET.put(key, JSON.stringify(finalSettings));
@@ -184,7 +211,9 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 
 	let toStr: string, fromEmail: string, fromDomain: string;
 	try {
-		({ toStr, fromEmail, fromDomain } = validateSender(to, from, mailboxId));
+		({ toStr, fromEmail, fromDomain } = await validateSenderWithAliases(
+			c.env, to, from, mailboxId,
+		));
 	} catch (e) {
 		if (e instanceof SenderValidationError) return c.json({ error: e.message }, 400);
 		throw e;
@@ -371,6 +400,52 @@ app.delete("/api/v1/mailboxes/:mailboxId/app-passwords/:id", async (c: AppContex
 	return revoked ? c.body(null, 204) : c.json({ error: "App password not found" }, 404);
 });
 
+// -- Aliases --------------------------------------------------------
+
+/**
+ * Address aliases for a mailbox: extra addresses that deliver into it and that
+ * it may send out as. The registry and the rules live in workers/lib/aliases.ts;
+ * these three routes are only the HTTP shape over it.
+ *
+ * They sit behind `requireMailbox` (so an unknown mailbox is a 404 before any
+ * alias code runs) and, like everything else under `/api/v1`, behind the
+ * Cloudflare Access boundary. There is no second auth mechanism here on
+ * purpose — see the app-password block above for the same reasoning.
+ */
+
+app.get("/api/v1/mailboxes/:mailboxId/aliases", async (c: AppContext) => {
+	const mailboxId = c.req.param("mailboxId")!;
+	return c.json(await listAliases(c.env, mailboxId));
+});
+
+app.post("/api/v1/mailboxes/:mailboxId/aliases", async (c: AppContext) => {
+	const mailboxId = c.req.param("mailboxId")!;
+	const body = await c.req.json().catch(() => null);
+	const parsed = AliasBody.safeParse(body);
+	if (!parsed.success) {
+		return c.json({ error: "A valid email address is required" }, 400);
+	}
+
+	const result = await createAlias(c.env, parsed.data.address, mailboxId, {
+		allowRepoint: parsed.data.repoint === true,
+	});
+	if (result.ok) return c.json(result.alias, 201);
+
+	const status =
+		result.reason === "invalid" ? 400 :
+		result.reason === "not-allowed" ? 403 :
+		result.reason === "no-such-mailbox" ? 404 :
+		409;
+	return c.json({ error: result.message }, status);
+});
+
+app.delete("/api/v1/mailboxes/:mailboxId/aliases/:alias", async (c: AppContext) => {
+	const mailboxId = c.req.param("mailboxId")!;
+	const alias = decodeURIComponent(c.req.param("alias")!);
+	const removed = await deleteAlias(c.env, alias, mailboxId);
+	return removed ? c.body(null, 204) : c.json({ error: "Alias not found" }, 404);
+});
+
 // -- Search ---------------------------------------------------------
 
 app.get("/api/v1/mailboxes/:mailboxId/search", async (c: AppContext) => {
@@ -422,7 +497,17 @@ async function streamToArrayBuffer(stream: ReadableStream, streamSize: number) {
 	return result;
 }
 
-async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env: Env, ctx: ExecutionContext) {
+/**
+ * `to` is the SMTP envelope recipient — the address the message was actually
+ * routed to. It is optional here only because workers/app.ts annotates its
+ * `email()` parameter as `{ raw, rawSize }`; the runtime object Cloudflare
+ * hands that handler is a ForwardableEmailMessage and does carry it. It is the
+ * first delivery candidate because it is the only field that is right when the
+ * mailbox's address appears nowhere in the headers, which is what a Bcc is.
+ */
+type InboundEvent = { raw: ReadableStream; rawSize: number; to?: string };
+
+async function receiveEmail(event: InboundEvent, env: Env, ctx: ExecutionContext) {
 	const rawEmail = await streamToArrayBuffer(event.raw, event.rawSize);
 	const parsedEmail = await new PostalMime().parse(rawEmail);
 
@@ -433,15 +518,26 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env
 	const ccRecipients = (parsedEmail.cc || []).map((e) => e.address?.toLowerCase()).filter(Boolean) as string[];
 	const bccRecipients = (parsedEmail.bcc || []).map((e) => e.address?.toLowerCase()).filter(Boolean) as string[];
 
-	let mailboxId: string | undefined;
+	// Envelope recipient first, then the header To addresses in order. See
+	// `resolveInboundDelivery` for why the envelope has to lead.
+	let candidates = [
+		...(event.to ? [normalizeAddress(event.to)] : []),
+		...allRecipients,
+	];
 	if (allowedAddresses.length > 0) {
-		mailboxId = allRecipients.find((addr) => allowedAddresses.includes(addr));
-		if (!mailboxId) { console.log(`Ignoring email: no recipient matches EMAIL_ADDRESSES.`); return; }
-	} else { mailboxId = allRecipients[0]; }
-	if (!mailboxId) throw new Error("received email with no valid recipient address");
+		candidates = candidates.filter((addr) => allowedAddresses.includes(addr));
+		if (candidates.length === 0) { console.log(`Ignoring email: no recipient matches EMAIL_ADDRESSES.`); return; }
+	}
+	if (candidates.length === 0) throw new Error("received email with no valid recipient address");
+
+	// A recipient with no mailbox of its own may still be an alias for one.
+	// Before this, any such message was logged and dropped — a mailbox with
+	// `info@` pointed at it received nothing, silently.
+	const delivery = await resolveInboundDelivery(env, candidates);
+	if (!delivery) { console.log(`Ignoring email for ${candidates[0]}: no mailbox or alias matches`); return; }
+	const { mailboxId, deliveredTo } = delivery;
 
 	const messageId = crypto.randomUUID();
-	if (!(await env.BUCKET.head(`mailboxes/${mailboxId}.json`))) { console.log(`Ignoring email for ${mailboxId}: mailbox does not exist`); return; }
 
 	const stub = env.MAILBOX.get(env.MAILBOX.idFromName(mailboxId));
 
@@ -474,7 +570,25 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env
 	// storeRawMime never throws, and falls back to raw_key: null on failure.
 	const rawMimeResult = await storeRawMime(env.BUCKET, mailboxId, messageId, rawEmail);
 
-	await stub.createEmail(Folders.INBOX, {
+	/**
+	 * `delivered_to` records which of this mailbox's addresses the message
+	 * actually arrived at, and it is captured here because here is the only
+	 * place that knows. `recipient` below is every To address joined with
+	 * commas: a message can name several of this mailbox's aliases at once,
+	 * can reach it by Bcc with none of its addresses in the headers, or can
+	 * come via a list that rewrote them. Deriving the routing address from
+	 * that string later is a heuristic, and it guesses wrong in exactly the
+	 * multi-alias cases aliases exist for.
+	 *
+	 * The `delivered_to` COLUMN DOES NOT EXIST YET (DEV-692 part two adds it
+	 * to workers/durableObject/migrations.ts + workers/db/schema.ts).
+	 * `MailboxDO.createEmail` builds its INSERT from an explicit list of
+	 * fields, so an unknown key is dropped on the floor rather than throwing —
+	 * this line is inert today and becomes live the moment the column lands,
+	 * with no change here. Nothing reads it yet; automatic send-as picks it up
+	 * in that same pass.
+	 */
+	const inboundRow = {
 		id: messageId, subject: parsedEmail.subject || "",
 		sender: (parsedEmail.from?.address || "").toLowerCase(), recipient: allRecipients.join(", "),
 		cc: ccRecipients.join(", ") || null, bcc: bccRecipients.join(", ") || null,
@@ -484,7 +598,9 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env
 		thread_id: threadId, message_id: originalMessageId, raw_headers: JSON.stringify(parsedEmail.headers),
 		raw_key: rawMimeResult.raw_key, rfc822_size: rawMimeResult.rfc822_size,
 		body_structure: rawMimeResult.body_structure,
-	}, attachmentData);
+		delivered_to: deliveredTo,
+	};
+	await stub.createEmail(Folders.INBOX, inboundRow, attachmentData);
 
 	const agentStub = env.EMAIL_AGENT.get(env.EMAIL_AGENT.idFromName(mailboxId));
 	ctx.waitUntil(agentStub.fetch(new Request("https://agents/onNewEmail", {
