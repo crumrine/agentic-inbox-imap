@@ -1140,6 +1140,138 @@ export class MailboxDO extends DurableObject<Env> {
 		};
 	}
 
+
+	/**
+	 * Apply a batch of IMAP flag changes to one folder in a single call.
+	 *
+	 * This is the write half of the gateway contract, and the reason it is not
+	 * optional: iOS Mail issues `UID STORE n +FLAGS.SILENT (\Seen)` the moment
+	 * it renders a message, and treats a `NO` reply as fatal — it tears the
+	 * connection down and reconnects, forever. A refused STORE is a hard
+	 * failure, not a degraded experience, so every plausible STORE must apply.
+	 *
+	 * The semantics the gateway depends on:
+	 *
+	 * - **One round trip.** A client may STORE an entire selected folder at
+	 *   once, so the whole batch is read, folded and written here rather than
+	 *   one RPC per uid. Everything runs inside `transactionSync`, so no reader
+	 *   observes half a batch and a throw rolls the whole thing back.
+	 * - **Unknown uids are skipped, never errors.** A message can be moved or
+	 *   expunged between the client's snapshot and its STORE; failing the batch
+	 *   over that would also fail it for the messages that do still exist.
+	 * - **The complete resulting flag set is returned** per uid, derived by the
+	 *   same `deriveImapFlags` the read endpoint uses, so the gateway can emit
+	 *   an accurate untagged FETCH without a second query and the two endpoints
+	 *   cannot disagree.
+	 * - Updates fold in request order, so two updates naming the same uid
+	 *   compose instead of the later one winning outright. Within one update
+	 *   `remove` is applied before `add`, so naming a flag in both leaves it
+	 *   set — IMAP itself never sends both, so this only has to be defined.
+	 *
+	 * Returns null when the folder does not exist, mirroring imapMessages; the
+	 * route turns that into a 404.
+	 */
+	async imapStoreFlags(
+		folderKey: string,
+		updates: ImapFlagUpdate[],
+	): Promise<ImapFlagStoreResult | null> {
+		const folder = this.#imapFolderRow(folderKey);
+		if (!folder) return null;
+
+		// Distinct, validated uids, in the order the request first named them.
+		// Filtering here is what makes the literal uid list below provably
+		// safe to interpolate.
+		const wanted: number[] = [];
+		const seenUids = new Set<number>();
+		for (const update of updates) {
+			const uid = imapStoreUid(update.uid);
+			if (uid === null || seenUids.has(uid)) continue;
+			seenUids.add(uid);
+			wanted.push(uid);
+		}
+		if (wanted.length === 0) return { updated: [] };
+
+		const isDraftFolder = folder.id === Folders.DRAFT;
+
+		return this.ctx.storage.transactionSync(() => {
+			// Bound parameters would be the reflex, but SQLite caps how many
+			// one statement may carry and a batch is deliberately allowed to be
+			// large. Every element of `wanted` came out of imapStoreUid, so the
+			// list cannot contain anything but digits.
+			const rows = [
+				...this.ctx.storage.sql.exec(
+					`SELECT uid                   AS uid,
+					        COALESCE(read, 0)     AS read,
+					        COALESCE(starred, 0)  AS starred,
+					        COALESCE(answered, 0) AS answered,
+					        COALESCE(deleted, 0)  AS deleted,
+					        flags                 AS flags
+					   FROM emails
+					  WHERE folder_id = ?1 AND uid IN (${wanted.join(", ")})`,
+					folder.id,
+				),
+			] as unknown as ImapFlagRow[];
+
+			const states = new Map<number, ImapFlagState>();
+			for (const row of rows) {
+				states.set(Number(row.uid), {
+					read: row.read ? 1 : 0,
+					starred: row.starred ? 1 : 0,
+					answered: row.answered ? 1 : 0,
+					deleted: row.deleted ? 1 : 0,
+					keywords: parseJsonStringArray(row.flags),
+					dirty: false,
+				});
+			}
+
+			for (const update of updates) {
+				const uid = imapStoreUid(update.uid);
+				const state = uid === null ? undefined : states.get(uid);
+				if (!state) continue; // Unknown uid: silently skipped.
+				for (const flag of update.remove ?? []) applyStoreFlag(state, flag, false);
+				for (const flag of update.add ?? []) applyStoreFlag(state, flag, true);
+			}
+
+			const updated: ImapUpdatedFlags[] = [];
+			for (const uid of wanted) {
+				const state = states.get(uid);
+				if (!state) continue;
+
+				const keywords = state.keywords.length > 0 ? JSON.stringify(state.keywords) : null;
+				if (state.dirty) {
+					this.ctx.storage.sql.exec(
+						`UPDATE emails
+						    SET read = ?3, starred = ?4, answered = ?5, deleted = ?6, flags = ?7
+						  WHERE folder_id = ?1 AND uid = ?2`,
+						folder.id,
+						uid,
+						state.read,
+						state.starred,
+						state.answered,
+						state.deleted,
+						keywords,
+					);
+				}
+
+				updated.push({
+					uid,
+					flags: deriveImapFlags(
+						{
+							read: state.read,
+							starred: state.starred,
+							answered: state.answered,
+							deleted: state.deleted,
+							flags: keywords,
+						},
+						isDraftFolder,
+					),
+				});
+			}
+
+			return { updated };
+		});
+	}
+
 	/** Resolve a folder by id (canonical) or, tolerantly, by display name. */
 	#imapFolderRow(folderKey: string): { id: string; uid_next: number } | undefined {
 		return [
@@ -1169,6 +1301,12 @@ export class MailboxDO extends DurableObject<Env> {
  * is what keeps a single request from turning into an unbounded result set.
  */
 export const IMAP_MESSAGES_MAX_LIMIT = 1000;
+
+/**
+ * Largest value a UID can take (RFC 9051: UIDs are 32-bit unsigned). Shared
+ * with the route so the two halves cannot drift apart.
+ */
+export const IMAP_MAX_UID = 4294967295;
 
 /** Bytes added to a legacy message's size estimate for MIME scaffolding. */
 const IMAP_LEGACY_MIME_OVERHEAD_BYTES = 512;
@@ -1251,6 +1389,120 @@ export type ImapRawSourceResult =
 	| { status: "no-folder" }
 	| { status: "no-message" }
 	| { status: "ok"; message: ImapRawSource };
+
+/** One uid's requested flag delta. Both arrays are optional and independent. */
+export interface ImapFlagUpdate {
+	uid: number;
+	add?: string[];
+	remove?: string[];
+}
+
+/** A uid's complete flag set after a store, exactly as FETCH would report it. */
+export interface ImapUpdatedFlags {
+	uid: number;
+	flags: string[];
+}
+
+/**
+ * Result of a flag batch. Uids that did not resolve to a message are absent
+ * rather than reported, so `updated.length` may be shorter than the request.
+ */
+export interface ImapFlagStoreResult {
+	updated: ImapUpdatedFlags[];
+}
+
+/** Row shape of the state read in MailboxDO.imapStoreFlags. */
+interface ImapFlagRow {
+	uid: number;
+	read: number;
+	starred: number;
+	answered: number;
+	deleted: number;
+	flags: string | null;
+}
+
+/** In-flight flag state for one message while a batch is being folded. */
+interface ImapFlagState {
+	read: number;
+	starred: number;
+	answered: number;
+	deleted: number;
+	keywords: string[];
+	/** Whether anything actually changed; an unchanged row is not rewritten. */
+	dirty: boolean;
+}
+
+/**
+ * The four settable system flags and the column each one lives in. Keys are
+ * lower-cased because IMAP flags are case-insensitive atoms: a client may send
+ * `\SEEN`, and a STORE that silently did nothing would leave the client
+ * re-issuing it forever.
+ */
+const IMAP_SYSTEM_FLAG_COLUMNS: Record<string, "read" | "starred" | "answered" | "deleted"> = {
+	"\\seen": "read",
+	"\\flagged": "starred",
+	"\\answered": "answered",
+	"\\deleted": "deleted",
+};
+
+/**
+ * Hard ceiling on custom keywords kept per message.
+ *
+ * The cap lives here rather than only in the route because the route bounds a
+ * single request, and nothing stops a client from issuing a thousand of them.
+ * Additions past the cap are dropped silently: the alternative is failing the
+ * STORE, which is the failure mode this whole endpoint exists to avoid.
+ */
+export const IMAP_MAX_KEYWORDS_PER_MESSAGE = 32;
+
+/** Validate one uid from a store request. Null means "not a possible uid". */
+function imapStoreUid(value: number): number | null {
+	const uid = Math.trunc(Number(value));
+	if (!Number.isSafeInteger(uid) || uid < 1 || uid > IMAP_MAX_UID) return null;
+	return uid;
+}
+
+/**
+ * Fold one flag into a message's in-flight state.
+ *
+ * `\Draft` is derived from the folder and `\Recent` from session state neither
+ * this Worker nor the gateway keeps, so neither is settable. They — and any
+ * other backslash flag — are ignored rather than rejected: the system-flag
+ * namespace is reserved, so storing an unrecognised one as a keyword would
+ * invent a flag the read path would then hand back as real.
+ */
+function applyStoreFlag(state: ImapFlagState, rawFlag: string, on: boolean): void {
+	const flag = rawFlag.trim();
+	if (flag === "") return;
+	const lower = flag.toLowerCase();
+
+	const column = IMAP_SYSTEM_FLAG_COLUMNS[lower];
+	if (column) {
+		const next = on ? 1 : 0;
+		if (state[column] !== next) {
+			state[column] = next;
+			state.dirty = true;
+		}
+		return;
+	}
+	if (flag.startsWith("\\")) return;
+
+	if (on) {
+		if (state.keywords.some((keyword) => keyword.trim().toLowerCase() === lower)) return;
+		if (state.keywords.length >= IMAP_MAX_KEYWORDS_PER_MESSAGE) return;
+		state.keywords.push(flag);
+		state.dirty = true;
+		return;
+	}
+
+	// Filter rather than find-and-splice: a legacy row can hold the same
+	// keyword twice in different casing, and a remove has to clear all of it.
+	const kept = state.keywords.filter((keyword) => keyword.trim().toLowerCase() !== lower);
+	if (kept.length !== state.keywords.length) {
+		state.keywords = kept;
+		state.dirty = true;
+	}
+}
 
 /** Row shape of the metadata query in MailboxDO.imapMessages. */
 interface ImapMessageRow {

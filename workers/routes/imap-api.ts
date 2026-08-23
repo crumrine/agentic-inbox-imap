@@ -39,10 +39,12 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
-import type {
-	ImapRawAttachment,
-	ImapRawSource,
-	MailboxDO,
+import {
+	IMAP_MAX_UID,
+	IMAP_MESSAGES_MAX_LIMIT,
+	type ImapRawAttachment,
+	type ImapRawSource,
+	type MailboxDO,
 } from "../durableObject";
 import { authRateLimiter } from "../durableObject/authRateLimit";
 import { normalizeMailboxId, verifyAppPassword } from "../lib/credentials";
@@ -156,15 +158,43 @@ const MESSAGE_NOT_FOUND_BODY = { error: "Message not found" } as const;
 const INVALID_REQUEST_BODY = { error: "Invalid request" } as const;
 const MESSAGE_TOO_LARGE_BODY = { error: "Message too large to reconstruct" } as const;
 
-/** Largest value a UID can take (RFC 9051: UIDs are 32-bit unsigned). */
-const MAX_UID = 4294967295;
-
 const MessagesQuery = z.object({
-	sinceUid: z.coerce.number().int().min(0).max(MAX_UID).optional(),
+	sinceUid: z.coerce.number().int().min(0).max(IMAP_MAX_UID).optional(),
 	// Not `.max()`: an over-large limit is clamped server-side rather than
 	// rejected, so a client asking for "everything" gets a bounded page
 	// instead of an error. The clamp lives in clampImapLimit.
 	limit: z.coerce.number().int().min(1).optional(),
+});
+
+/**
+ * Caps on a single flag-store request.
+ *
+ * `MAX_FLAG_UPDATES` bounds the work one call can hand the Durable Object: a
+ * client is allowed to STORE a whole selected folder, and the read endpoint
+ * only ever shows it IMAP_MESSAGES_MAX_LIMIT messages at a time, so matching
+ * that number lets a client act on everything it has seen and no more.
+ * `MAX_FLAGS_PER_UPDATE` bounds one message's share of that;
+ * IMAP_MAX_KEYWORDS_PER_MESSAGE in the Durable Object is the separate ceiling
+ * on what actually gets stored, which a caller cannot climb past by splitting
+ * the work across many requests.
+ */
+const MAX_FLAG_UPDATES = IMAP_MESSAGES_MAX_LIMIT;
+const MAX_FLAGS_PER_UPDATE = 64;
+/** Long enough for any real keyword; short enough that 64 of them are cheap. */
+const MAX_FLAG_LENGTH = 64;
+
+const FlagName = z.string().min(1).max(MAX_FLAG_LENGTH);
+
+const FlagsBody = z.object({
+	updates: z
+		.array(
+			z.object({
+				uid: z.number().int().min(1).max(IMAP_MAX_UID),
+				add: z.array(FlagName).max(MAX_FLAGS_PER_UPDATE).optional(),
+				remove: z.array(FlagName).max(MAX_FLAGS_PER_UPDATE).optional(),
+			}),
+		)
+		.max(MAX_FLAG_UPDATES),
 });
 
 /**
@@ -247,7 +277,7 @@ imapApi.get("/:mailboxId/:folder/messages", async (c) => {
 imapApi.get("/:mailboxId/messages/:uid/raw", async (c) => {
 	const folder = c.req.query("folder");
 	const uid = Number(c.req.param("uid"));
-	if (!folder || !Number.isInteger(uid) || uid < 1 || uid > MAX_UID) {
+	if (!folder || !Number.isInteger(uid) || uid < 1 || uid > IMAP_MAX_UID) {
 		return c.json(INVALID_REQUEST_BODY, 400);
 	}
 
@@ -297,6 +327,51 @@ imapApi.get("/:mailboxId/messages/:uid/raw", async (c) => {
 			"content-length": String(bytes.byteLength),
 		},
 	});
+});
+
+// ── Write API: flags ─────────────────────────────────────
+
+/**
+ * POST /api/imap/v1/{mailbox}/{folder}/flags
+ *   { "updates": [ { "uid": 3, "add": ["\\Seen"], "remove": ["\\Flagged"] } ] }
+ *   -> 200 { "updated": [ { "uid": 3, "flags": ["\\Seen", "\\Answered"] } ] }
+ *   -> 400 { "error": "Invalid request" }
+ *   -> 404 { "error": "Not found" | "Folder not found" }
+ *
+ * The write half of the gateway contract, and the endpoint that makes the
+ * mailbox usable from a real client at all: iOS Mail sends
+ * `UID STORE n +FLAGS.SILENT (\Seen)` as soon as it displays a message, and a
+ * `NO` reply makes it drop the connection and reconnect in a loop. Read-only
+ * is not a lesser mode here, it is an unusable one.
+ *
+ * Each entry comes back with its **complete** resulting flag set so the
+ * gateway can emit an untagged FETCH without re-reading. Uids that no longer
+ * exist are omitted from `updated` rather than failing the batch — a message
+ * can vanish between the client's snapshot and its STORE.
+ *
+ * Auth is the Access service token, same as the read routes above, and for
+ * the same reason: the app password is a login credential, not a per-request
+ * one. This route mutates, but it mutates only within a mailbox the caller
+ * already has full read access to.
+ */
+imapApi.post("/:mailboxId/:folder/flags", async (c) => {
+	let body: z.infer<typeof FlagsBody>;
+	try {
+		body = FlagsBody.parse(await c.req.json());
+	} catch {
+		// Never `err.message`: a zod error embeds the input it rejected, which
+		// would put message flags and uids into an error body for anything that
+		// logs it. 400 says the envelope was wrong and nothing else.
+		return c.json(INVALID_REQUEST_BODY, 400);
+	}
+
+	const stub = await resolveMailbox(c.env, c.req.param("mailboxId"));
+	if (!stub) return c.json(NOT_FOUND_BODY, 404);
+
+	const result = await stub.imapStoreFlags(c.req.param("folder"), body.updates);
+	if (!result) return c.json(FOLDER_NOT_FOUND_BODY, 404);
+
+	return c.json(result);
 });
 
 /**
