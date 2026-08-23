@@ -5,7 +5,9 @@
 package config
 
 import (
+	"fmt"
 	"net"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -220,5 +222,39 @@ func TestLoad_ErrorDoesNotLeakSecret(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "super-secret-value-should-not-appear") {
 		t.Fatalf("error text leaked the access secret: %v", err)
+	}
+}
+
+// Formatting a Config must never emit the Access secret or the session cookie.
+// This is a control, not a style preference: before String/GoString existed,
+// a single %+v in a debug line would have printed both in clear.
+func TestConfigFormattingRedactsSecrets(t *testing.T) {
+	u, err := url.Parse("https://worker.example.com")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	cfg := &Config{
+		InboxURL:           u,
+		AccessClientID:     "id.access",
+		AccessClientSecret: "SUPER-SECRET-TOKEN",
+		AccessCookie:       "CF_Authorization=SUPER-SECRET-COOKIE",
+		IMAPAddr:           "100.64.0.1:993",
+	}
+	for _, format := range []string{"%v", "%+v", "%s", "%#v"} {
+		got := fmt.Sprintf(format, cfg)
+		if strings.Contains(got, "SUPER-SECRET-TOKEN") {
+			t.Errorf("%s leaked AccessClientSecret: %s", format, got)
+		}
+		if strings.Contains(got, "SUPER-SECRET-COOKIE") {
+			t.Errorf("%s leaked AccessCookie: %s", format, got)
+		}
+		if !strings.Contains(got, "<redacted>") {
+			t.Errorf("%s did not mark the secrets redacted: %s", format, got)
+		}
+	}
+	// An unset secret should be distinguishable from a redacted one.
+	empty := &Config{InboxURL: u}
+	if !strings.Contains(fmt.Sprintf("%v", empty), "<unset>") {
+		t.Errorf("unset secret should render as <unset>, got %v", empty)
 	}
 }

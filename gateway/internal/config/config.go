@@ -38,8 +38,9 @@ const DefaultLogLevel = "info"
 
 // Config holds the fully validated runtime configuration for agentic-imapd.
 //
-// Config never carries a String()/GoString() implementation that dumps
-// AccessClientSecret; callers must not %+v this struct into logs.
+// String and GoString are implemented to redact AccessClientSecret and
+// AccessCookie, so formatting a Config into a log line is safe by default
+// rather than by convention. Do not remove them.
 type Config struct {
 	// InboxURL is the base URL of the Worker backend.
 	InboxURL *url.URL
@@ -263,4 +264,42 @@ func DefaultTailscaleAddr() (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no interface address found in 100.64.0.0/10 (is Tailscale up?)")
+}
+
+// String redacts AccessClientSecret and AccessCookie.
+//
+// Without this, Go's default struct formatting prints every field, so a single
+// `%+v` or `%v` on a Config in a log line would emit the Access service-token
+// secret or a live CF_Authorization session cookie in clear. Relying on a
+// comment telling people not to do that is not a control: the next person to
+// add a debug line will not read it.
+//
+// GoString covers %#v for the same reason.
+func (c *Config) String() string {
+	return c.redacted()
+}
+
+// GoString implements fmt.GoStringer so %#v is redacted too.
+func (c *Config) GoString() string {
+	return c.redacted()
+}
+
+func (c *Config) redacted() string {
+	if c == nil {
+		return "<nil>"
+	}
+	secret := "<unset>"
+	if c.AccessClientSecret != "" {
+		secret = "<redacted>"
+	}
+	cookie := "<unset>"
+	if c.AccessCookie != "" {
+		cookie = "<redacted>"
+	}
+	return fmt.Sprintf(
+		"config.Config{InboxURL:%q, AccessClientID:%q, AccessClientSecret:%s, AccessCookie:%s, "+
+			"IMAPAddr:%q, TLSCertFile:%q, TLSKeyFile:%q, LogLevel:%q, AllowPublicBind:%t}",
+		c.InboxURL, c.AccessClientID, secret, cookie,
+		c.IMAPAddr, c.TLSCertFile, c.TLSKeyFile, c.LogLevel, c.AllowPublicBind,
+	)
 }

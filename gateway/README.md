@@ -14,7 +14,7 @@ mailbox Durable Object in the Worker stays the single source of truth;
 
 ## Status
 
-Phase 1, read-only IMAP. Configuration, the backend HTTP client, the process
+Read/write IMAP. Configuration, the backend HTTP client, the process
 entrypoint, deploy files, and the IMAP protocol session
 (`internal/imap.Session`) are all implemented.
 
@@ -108,7 +108,8 @@ gateway/
   cmd/agentic-imapd/main.go  entrypoint: load config, build backend client, start listener, graceful shutdown
   internal/config/           configuration from environment, with validation and the public-bind guard
   internal/backend/          typed HTTP client for the Worker's IMAP-gateway API
-  internal/imap/             read-only imapserver.Session: FETCH, SEARCH, append-only Poll
+  internal/imap/             imapserver.Session: FETCH, SEARCH, append-only Poll, plus
+                             STORE/COPY/MOVE/EXPUNGE/APPEND mutations (mutate.go)
   internal/smtp/             empty package placeholder (phase 2)
   deploy/                    systemd unit + example env file
 ```
@@ -159,8 +160,9 @@ secret value is ever included in an error message or log line.
 | Variable | Required | Description |
 |---|---|---|
 | `AGENTIC_INBOX_URL` | yes | Base URL of the Worker, e.g. `https://mail.example.com` |
-| `AGENTIC_ACCESS_CLIENT_ID` | yes | Cloudflare Access service token client ID, sent as the `CF-Access-Client-Id` header on every request to the Worker |
-| `AGENTIC_ACCESS_CLIENT_SECRET` | yes | Cloudflare Access service token secret, sent as `CF-Access-Client-Secret` |
+| `AGENTIC_ACCESS_CLIENT_ID` | one of client ID/secret or cookie | Cloudflare Access service token client ID, sent as the `CF-Access-Client-Id` header on every request to the Worker |
+| `AGENTIC_ACCESS_CLIENT_SECRET` | one of client ID/secret or cookie | Cloudflare Access service token secret, sent as `CF-Access-Client-Secret` |
+| `AGENTIC_ACCESS_COOKIE` | one of client ID/secret or cookie | A full `CF_Authorization=...` cookie header, used instead of the service token for local testing only |
 | `AGENTIC_TLS_CERT` | yes | Path to a certificate from `tailscale cert` |
 | `AGENTIC_TLS_KEY` | yes | Path to the matching private key from `tailscale cert` |
 | `AGENTIC_IMAP_ADDR` | no | Listen address, `host:port`. If unset, `agentic-imapd` scans local interfaces for a `100.64.0.0/10` address and binds it on port 993. 993 is privileged, so the shipped systemd unit grants `CAP_NET_BIND_SERVICE`; set a port above 1024 here if you would rather drop that capability. |

@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# No secrets are used or needed. Nothing here deploys, reaches Cloudflare,
+# or touches a real mailbox.
+permissions:
+  contents: read
+
+jobs:
+  worker:
+    name: TypeScript / Worker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        # Regenerates worker-configuration.d.ts via `wrangler types` first;
+        # that file is gitignored, so bare `tsc` cannot run on a fresh clone.
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+  gateway:
+    name: Go / gateway
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gateway
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+          cache-dependency-path: gateway/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Format check
+        run: |
+          fmt_out="$(gofmt -l .)"
+          if [ -n "$fmt_out" ]; then
+            echo "The following files are not gofmt'd:"
+            echo "$fmt_out"
+            exit 1
+          fi
+
+      - name: Test
+        run: go test ./... -count=1
+
+      - name: Race test (internal/imap)
+        # -count=2 is deliberate: a harness flake here only reproduced at
+        # -count=2, and every earlier "race clean" claim was made at
+        # -count=1 and would not have caught it.
+        run: go test ./internal/imap -race -count=2
