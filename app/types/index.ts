@@ -23,6 +23,31 @@ export interface Mailbox {
 	settings?: MailboxSettings;
 }
 
+/**
+ * One app password as the browser is allowed to see it.
+ *
+ * Mirrors `AppPasswordMetadata` in workers/lib/credentials.ts, which is the
+ * safe projection: no hash, no salt, and nothing derived from the secret. If a
+ * field is added there it must stay out of here unless it is safe to render.
+ */
+export interface AppPassword {
+	id: string;
+	label: string;
+	createdAt: string;
+	algorithm: string;
+	iterations: number;
+}
+
+/**
+ * The create response. `password` is plaintext and exists only in this object,
+ * only for the lifetime of the dialog that displays it. It must never be
+ * written to a query cache, to storage, or to a log.
+ */
+export interface CreatedAppPassword {
+	password: string;
+	metadata: AppPassword;
+}
+
 export interface Email {
 	id: string;
 	thread_id?: string | null;

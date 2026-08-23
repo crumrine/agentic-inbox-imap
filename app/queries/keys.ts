@@ -23,5 +23,10 @@ export const queryKeys = {
 		results: (mailboxId: string, query: string, page: number) =>
 			["search", mailboxId, query, page] as const,
 	},
+	appPasswords: {
+		// Metadata only. The plaintext from a create call must never be written
+		// under this key, or anywhere else in the cache.
+		list: (mailboxId: string) => ["app-passwords", mailboxId] as const,
+	},
 	config: ["config"] as const,
 };

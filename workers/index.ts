@@ -16,6 +16,11 @@ import {
 	listMailboxes,
 	toClientEmail,
 } from "./lib/email-helpers";
+import {
+	createAppPassword,
+	listAppPasswords,
+	revokeAppPassword,
+} from "./lib/credentials";
 import { SendEmailRequestSchema } from "./lib/schemas";
 import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
 import { purgeR2Keys } from "./routes/imap-api";
@@ -32,6 +37,10 @@ const CreateMailboxBody = z.object({
 	email: z.string().email(),
 	name: z.string().min(1),
 	settings: z.record(z.any()).optional(), // unvalidated — agentSystemPrompt goes straight to AI
+});
+
+const AppPasswordBody = z.object({
+	label: z.string().trim().min(1).max(128),
 });
 
 const DraftBody = z.object({
@@ -320,6 +329,46 @@ app.put("/api/v1/mailboxes/:mailboxId/folders/:id", async (c: AppContext) => {
 app.delete("/api/v1/mailboxes/:mailboxId/folders/:id", async (c: AppContext) => {
 	const ok = await c.var.mailboxStub.deleteFolder(c.req.param("id")!);
 	return ok ? c.body(null, 204) : c.json({ error: "Folder not found or cannot be deleted" }, 400);
+});
+
+// -- App passwords --------------------------------------------------
+
+/**
+ * Credentials for mail clients. These three routes are the only way to mint an
+ * app password without shell access, and they sit behind the same Cloudflare
+ * Access boundary as the rest of `/api/v1` — deliberately no second auth
+ * mechanism, because a credential-minting endpoint with its own bespoke auth is
+ * exactly the kind of thing that ends up with a weaker check than everything
+ * around it.
+ *
+ * The hash and salt never appear on this surface: `listAppPasswords` returns
+ * `AppPasswordMetadata`, an explicit projection in workers/lib/credentials.ts
+ * that omits both. The plaintext appears exactly once, in the 201 body of the
+ * create call, and is never recoverable afterwards — nothing here logs it, and
+ * `Cache-Control: no-store` keeps it out of any intermediary that might.
+ */
+
+app.get("/api/v1/mailboxes/:mailboxId/app-passwords", async (c: AppContext) => {
+	const mailboxId = c.req.param("mailboxId")!;
+	return c.json(await listAppPasswords(c.env, mailboxId));
+});
+
+app.post("/api/v1/mailboxes/:mailboxId/app-passwords", async (c: AppContext) => {
+	const mailboxId = c.req.param("mailboxId")!;
+	const body = await c.req.json().catch(() => null);
+	const parsed = AppPasswordBody.safeParse(body);
+	if (!parsed.success) {
+		return c.json({ error: "A label of 1-128 characters is required" }, 400);
+	}
+	const created = await createAppPassword(c.env, mailboxId, parsed.data.label);
+	// 201 body carries the only copy of the plaintext that will ever exist.
+	return c.json(created, 201, { "Cache-Control": "no-store" });
+});
+
+app.delete("/api/v1/mailboxes/:mailboxId/app-passwords/:id", async (c: AppContext) => {
+	const mailboxId = c.req.param("mailboxId")!;
+	const revoked = await revokeAppPassword(c.env, mailboxId, c.req.param("id")!);
+	return revoked ? c.body(null, 204) : c.json({ error: "App password not found" }, 404);
 });
 
 // -- Search ---------------------------------------------------------

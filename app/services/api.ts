@@ -2,7 +2,13 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import type { Email, Folder, Mailbox } from "~/types";
+import type {
+	AppPassword,
+	CreatedAppPassword,
+	Email,
+	Folder,
+	Mailbox,
+} from "~/types";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -156,6 +162,19 @@ const api = {
 		put<Folder>(`/api/v1/mailboxes/${mailboxId}/folders/${id}`, { name }),
 	deleteFolder: (mailboxId: string, id: string) =>
 		del<void>(`/api/v1/mailboxes/${mailboxId}/folders/${id}`),
+
+	// App passwords
+	//
+	// createAppPassword resolves with the one and only copy of the plaintext.
+	// Callers must hand it straight to the UI that displays it and drop it on
+	// dismissal — see app/queries/app-passwords.ts, which deliberately keeps it
+	// out of the TanStack cache.
+	listAppPasswords: (mailboxId: string) =>
+		get<AppPassword[]>(`/api/v1/mailboxes/${mailboxId}/app-passwords`),
+	createAppPassword: (mailboxId: string, label: string) =>
+		post<CreatedAppPassword>(`/api/v1/mailboxes/${mailboxId}/app-passwords`, { label }),
+	revokeAppPassword: (mailboxId: string, id: string) =>
+		del<void>(`/api/v1/mailboxes/${mailboxId}/app-passwords/${id}`),
 
 	// Search
 	searchEmails: (mailboxId: string, params: Record<string, string>) =>

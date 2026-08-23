@@ -6,6 +6,7 @@ import { Badge, Button, Input, Loader, useKumoToastManager } from "@cloudflare/k
 import { RobotIcon, ArrowCounterClockwiseIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
+import AppPasswordSettings from "~/components/AppPasswordSettings";
 import { useMailbox, useUpdateMailbox } from "~/queries/mailboxes";
 
 // Placeholder shown in the textarea when no custom prompt is set.
@@ -125,6 +126,9 @@ export default function SettingsRoute() {
 						It controls the agent's personality, writing style, and behavior rules.
 					</p>
 				</div>
+
+				{/* App passwords */}
+				{mailboxId && <AppPasswordSettings mailboxId={mailboxId} />}
 
 				{/* Save */}
 				<div className="flex justify-end">
