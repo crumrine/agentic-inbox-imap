@@ -69,6 +69,31 @@ snapshot; it stays addressable and fails to fetch, because renumbering a
 mailbox under a client that was never sent an EXPUNGE is worse than a stale
 entry.
 
+There is one case where staying stale is not safe, and it is handled
+differently. If the selected folder is replaced (UIDVALIDITY changes) or
+disappears entirely, every UID the client holds now means something else,
+or nothing. That is the only situation in which continuing would make a
+client *actively wrong* rather than merely behind, so the selection is
+poisoned: every subsequent FETCH, SEARCH, STORE, COPY, MOVE and UID EXPUNGE
+fails with a `NO` telling the client to reselect, until it does. The
+snapshot is not renumbered or shrunk on the way, the connection survives,
+and both SELECT and CLOSE clear the fault. A transient backend failure does
+*not* poison: it says nothing about the folder, so the snapshot is kept.
+
+### Folder size ceiling
+
+IMAP sequence numbers are positional, so the whole mapping has to be known
+at SELECT and the snapshot cannot be lazy. `DefaultMaxFolderMessages` caps
+one selection at 50,000 messages; beyond that SELECT answers `NO [LIMIT]`
+rather than silently serving a prefix.
+
+The bound is memory, and it is measured rather than assumed:
+`BenchmarkSelectionFootprint` reports about 500 bytes per message with
+realistic envelopes, so the ceiling is roughly 24 MiB for one selected
+folder, and a few connections each selecting something different multiply
+it. Raising the constant is a one-line change; multiply by the measured
+figure first.
+
 Not served: mailbox management (CREATE, DELETE, RENAME, SUBSCRIBE) answers
 NO and keeps the connection alive.
 

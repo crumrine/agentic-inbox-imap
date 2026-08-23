@@ -28,9 +28,9 @@ type storeTarget struct {
 // the same sequence indefinitely, never rendering the message. A refused
 // flag write is a hard failure, not a degraded experience.
 func (s *Session) Store(w *imapserver.FetchWriter, numSet imap.NumSet, flags *imap.StoreFlags, options *imap.StoreOptions) error {
-	mailbox, sel := s.snapshot()
-	if sel == nil {
-		return errNoMailboxSelected
+	mailbox, sel, err := s.selected()
+	if err != nil {
+		return err
 	}
 	if flags == nil {
 		return errClientBug("STORE requires a flag list")

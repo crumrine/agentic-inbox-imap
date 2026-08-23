@@ -95,6 +95,32 @@ func errUnsupported(what string) error {
 	}
 }
 
+// errMailboxReselectRequired and errMailboxGone are the two ways a
+// selection can be poisoned: the snapshot describes a folder generation
+// that no longer exists, so every UID and sequence number the client holds
+// is meaningless.
+//
+// They are NO rather than BAD because the client did nothing wrong, and
+// they carry no retry-flavoured code because retrying the same command
+// cannot help. The text names the recovery, which is the only thing the
+// client can usefully act on: close the mailbox and select it again.
+//
+// This is the one place in the design where continuing would make a client
+// actively wrong rather than merely stale. Everywhere else a client may
+// miss new mail or see a message that has already gone; here it would
+// address the wrong message.
+var errMailboxReselectRequired = &imap.Error{
+	Type: imap.StatusResponseTypeNo,
+	Code: imap.ResponseCodeCannot,
+	Text: "UIDVALIDITY changed, close and reselect this mailbox",
+}
+
+var errMailboxGone = &imap.Error{
+	Type: imap.StatusResponseTypeNo,
+	Code: imap.ResponseCodeNonExistent,
+	Text: "Selected mailbox no longer exists, close and reselect",
+}
+
 // errNoMailboxSelected is returned when a selected-state operation runs
 // without a live selection. go-imap checks connection state before
 // dispatching, so this is a defence against a state bug rather than an

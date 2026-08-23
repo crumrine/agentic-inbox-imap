@@ -55,9 +55,9 @@ var envelopeHeaderKeys = map[string]struct{}{
 // ignores a term returns the wrong messages, and a mail client has no way
 // to tell that happened; a NO is recoverable, a wrong result set is not.
 func (s *Session) Search(kind imapserver.NumKind, criteria *imap.SearchCriteria, options *imap.SearchOptions) (*imap.SearchData, error) {
-	mailbox, sel := s.snapshot()
-	if sel == nil {
-		return nil, errNoMailboxSelected
+	mailbox, sel, err := s.selected()
+	if err != nil {
+		return nil, err
 	}
 	if options != nil && options.ReturnSave {
 		// SEARCHRES would require remembering the result set and honouring

@@ -270,10 +270,14 @@ func TestPollDoesNotShrinkOnRemoval(t *testing.T) {
 	}
 }
 
-// TestPollIgnoresUIDValidityChange: once UIDVALIDITY moves, every UID the
-// client holds refers to a different folder generation. Growing across
-// that boundary would mix two generations in one snapshot.
-func TestPollIgnoresUIDValidityChange(t *testing.T) {
+// TestPollDoesNotGrowAcrossAUIDValidityChange: once UIDVALIDITY moves,
+// every UID the client holds refers to a different folder generation, so
+// growing across that boundary would mix two generations in one snapshot.
+//
+// Poll leaves the snapshot exactly as it was. It also poisons it, which is
+// covered separately in poison_test.go; this test is only about the
+// snapshot not being touched.
+func TestPollDoesNotGrowAcrossAUIDValidityChange(t *testing.T) {
 	be := newFakeBackend(t)
 	s := newSelectedSession(t, be, WithPollInterval(0))
 

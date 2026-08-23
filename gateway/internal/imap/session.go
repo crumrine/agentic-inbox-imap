@@ -98,10 +98,35 @@ const (
 	DefaultMaxAppendBytes = DefaultMaxMessageBytes
 
 	// DefaultMaxFolderMessages bounds how many messages one selection may
-	// hold. IMAP requires the whole sequence-number mapping of the selected
-	// folder to be known up front, so the snapshot cannot be lazy; this is
-	// the point where a folder is too big for a stateless gateway to serve
-	// and SELECT answers NO [LIMIT] instead of showing a prefix of it.
+	// hold. IMAP sequence numbers are positional, so the whole mapping has
+	// to be known at SELECT and the snapshot cannot be lazy; this is where
+	// a folder is too big for a stateless gateway to serve, and SELECT
+	// answers NO [LIMIT] rather than showing a prefix of it.
+	//
+	// The bound is memory. BenchmarkSelectionFootprint measures a selection
+	// holding realistic envelopes at about 500 bytes per message, so this
+	// ceiling is roughly 24 MiB for one selected folder. That is per
+	// selection, and a phone, a laptop and a desktop are three connections
+	// that may each select something different, so the number to reason
+	// about is a small multiple of it.
+	//
+	// Two cheaper designs were considered and rejected for now:
+	//
+	// A lean snapshot holding only a UID index, with metadata fetched on
+	// demand, would cost about 5 bytes per message instead of 500. But it
+	// saves retention, not work: a client's first sync reads every envelope
+	// regardless, so the metadata gets fetched either way, and making it
+	// lazy turns one paged listing into repeated round trips. The messages
+	// endpoint is UID-range based, so a FETCH over an arbitrary set would
+	// have to over-fetch or page again.
+	//
+	// A server-side endpoint returning just the UID column would make that
+	// design cheap and is the right long-term answer. It needs Worker work
+	// that is not scheduled, and no deployment is near this ceiling, so
+	// building the client half now would be speculative.
+	//
+	// Raising the constant is a one-line change once a real folder
+	// approaches it; multiply by the measured per-message figure first.
 	DefaultMaxFolderMessages = 50000
 )
 
@@ -385,6 +410,14 @@ type Session struct {
 	mailbox  string
 	sel      *selection
 	lastPoll time.Time
+
+	// selFault poisons the selection. Once set, every command that would
+	// touch the snapshot fails with it until the client reselects. It is
+	// set by refresh when the folder underneath the snapshot has been
+	// replaced or removed, which are the only two situations where
+	// continuing would hand the client a wrong answer rather than a stale
+	// one. Cleared by Select and Unselect.
+	selFault error
 }
 
 // Option configures a Session built by NewSession.
@@ -513,6 +546,39 @@ func (s *Session) snapshot() (string, *selection) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.mailbox, s.sel
+}
+
+// selected returns the mailbox and snapshot for a command that operates on
+// the selected mailbox, or the reason it cannot.
+//
+// Every selected-state entry point goes through this rather than snapshot,
+// so that poisoning cannot be forgotten at one of them: FETCH, SEARCH,
+// STORE, COPY, MOVE and EXPUNGE all fail together the moment the snapshot
+// stops describing reality.
+func (s *Session) selected() (string, *selection, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.sel == nil {
+		return "", nil, errNoMailboxSelected
+	}
+	if s.selFault != nil {
+		return "", nil, s.selFault
+	}
+	return s.mailbox, s.sel, nil
+}
+
+// poisonSelection marks the snapshot unusable.
+//
+// It is guarded the same way installGrown is: if a SELECT has already
+// replaced the selection while the refresh was in flight, the new one is
+// healthy and must not inherit the old one's fault.
+func (s *Session) poisonSelection(previous *selection, fault error) {
+	s.mu.Lock()
+	if s.sel == previous {
+		s.selFault = fault
+	}
+	s.mu.Unlock()
 }
 
 // ---------------------------------------------------------------------
@@ -757,6 +823,9 @@ func (s *Session) Select(mailbox string, options *imap.SelectOptions) (*imap.Sel
 
 	s.mu.Lock()
 	s.sel = sel
+	// A fresh snapshot is the recovery from a poisoned one, so clear the
+	// fault here rather than making the client reconnect.
+	s.selFault = nil
 	// The snapshot is brand new; there is nothing for the next Poll to
 	// discover for at least one interval.
 	s.lastPoll = time.Now()
@@ -785,6 +854,7 @@ func (s *Session) Select(mailbox string, options *imap.SelectOptions) (*imap.Sel
 func (s *Session) Unselect() error {
 	s.mu.Lock()
 	s.sel = nil
+	s.selFault = nil
 	s.mu.Unlock()
 	return nil
 }
@@ -1053,6 +1123,12 @@ func (s *Session) beginPoll() (mailbox string, sel *selection, ok bool) {
 	if s.mailbox == "" || s.sel == nil {
 		return "", nil, false
 	}
+	if s.selFault != nil {
+		// Nothing to refresh: the snapshot is already known to be wrong,
+		// and growing it would only add messages from a folder generation
+		// the client cannot address.
+		return "", nil, false
+	}
 	if s.pollInterval > 0 && time.Since(s.lastPoll) < s.pollInterval {
 		return "", nil, false
 	}
@@ -1080,21 +1156,28 @@ func (s *Session) refresh(ctx context.Context, mailbox string, sel *selection) (
 		}
 	}
 	if folder == nil {
-		// The folder was deleted underneath us. Reporting that needs a
-		// mailbox-closed response the session cannot send from Poll, so
-		// keep serving the snapshot until the client re-selects.
-		s.logger.Warn("imap: selected folder is gone from the backend, keeping the existing snapshot",
+		// The folder was deleted underneath us. A successful Folders call
+		// that does not list it is a definite statement, not a blip: a
+		// blip is a transport error, which was handled above by keeping
+		// the snapshot. So every UID in the snapshot now refers to a
+		// folder that is not there, and serving them would answer FETCH
+		// with silence rather than an error.
+		s.logger.Warn("imap: selected folder is gone from the backend, poisoning the selection",
 			"mailbox", mailbox, "folder", sel.folderKey)
+		s.poisonSelection(sel, errMailboxGone)
 		return nil, false
 	}
 	if folder.UIDValidity != sel.uidValidity {
-		// UIDVALIDITY changed, so every UID the client holds is stale. The
-		// only correct recovery is a re-SELECT, which the client must
-		// initiate; growing the snapshot across the boundary would hand
-		// out UIDs from two different generations of the folder.
-		s.logger.Warn("imap: UIDVALIDITY changed mid-session, the client must reselect",
+		// UIDVALIDITY changed, so the folder the client is addressing has
+		// been replaced by a different generation and every UID it holds
+		// now means something else, or nothing. Continuing would let it
+		// address the wrong message, which is the one failure this design
+		// must not have; the snapshot is poisoned until the client
+		// reselects.
+		s.logger.Warn("imap: UIDVALIDITY changed mid-session, poisoning the selection",
 			"mailbox", mailbox, "folder", sel.folderKey,
 			"selected", sel.uidValidity, "current", folder.UIDValidity)
+		s.poisonSelection(sel, errMailboxReselectRequired)
 		return nil, false
 	}
 
@@ -1385,9 +1468,9 @@ func (s *Session) logVanished(mailbox, folder string, uid uint32) {
 
 // Fetch implements FETCH and UID FETCH.
 func (s *Session) Fetch(w *imapserver.FetchWriter, numSet imap.NumSet, options *imap.FetchOptions) error {
-	mailbox, sel := s.snapshot()
-	if sel == nil {
-		return errNoMailboxSelected
+	mailbox, sel, err := s.selected()
+	if err != nil {
+		return err
 	}
 	if options.ModSeq || options.ChangedSince != 0 {
 		return errUnsupported("FETCH MODSEQ / CHANGEDSINCE (CONDSTORE)")

@@ -56,9 +56,20 @@ func (s *Session) Expunge(w *imapserver.ExpungeWriter, uids *imap.UIDSet) error 
 }
 
 func (s *Session) expunge(w expungeWriter, uids *imap.UIDSet) error {
-	mailbox, sel := s.snapshot()
-	if sel == nil {
-		return errNoMailboxSelected
+	mailbox, sel, err := s.selected()
+	if err != nil {
+		if uids == nil {
+			// The CLOSE path. It must succeed even on a poisoned
+			// selection, because go-imap only calls Unselect when Expunge
+			// returns nil, so failing here would leave the client with no
+			// way to close the mailbox and recover.
+			//
+			// Expunging nothing is also the only safe answer: if the
+			// folder generation changed, the UIDs carrying \Deleted in the
+			// snapshot may now name entirely different messages.
+			return nil
+		}
+		return err
 	}
 	if sel.readOnly {
 		if uids == nil {
@@ -224,9 +235,9 @@ func (m moveExpungeWriter) WriteExpunge(seqNum uint32) error {
 // prepareTransfer resolves the destination mailbox and the source UIDs
 // shared by COPY and MOVE.
 func (s *Session) prepareTransfer(numSet imap.NumSet, dest string) (mailbox string, sel *selection, folder *backend.Folder, uids []uint32, err error) {
-	mailbox, sel = s.snapshot()
-	if sel == nil {
-		return "", nil, nil, nil, errNoMailboxSelected
+	mailbox, sel, err = s.selected()
+	if err != nil {
+		return "", nil, nil, nil, err
 	}
 	if imap.IsSearchRes(numSet) {
 		return "", nil, nil, nil, errUnsupported("the SEARCHRES '$' marker")
