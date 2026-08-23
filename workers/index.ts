@@ -17,6 +17,7 @@ import {
 } from "./lib/email-helpers";
 import { SendEmailRequestSchema } from "./lib/schemas";
 import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
+import { purgeR2Keys } from "./routes/imap-api";
 import { buildAndStoreOutboundMime, storeRawMime } from "./lib/raw-mime";
 import { Folders } from "../shared/folders";
 import type { Env } from "./types";
@@ -49,6 +50,40 @@ function slugify(text: string) { // can return "" for non-alphanumeric input
 	return text.toString().toLowerCase()
 		.replace(/\s+/g, "-").replace(/[^\w-]+/g, "")
 		.replace(/--+/g, "-").replace(/^-+/, "").replace(/-+$/, "");
+}
+
+/**
+ * The `emails` columns the SPA is allowed to see — an allowlist, so a column
+ * added to the table later cannot silently start crossing this boundary.
+ *
+ * Migration 9 added `uid`, `answered`, `deleted`, `flags`, `rfc822_size` and
+ * `raw_key` for IMAP, and the two single-email reads (`getEmail`,
+ * `getThreadEmails`) hand back whole rows, so all six started appearing in SPA
+ * responses. None of them mean anything to the client and `raw_key` is an
+ * internal R2 path.
+ *
+ * The narrowing lives here rather than in the DO on purpose: the IMAP read
+ * paths, the raw-MIME code and the agent all read those same rows and
+ * legitimately need the full set. This is the one place a browser is on the
+ * other end.
+ *
+ * Keep in step with the `Email` interface in app/types/index.ts. The thread
+ * aggregate fields there (`thread_count`, `participants`, …) come from the
+ * list queries, which already project explicitly, and are simply absent here.
+ */
+const CLIENT_EMAIL_FIELDS = [
+	"id", "thread_id", "folder_id", "subject", "sender", "recipient",
+	"cc", "bcc", "date", "read", "starred", "body", "in_reply_to",
+	"email_references", "message_id", "raw_headers", "snippet", "attachments",
+] as const;
+
+function toClientEmail(email: object): Record<string, unknown> {
+	const row = email as Record<string, unknown>;
+	const projected: Record<string, unknown> = {};
+	for (const key of CLIENT_EMAIL_FIELDS) {
+		if (key in row) projected[key] = row[key];
+	}
+	return projected;
 }
 
 function intQuery(c: AppContext, key: string): number | undefined {
@@ -221,7 +256,9 @@ app.post("/api/v1/mailboxes/:mailboxId/drafts", async (c: AppContext) => {
 	const mailboxId = c.req.param("mailboxId")!;
 	const { to, cc, bcc, subject, body, in_reply_to, thread_id, draft_id } = DraftBody.parse(await c.req.json());
 	const stub = c.var.mailboxStub;
-	if (draft_id) await stub.deleteEmail(draft_id); // not atomic — create-then-delete would be safer
+	// not atomic — create-then-delete would be safer
+	const replaced = draft_id ? await stub.deleteEmail(draft_id) : null;
+	if (replaced && replaced.length > 0) await purgeR2Keys(c.env.BUCKET, replaced);
 	const messageId = crypto.randomUUID();
 	const now = new Date().toISOString();
 	await stub.createEmail(Folders.DRAFT, {
@@ -236,22 +273,36 @@ app.post("/api/v1/mailboxes/:mailboxId/drafts", async (c: AppContext) => {
 app.get("/api/v1/mailboxes/:mailboxId/emails/:id", async (c: AppContext) => {
 	const email = await c.var.mailboxStub.getEmail(c.req.param("id")!);
 	if (!email) return c.json({ error: "Email not found" }, 404);
-	return new Response(JSON.stringify(email), {
+	return new Response(JSON.stringify(toClientEmail(email)), {
 		headers: { "Content-Type": "application/json" },
 	});
 });
 
 app.put("/api/v1/mailboxes/:mailboxId/emails/:id", async (c: AppContext) => {
 	const { read, starred } = (await c.req.json()) as { read?: boolean; starred?: boolean };
+	// updateEmail echoes the row back through getEmail, so it needs the same
+	// narrowing as the read below it.
 	const email = await c.var.mailboxStub.updateEmail(c.req.param("id")!, { read, starred });
-	return email ? c.json(email) : c.json({ error: "Email not found" }, 404);
+	return email ? c.json(toClientEmail(email)) : c.json({ error: "Email not found" }, 404);
 });
 
+/**
+ * The SPA's delete. Hard delete, no Trash hop — that is a separate move.
+ *
+ * `deleteEmail` reports the R2 objects nothing references any more; this route
+ * only has to purge them. It must not compute that list itself: an IMAP COPY
+ * leaves two rows sharing one `raw_key`, so "this row is gone, therefore its
+ * blob is garbage" is false, and acting on it here would leave the surviving
+ * copy listed in the UI with no bytes behind it. `MailboxDO.#deleteEmailRows`
+ * is the one place that decides, for this route and for EXPUNGE alike.
+ */
 app.delete("/api/v1/mailboxes/:mailboxId/emails/:id", async (c: AppContext) => {
-	const id = c.req.param("id")!;
-	const attachments = await c.var.mailboxStub.deleteEmail(id);
-	if (attachments === null) return c.json({ error: "Not found" }, 404);
-	if (attachments.length > 0) await c.env.BUCKET.delete(attachments.map((att: any) => `attachments/${id}/${att.id}/${att.filename}`));
+	const orphanedKeys = await c.var.mailboxStub.deleteEmail(c.req.param("id")!);
+	if (orphanedKeys === null) return c.json({ error: "Not found" }, 404);
+	// The row is already gone and committed, so a failed purge is a leaked R2
+	// object and nothing worse. purgeR2Keys logs and swallows rather than
+	// turning a delete the user can see succeeded into a 500.
+	if (orphanedKeys.length > 0) await purgeR2Keys(c.env.BUCKET, orphanedKeys);
 	return c.body(null, 204);
 });
 
@@ -264,7 +315,10 @@ app.post("/api/v1/mailboxes/:mailboxId/emails/:id/move", async (c: AppContext) =
 // -- Threads --------------------------------------------------------
 
 app.get("/api/v1/mailboxes/:mailboxId/threads/:threadId", async (c: AppContext) => {
-	return c.json(await (c.var.mailboxStub as any).getThreadEmails(c.req.param("threadId")!));
+	const emails = (await (c.var.mailboxStub as any).getThreadEmails(
+		c.req.param("threadId")!,
+	)) as object[];
+	return c.json(emails.map(toClientEmail));
 });
 
 app.post("/api/v1/mailboxes/:mailboxId/threads/:threadId/read", async (c: AppContext) => {

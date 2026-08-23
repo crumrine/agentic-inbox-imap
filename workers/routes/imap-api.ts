@@ -927,8 +927,13 @@ function relocateResponse(
  *
  * Failures are logged and swallowed — see the call site. The keys are not
  * echoed into the log line; the count is enough to notice a systematic leak.
+ *
+ * Exported because the app's own delete route (workers/index.ts) purges the
+ * same key list, produced by the same `MailboxDO.#deleteEmailRows`. Two
+ * batching-and-swallowing helpers that had to stay in step is exactly the
+ * duplication that let the app path drift into leaking raw objects.
  */
-async function purgeR2Keys(bucket: R2Bucket, keys: string[]): Promise<void> {
+export async function purgeR2Keys(bucket: R2Bucket, keys: string[]): Promise<void> {
 	const R2_DELETE_BATCH = 1000;
 	for (let i = 0; i < keys.length; i += R2_DELETE_BATCH) {
 		const batch = keys.slice(i, i + R2_DELETE_BATCH);

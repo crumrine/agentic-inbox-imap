@@ -49,6 +49,38 @@ const SORT_COLUMN_MAP = {
 	starred: schema.emails.starred,
 } satisfies Record<SortColumn, typeof schema.emails[keyof typeof schema.emails]>;
 
+/**
+ * Per-mailbox send caps. The numbers were previously literals inside
+ * `checkSendRateLimit`, both in the comparison and in the message; hoisting
+ * them means a change to one cannot leave the other lying.
+ */
+const SEND_LIMIT_PER_HOUR = 20;
+const SEND_LIMIT_PER_DAY = 100;
+const HOUR_SECONDS = 3600;
+const DAY_SECONDS = 86400;
+
+/** A refused send, with the interval the caller should wait before retrying. */
+export interface SendRateLimitRefusal {
+	error: string;
+	/** Whole seconds, at least 1. Suitable for a `Retry-After` header. */
+	retryAfterSeconds: number;
+}
+
+/**
+ * Seconds until `oldest` falls out of a `windowSeconds` window.
+ *
+ * An absent or unparseable date falls back to the whole window rather than
+ * to zero: telling a rate-limited client to retry immediately is worse than
+ * telling it to wait too long.
+ */
+function retryAfterSeconds(oldest: string | null, windowSeconds: number): number {
+	if (!oldest) return windowSeconds;
+	const oldestMs = new Date(oldest).getTime();
+	if (Number.isNaN(oldestMs)) return windowSeconds;
+	const elapsed = Math.floor((Date.now() - oldestMs) / 1000);
+	return Math.min(windowSeconds, Math.max(1, windowSeconds - elapsed));
+}
+
 interface SearchFilterOptions {
 	query: string;
 	folder?: string;
@@ -538,30 +570,89 @@ export class MailboxDO extends DurableObject<Env> {
 		return { threadId, markedRead: true };
 	}
 
-	async deleteEmail(id: string) {
-		const email = this.db
-			.select({ id: schema.emails.id })
-			.from(schema.emails)
-			.where(eq(schema.emails.id, id))
-			.get();
+	/**
+	 * Hard-delete email rows and report every R2 object that no row references
+	 * any more. **This is the only implementation of "is this blob still
+	 * referenced", and both delete paths go through it** — IMAP EXPUNGE in the
+	 * Trash (`imapExpunge`) and the app's own delete route (`deleteEmail`).
+	 *
+	 * They have to agree, because IMAP COPY deliberately makes two rows share
+	 * one `raw_key` rather than duplicating the bytes (see the block comment
+	 * above `imapCopyMessages`). A delete that purged the raw object without
+	 * checking would gut the surviving copy: a message still listed in the UI
+	 * that serves no bytes over IMAP.
+	 *
+	 * The two kinds of key are treated differently on purpose:
+	 *
+	 * - An **attachment** key embeds its owning email id
+	 *   (`attachments/{emailId}/{attachmentId}/{filename}`), so exactly one row
+	 *   can ever reference it. Purgeable the moment that row goes, no check.
+	 * - A **`raw_key`** is shared, so it is purgeable only once the last row
+	 *   pointing at it is gone. Checked *after* the deletes, so a batch that
+	 *   removes every referencing row still reports the key exactly once.
+	 *
+	 * Callers must already be inside `transactionSync`: the reference check
+	 * reads rows this method just deleted, and is only sound if those deletes
+	 * and the check commit or roll back together.
+	 */
+	#deleteEmailRows(rows: { id: string; raw_key: string | null }[]): string[] {
+		const orphanedKeys: string[] = [];
 
-		if (!email) return null;
+		for (const row of rows) {
+			// Collected before the row goes; the attachment rows themselves
+			// follow it via ON DELETE CASCADE.
+			const attachments = [
+				...this.ctx.storage.sql.exec(
+					`SELECT id, filename FROM attachments WHERE email_id = ?1`,
+					row.id,
+				),
+			] as unknown as { id: string; filename: string }[];
+			for (const att of attachments) {
+				orphanedKeys.push(`attachments/${row.id}/${att.id}/${att.filename}`);
+			}
+			this.ctx.storage.sql.exec(`DELETE FROM emails WHERE id = ?1`, row.id);
+		}
 
-		const emailAttachments = this.db
-			.select({
-				id: schema.attachments.id,
-				filename: schema.attachments.filename,
-			})
-			.from(schema.attachments)
-			.where(eq(schema.attachments.email_id, id))
-			.all();
+		const rawKeys = new Set(
+			rows.map((row) => row.raw_key).filter((key): key is string => !!key),
+		);
+		for (const key of rawKeys) {
+			const stillReferenced = [
+				...this.ctx.storage.sql.exec(
+					`SELECT 1 FROM emails WHERE raw_key = ?1 LIMIT 1`,
+					key,
+				),
+			];
+			if (stillReferenced.length === 0) orphanedKeys.push(key);
+		}
 
-		this.db
-			.delete(schema.emails)
-			.where(eq(schema.emails.id, id))
-			.run();
+		return orphanedKeys;
+	}
 
-		return emailAttachments;
+	/**
+	 * Delete one email outright and return the R2 keys the caller should purge
+	 * — attachment blobs plus the raw `.eml`, but the raw one only if nothing
+	 * else still points at it. `null` means there was no such email.
+	 *
+	 * The return value used to be the attachment rows, and the route built the
+	 * keys itself and never purged `raw_key` at all, so every message deleted
+	 * from the web UI leaked its stored `.eml`. Reporting keys rather than rows
+	 * is what lets this share `#deleteEmailRows` with IMAP EXPUNGE; existing
+	 * callers that only null-check the result are unaffected.
+	 */
+	async deleteEmail(id: string): Promise<string[] | null> {
+		return this.ctx.storage.transactionSync(() => {
+			const row = [
+				...this.ctx.storage.sql.exec(
+					`SELECT id, raw_key FROM emails WHERE id = ?1`,
+					id,
+				),
+			][0] as unknown as { id: string; raw_key: string | null } | undefined;
+
+			if (!row) return null;
+
+			return this.#deleteEmailRows([row]);
+		});
 	}
 
 	async getAttachment(id: string) {
@@ -864,31 +955,68 @@ export class MailboxDO extends DurableObject<Env> {
 	 * Check if the mailbox has exceeded the send rate limit.
 	 * Limits: 20 emails per hour, 100 per day per mailbox.
 	 * Returns null if under limit, or an error message string if exceeded.
+	 *
+	 * Thin wrapper over `checkSendRateLimitDetailed` so the three JSON send
+	 * paths that only ever render the message keep the signature they had.
 	 */
 	async checkSendRateLimit(): Promise<string | null> {
-		const hourRow = [...this.ctx.storage.sql.exec(
-			`SELECT COUNT(*) as cnt FROM emails
-			 WHERE folder_id = ?1
-			   AND date >= datetime('now', '-1 hour')`,
-			Folders.SENT,
-		)][0] as { cnt: number } | undefined;
+		return (await this.checkSendRateLimitDetailed())?.error ?? null;
+	}
 
-		if ((hourRow?.cnt ?? 0) >= 20) {
-			return "Rate limit exceeded: max 20 emails per hour per mailbox";
+	/**
+	 * The same limit, plus how long the caller should wait.
+	 *
+	 * SMTP submission needs the wait: the gateway turns a refusal into a 4xx
+	 * for the mail client, and a client told "try again" with no interval
+	 * retries immediately and forever. The JSON API can get away with a bare
+	 * message because a human reads it.
+	 *
+	 * `retryAfterSeconds` is derived from the oldest send still inside the
+	 * window — that row aging out is precisely when a slot frees — so it is an
+	 * answer rather than a guess. It is never 0: a Retry-After of 0 is an
+	 * invitation to hot-loop.
+	 */
+	async checkSendRateLimitDetailed(): Promise<SendRateLimitRefusal | null> {
+		const hour = this.#sentInWindow("-1 hour");
+		if (hour.count >= SEND_LIMIT_PER_HOUR) {
+			return {
+				error: `Rate limit exceeded: max ${SEND_LIMIT_PER_HOUR} emails per hour per mailbox`,
+				retryAfterSeconds: retryAfterSeconds(hour.oldest, HOUR_SECONDS),
+			};
 		}
 
-		const dayRow = [...this.ctx.storage.sql.exec(
-			`SELECT COUNT(*) as cnt FROM emails
-			 WHERE folder_id = ?1
-			   AND date >= datetime('now', '-1 day')`,
-			Folders.SENT,
-		)][0] as { cnt: number } | undefined;
-
-		if ((dayRow?.cnt ?? 0) >= 100) {
-			return "Rate limit exceeded: max 100 emails per day per mailbox";
+		const day = this.#sentInWindow("-1 day");
+		if (day.count >= SEND_LIMIT_PER_DAY) {
+			return {
+				error: `Rate limit exceeded: max ${SEND_LIMIT_PER_DAY} emails per day per mailbox`,
+				retryAfterSeconds: retryAfterSeconds(day.oldest, DAY_SECONDS),
+			};
 		}
 
 		return null;
+	}
+
+	/**
+	 * Rows in `sent` dated inside `modifier` (a SQLite datetime modifier),
+	 * with the earliest such date.
+	 *
+	 * The `date >= datetime('now', ...)` comparison is kept exactly as it was:
+	 * `date` holds ISO 8601 with a `T` and a `Z` while `datetime()` yields a
+	 * space-separated form, so this is a lexicographic comparison that is
+	 * marginally generous at the boundary. Tightening it would quietly change
+	 * what every existing send path is allowed to do, which is not this
+	 * change's business.
+	 */
+	#sentInWindow(modifier: string): { count: number; oldest: string | null } {
+		const row = [...this.ctx.storage.sql.exec(
+			`SELECT COUNT(*) as cnt, MIN(date) as oldest FROM emails
+			 WHERE folder_id = ?1
+			   AND date >= datetime('now', ?2)`,
+			Folders.SENT,
+			modifier,
+		)][0] as { cnt: number; oldest: string | null } | undefined;
+
+		return { count: row?.cnt ?? 0, oldest: row?.oldest ?? null };
 	}
 
 	// ── Email creation (Drizzle) ───────────────────────────────────
@@ -1301,9 +1429,10 @@ export class MailboxDO extends DurableObject<Env> {
 	 * The copy is a new row with a new id and a freshly minted UID in the
 	 * destination, carrying every column of the original **including
 	 * `raw_key`** — the two rows share one R2 object rather than duplicating
-	 * the bytes. `imapExpunge` is the only thing that deletes those bytes and
-	 * it refuses to while any row still points at the key, so the sharing is
-	 * safe in both directions.
+	 * the bytes. Every path that deletes those bytes goes through
+	 * `#deleteEmailRows` — IMAP EXPUNGE and the app's own delete alike — and it
+	 * refuses to report the key while any row still points at it, so the
+	 * sharing is safe in both directions.
 	 *
 	 * Attachment rows are deliberately **not** copied. Attachment blobs live
 	 * at `attachments/{emailId}/{attachmentId}/{filename}` — the owning email
@@ -1427,39 +1556,10 @@ export class MailboxDO extends DurableObject<Env> {
 			}
 
 			// ── Trash: the one destructive path ──
-			const orphanedKeys: string[] = [];
-			for (const row of targets) {
-				// Collected before the row goes: an attachment blob's key
-				// embeds its owning email id, so it is owned by exactly this
-				// message and nothing else can be referencing it.
-				const attachments = [
-					...this.ctx.storage.sql.exec(
-						`SELECT id, filename FROM attachments WHERE email_id = ?1`,
-						row.id,
-					),
-				] as unknown as { id: string; filename: string }[];
-				for (const att of attachments) {
-					orphanedKeys.push(`attachments/${row.id}/${att.id}/${att.filename}`);
-				}
-				// Attachment rows go with it via ON DELETE CASCADE.
-				this.ctx.storage.sql.exec(`DELETE FROM emails WHERE id = ?1`, row.id);
-			}
-
-			// Raw bytes are shared with any COPY of this message, so the key
-			// is only purgeable once the last row pointing at it is gone.
-			// Checked after the deletes, inside the same transaction.
-			const rawKeys = new Set(
-				targets.map((row) => row.raw_key).filter((key): key is string => !!key),
-			);
-			for (const key of rawKeys) {
-				const stillReferenced = [
-					...this.ctx.storage.sql.exec(
-						`SELECT 1 FROM emails WHERE raw_key = ?1 LIMIT 1`,
-						key,
-					),
-				];
-				if (stillReferenced.length === 0) orphanedKeys.push(key);
-			}
+			// Attachment blobs are single-owner and go unconditionally; the
+			// shared raw_key is ref-counted. #deleteEmailRows owns both rules
+			// so the app's delete route cannot drift from this one.
+			const orphanedKeys = this.#deleteEmailRows(targets);
 
 			return { status: "ok", expunged, orphanedKeys };
 		});
