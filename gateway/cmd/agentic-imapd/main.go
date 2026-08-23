@@ -10,10 +10,17 @@
 // internal/config.CheckBindAddr) and terminates TLS using certificates
 // produced by `tailscale cert`.
 //
-// The IMAP session (internal/imap.Session) is read-only: it serves
-// CAPABILITY, NOOP, LOGOUT, AUTHENTICATE PLAIN, LOGIN, LIST, LSUB, STATUS,
-// SELECT, EXAMINE, CLOSE, UNSELECT, SEARCH and FETCH. Every mutating
-// command answers NO. Writes and submission are phase 2.
+// The IMAP session (internal/imap.Session) is read/write: CAPABILITY, NOOP,
+// LOGOUT, AUTHENTICATE PLAIN, LOGIN, ID, LIST, LSUB, STATUS, SELECT, EXAMINE,
+// CLOSE, UNSELECT, SEARCH, FETCH, IDLE, STORE, COPY, MOVE, EXPUNGE and APPEND.
+//
+// Read-only was the original scope and it did not survive contact with real
+// clients: a mail client treats a refused routine command as a fatal server
+// error and reconnects in a loop, so every mutating command had to be
+// implemented. IDLE is polling rather than push.
+//
+// SMTP submission (internal/smtp) runs alongside on a separate listener and is
+// optional: if it cannot start, IMAP still serves.
 package main
 
 import (
@@ -21,16 +28,20 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/emersion/go-imap/v2/imapserver"
+	gosmtp "github.com/emersion/go-smtp"
 
 	"github.com/crumrine/agentic-inbox/gateway/internal/backend"
 	"github.com/crumrine/agentic-inbox/gateway/internal/config"
 	imapsession "github.com/crumrine/agentic-inbox/gateway/internal/imap"
+	smtpsession "github.com/crumrine/agentic-inbox/gateway/internal/smtp"
 	"io"
 )
 
@@ -130,14 +141,29 @@ func run() error {
 		errCh <- server.Serve(imapsession.WrapListener(listener))
 	}()
 
-	select {
-	case err := <-errCh:
-		if err != nil {
-			return fmt.Errorf("imap listener: %w", err)
+	// SMTP submission is an addition, and it must never be the reason a
+	// working IMAP deployment stops serving. Every failure below is logged
+	// and stepped over: a listener that cannot bind, a disabled address, a
+	// missing Tailscale interface. A client then gets connection refused on
+	// 465, which is loud, while mail keeps being readable.
+	smtpServer, smtpDone := startSubmission(cfg, backendClient, tlsConfig, logger)
+
+	shutdown := func() error {
+		logger.Info("shutdown signal received, closing listeners")
+
+		var smtpErr error
+		if smtpServer != nil {
+			// Graceful: let an in-flight submission finish rather than
+			// dropping a message the user already handed us.
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), smtpShutdownGrace)
+			smtpErr = smtpServer.Shutdown(shutdownCtx)
+			cancel()
+			<-smtpDone
+			if smtpErr != nil {
+				logger.Error("smtp submission did not shut down cleanly", "err", smtpErr)
+			}
 		}
-		return nil
-	case <-ctx.Done():
-		logger.Info("shutdown signal received, closing listener")
+
 		closeErr := server.Close()
 		<-errCh // wait for Serve to return
 		if closeErr != nil {
@@ -146,6 +172,73 @@ func run() error {
 		logger.Info("shutdown complete")
 		return nil
 	}
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			return fmt.Errorf("imap listener: %w", err)
+		}
+		return nil
+	case <-ctx.Done():
+		return shutdown()
+	}
+}
+
+// smtpShutdownGrace bounds how long an in-flight submission may take to
+// finish once a shutdown starts.
+const smtpShutdownGrace = 30 * time.Second
+
+// startSubmission brings up the SMTP submission listener, or returns nil
+// when it is disabled or cannot be started. It never returns an error: see
+// the call site for why.
+func startSubmission(cfg *config.Config, be *backend.Client, tlsConfig *tls.Config, logger *slog.Logger) (*gosmtp.Server, <-chan struct{}) {
+	done := make(chan struct{})
+
+	if cfg.SMTPAddr == "" {
+		close(done)
+		logger.Info("smtp submission is disabled", "reason",
+			"no address configured and no Tailscale interface detected; set "+config.EnvSMTPAddr+" to enable")
+		return nil, done
+	}
+
+	listener, err := tls.Listen("tcp", cfg.SMTPAddr, tlsConfig)
+	if err != nil {
+		close(done)
+		logger.Error("smtp submission could not bind, continuing with IMAP only",
+			"addr", cfg.SMTPAddr, "err", err)
+		return nil, done
+	}
+
+	server := smtpsession.NewServer(be, smtpsession.Options{
+		Domain: submissionDomain(cfg),
+		Logger: logger,
+	})
+
+	logger.Info("smtp submission listening",
+		"addr", cfg.SMTPAddr, "max_message_bytes", server.MaxMessageBytes)
+
+	go func() {
+		defer close(done)
+		// Implicit TLS at the listener, and the wrapper drops anything that
+		// somehow is not TLS before the greeting.
+		if err := server.Serve(smtpsession.WrapListener(listener)); err != nil {
+			logger.Error("smtp submission listener stopped", "err", err)
+		}
+	}()
+
+	return server, done
+}
+
+// submissionDomain is the hostname announced in the SMTP greeting. The TLS
+// certificate comes from `tailscale cert <magicdns-name>`, so its subject
+// is the right name to use; the listen host is the fallback.
+func submissionDomain(cfg *config.Config) string {
+	if len(cfg.TLSCertFile) > 0 {
+		if host, _, err := net.SplitHostPort(cfg.SMTPAddr); err == nil && host != "" {
+			return host
+		}
+	}
+	return "agentic-imapd"
 }
 
 // newLogger builds a slog.Logger writing to stderr at the level named by

@@ -4,7 +4,10 @@
 
 package backend
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // ErrorKind classifies a backend error so the IMAP layer can map it to the
 // correct IMAP response without inspecting HTTP status codes itself.
@@ -46,6 +49,11 @@ type APIError struct {
 	StatusCode int // 0 for transport-level errors that never got a response
 	Body       string
 	Err        error // underlying transport error, if any
+
+	// RetryAfter is the parsed Retry-After header, zero when absent or
+	// unparseable. Callers that turn a 429 into a protocol-level
+	// try-again-later use it to tell the client how long to wait.
+	RetryAfter time.Duration
 }
 
 func (e *APIError) Error() string {

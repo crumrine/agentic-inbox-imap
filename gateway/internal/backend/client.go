@@ -222,6 +222,21 @@ func readErrorBody(resp *http.Response) string {
 	return string(bytes.TrimSpace(b))
 }
 
+// parseRetryAfter reads the delta-seconds form of a Retry-After header. The
+// HTTP-date form is legal but not something the Worker emits, so an
+// unparseable value simply yields zero rather than an error.
+func parseRetryAfter(v string) time.Duration {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0
+	}
+	seconds, err := strconv.Atoi(v)
+	if err != nil || seconds < 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
+}
+
 // newTransportError wraps a transport-level failure (connection refused,
 // DNS failure, TLS failure, etc). Context cancellation/deadline errors are
 // NOT wrapped here — callers should check ctx.Err() first and propagate it
@@ -272,6 +287,7 @@ func (c *Client) doRequest(ctx context.Context, timeout time.Duration, method, p
 			Kind:       classifyStatus(resp.StatusCode),
 			StatusCode: resp.StatusCode,
 			Body:       readErrorBody(resp),
+			RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After")),
 		}
 	}
 
@@ -472,6 +488,30 @@ func (c *Client) Append(ctx context.Context, mailbox, folder string, body io.Rea
 	var result AppendResult
 	path := mailboxPath(mailbox) + "/" + url.PathEscape(folder) + "/append"
 	err := c.doRequest(ctx, c.uploadTimeout, http.MethodPost, path, query, body, "message/rfc822", size, &result)
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// Submit calls POST /api/imap/v1/{mailbox}/submit, streaming a raw RFC 5322
+// message for outbound delivery.
+//
+// The body is streamed and never buffered, for the same reason as Append.
+// Unlike Append the length is not known up front: SMTP DATA has no declared
+// size, and the client's SIZE= hint is advisory rather than exact, so
+// sending it as a Content-Length would break the request whenever a client
+// rounded. The request is therefore chunked.
+func (c *Client) Submit(ctx context.Context, mailbox string, body io.Reader, envelopeFrom string, envelopeTo []string) (*SubmitResult, error) {
+	query := url.Values{}
+	query.Set("envelopeFrom", envelopeFrom)
+	if len(envelopeTo) > 0 {
+		query.Set("envelopeTo", strings.Join(envelopeTo, ","))
+	}
+
+	var result SubmitResult
+	path := mailboxPath(mailbox) + "/submit"
+	err := c.doRequest(ctx, c.uploadTimeout, http.MethodPost, path, query, body, "message/rfc822", -1, &result)
 	if err != nil {
 		return nil, err
 	}

@@ -132,3 +132,14 @@ type AppendResult struct {
 	UIDValidity  uint32 `json:"uidValidity"`
 	Deduplicated bool   `json:"deduplicated"`
 }
+
+// SubmitResult is the response body of POST /api/imap/v1/{mailbox}/submit.
+//
+// SentUID and SentUIDValidity identify the copy the Worker filed in the
+// Sent folder, so a submission and the record of it are one operation
+// rather than two that can disagree.
+type SubmitResult struct {
+	MessageID       string `json:"messageId"`
+	SentUID         uint32 `json:"sentUid"`
+	SentUIDValidity uint32 `json:"sentUidValidity"`
+}

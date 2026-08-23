@@ -23,6 +23,7 @@ const (
 	EnvAccessClientSecret = "AGENTIC_ACCESS_CLIENT_SECRET"
 	EnvAccessCookie       = "AGENTIC_ACCESS_COOKIE"
 	EnvIMAPAddr           = "AGENTIC_IMAP_ADDR"
+	EnvSMTPAddr           = "AGENTIC_SMTP_ADDR"
 	EnvTLSCert            = "AGENTIC_TLS_CERT"
 	EnvTLSKey             = "AGENTIC_TLS_KEY"
 	EnvLogLevel           = "AGENTIC_LOG_LEVEL"
@@ -32,6 +33,21 @@ const (
 // DefaultIMAPPort is used when AGENTIC_IMAP_ADDR is unset and a Tailscale
 // interface address can be auto-detected.
 const DefaultIMAPPort = "993"
+
+// DefaultSMTPPort is used when AGENTIC_SMTP_ADDR is unset and a Tailscale
+// interface address can be auto-detected. 465 is implicit TLS submission;
+// there is deliberately no 587 STARTTLS path.
+const DefaultSMTPPort = "465"
+
+// smtpDisabledValues turn the submission listener off explicitly. Leaving
+// AGENTIC_SMTP_ADDR unset enables it on the detected Tailscale address, so
+// there has to be a way to say no.
+var smtpDisabledValues = map[string]bool{
+	"off":      true,
+	"none":     true,
+	"disabled": true,
+	"false":    true,
+}
 
 // DefaultLogLevel is used when AGENTIC_LOG_LEVEL is unset.
 const DefaultLogLevel = "info"
@@ -57,6 +73,12 @@ type Config struct {
 	// IMAPAddr is the address agentic-imapd listens on for IMAP
 	// connections, e.g. "100.64.1.2:993".
 	IMAPAddr string
+
+	// SMTPAddr is the address the submission listener binds, e.g.
+	// "100.64.1.2:465". Empty means submission is disabled, either because
+	// it was turned off explicitly or because no Tailscale address could
+	// be detected for it. IMAP runs either way.
+	SMTPAddr string
 
 	// TLSCertFile and TLSKeyFile are paths to `tailscale cert` output.
 	TLSCertFile string
@@ -151,6 +173,11 @@ func load(lookup lookupFunc) (*Config, error) {
 		return nil, fmt.Errorf("config: refusing to start: %w", err)
 	}
 
+	smtpAddr, err := loadSMTPAddr(lookup, allowPublicBind)
+	if err != nil {
+		return nil, err
+	}
+
 	logLevel := DefaultLogLevel
 	if raw, ok := lookup(EnvLogLevel); ok && strings.TrimSpace(raw) != "" {
 		logLevel = raw
@@ -162,11 +189,41 @@ func load(lookup lookupFunc) (*Config, error) {
 		AccessClientSecret: clientSecret,
 		AccessCookie:       accessCookie,
 		IMAPAddr:           addr,
+		SMTPAddr:           smtpAddr,
 		TLSCertFile:        certFile,
 		TLSKeyFile:         keyFile,
 		LogLevel:           logLevel,
 		AllowPublicBind:    allowPublicBind,
 	}, nil
+}
+
+// loadSMTPAddr resolves the submission listen address.
+//
+// Unset means "the detected Tailscale address on 465", matching IMAP. If
+// no such address can be found the result is empty rather than an error:
+// submission is an addition, and it must never be the reason a working
+// IMAP deployment stops starting.
+func loadSMTPAddr(lookup lookupFunc, allowPublic bool) (string, error) {
+	raw, ok := lookup(EnvSMTPAddr)
+	trimmed := strings.TrimSpace(raw)
+
+	if ok && smtpDisabledValues[strings.ToLower(trimmed)] {
+		return "", nil
+	}
+
+	if !ok || trimmed == "" {
+		detected, err := DefaultTailscaleAddrPort(DefaultSMTPPort)
+		if err != nil {
+			// Not fatal, by design. See the doc comment.
+			return "", nil
+		}
+		trimmed = detected
+	}
+
+	if err := CheckBindAddr(trimmed, allowPublic); err != nil {
+		return "", fmt.Errorf("config: refusing to start: %s: %w", EnvSMTPAddr, err)
+	}
+	return trimmed, nil
 }
 
 // tailscaleCGNAT is the CGNAT range Tailscale allocates addresses from.
@@ -250,6 +307,12 @@ func checkBindAddr(addr string, allowPublic bool, resolve resolveFunc) error {
 // Tailscale CGNAT range and returns "ip:993". It returns an error if none is
 // found.
 func DefaultTailscaleAddr() (string, error) {
+	return DefaultTailscaleAddrPort(DefaultIMAPPort)
+}
+
+// DefaultTailscaleAddrPort scans local network interfaces for an address in
+// the Tailscale CGNAT range and returns "ip:port".
+func DefaultTailscaleAddrPort(port string) (string, error) {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		return "", fmt.Errorf("listing network interfaces: %w", err)
@@ -260,7 +323,7 @@ func DefaultTailscaleAddr() (string, error) {
 			continue
 		}
 		if tailscaleCGNAT.Contains(ipNet.IP) {
-			return net.JoinHostPort(ipNet.IP.String(), DefaultIMAPPort), nil
+			return net.JoinHostPort(ipNet.IP.String(), port), nil
 		}
 	}
 	return "", fmt.Errorf("no interface address found in 100.64.0.0/10 (is Tailscale up?)")
@@ -298,8 +361,8 @@ func (c *Config) redacted() string {
 	}
 	return fmt.Sprintf(
 		"config.Config{InboxURL:%q, AccessClientID:%q, AccessClientSecret:%s, AccessCookie:%s, "+
-			"IMAPAddr:%q, TLSCertFile:%q, TLSKeyFile:%q, LogLevel:%q, AllowPublicBind:%t}",
+			"IMAPAddr:%q, SMTPAddr:%q, TLSCertFile:%q, TLSKeyFile:%q, LogLevel:%q, AllowPublicBind:%t}",
 		c.InboxURL, c.AccessClientID, secret, cookie,
-		c.IMAPAddr, c.TLSCertFile, c.TLSKeyFile, c.LogLevel, c.AllowPublicBind,
+		c.IMAPAddr, c.SMTPAddr, c.TLSCertFile, c.TLSKeyFile, c.LogLevel, c.AllowPublicBind,
 	)
 }

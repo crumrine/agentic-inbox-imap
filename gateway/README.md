@@ -5,7 +5,7 @@ A small, stateless IMAP/SMTP gateway for [agentic-inbox](../README.md).
 Cloudflare Workers cannot accept inbound TCP connections, so IMAP cannot
 terminate in the Worker. `agentic-imapd` is an always-on process - meant to
 run on a small VPS or home server on your [Tailscale](https://tailscale.com)
-network - that speaks IMAP (and, eventually, SMTP submission) to mail
+network - that speaks IMAP and SMTP submission to mail
 clients and calls the Worker's HTTP API as its only backing store.
 
 **It is stateless.** No mail, no database, no durable state on disk. The
@@ -70,8 +70,39 @@ mailbox under a client that was never sent an EXPUNGE is worse than a stale
 entry.
 
 Not served: mailbox management (CREATE, DELETE, RENAME, SUBSCRIBE) answers
-NO and keeps the connection alive. SMTP submission (`internal/smtp`) is
-still an empty placeholder.
+NO and keeps the connection alive.
+
+## SMTP submission
+
+`internal/smtp` accepts outbound mail on **465, implicit TLS only**, using
+the same certificate, the same tailnet bind interlock and the same app
+passwords as IMAP. There is deliberately no cleartext port and no STARTTLS
+on 587: the whole posture is that nothing listens publicly and credentials
+never cross unencrypted. A cleartext connection is dropped by the listener
+before it is greeted, and `AllowInsecureAuth` is off so AUTH is not even
+advertised on one.
+
+Every message is streamed to `POST /api/imap/v1/{mailbox}/submit`, never
+buffered, which is what puts it through `validateSender`, the per-mailbox
+rate limit and the Sent folder. `MAIL FROM` must equal the authenticated
+mailbox and is rejected before DATA, so a client is told before it uploads.
+`SIZE 5242880` is advertised, matching Cloudflare's outbound cap, so an
+oversize message is refused up front rather than after the upload.
+
+The temporary/permanent split on failures is deliberately asymmetric. Only
+the statuses the contract defines as the client's own fault are permanent
+(403 sender validation to 550, 413 too large to 552); everything else,
+including anything unrecognised, is a 451 so the client queues and retries.
+Losing a message the user wrote is worse than a retry loop, which is at
+least visible.
+
+The `From:` header is **not** checked here, only the envelope sender. See
+`internal/smtp/smtp.go` for why.
+
+Submission is optional and can never stop IMAP from starting.
+`AGENTIC_SMTP_ADDR` defaults to the detected Tailscale address on 465; set
+it to `off` to disable, and if the listener cannot bind the daemon logs the
+failure and carries on serving IMAP.
 
 Verified against iOS Mail over the tailnet with a live Worker: connect, full
 folder sync, UID SEARCH, UID FETCH with BODY.PEEK[HEADER] and partial ranges,
@@ -79,7 +110,10 @@ IDLE holding open until DONE, flag writes persisting, and COPY, MOVE and
 EXPUNGE against a real mailbox (COPYUID correct, descending EXPUNGE, no UID
 reuse). APPEND is covered against a fake backend and an in-process go-imap
 server, including appending a real message over the wire and reading it back
-out, but has not yet run against a real client.
+out, but has not yet run against a real client. SMTP submission is covered
+against a fake backend and a real go-smtp server over a pipe, including a
+full AUTH/MAIL/RCPT/DATA/QUIT exchange, but has not yet carried a real
+message.
 
 ## Why Tailscale-only
 
