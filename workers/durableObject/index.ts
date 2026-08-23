@@ -1465,6 +1465,235 @@ export class MailboxDO extends DurableObject<Env> {
 		});
 	}
 
+	// ── IMAP write API: APPEND (DEV-672) ───────────────────────────────
+	//
+	// APPEND is the last routine command the gateway used to answer `NO` to,
+	// and the same trap as ID, STORE and EXPUNGE before it: iOS Mail APPENDs
+	// to save a draft and most clients APPEND a Sent copy after submission,
+	// and a refusal on either drops the client into a reconnect loop.
+	//
+	// Split in two on purpose. `imapAppendDedup` runs first and answers "does
+	// this folder exist, and is this a Sent copy I already have?" so the route
+	// can 404, or report a duplicate, **before** spending an R2 PUT on bytes it
+	// would immediately have to delete again. The Sent-copy case is the common
+	// one, so that saving is the normal path, not a corner case. `imapAppend`
+	// then re-checks the same duplicate inside its transaction, so a race
+	// between the two calls still resolves to one row.
+
+	/**
+	 * Pre-flight for APPEND: folder resolution plus the Sent-copy duplicate
+	 * check. See the block comment above.
+	 *
+	 * **Deduplication applies to `sent` and nowhere else.** The duplicate it
+	 * exists to prevent is specific to Sent: a client APPENDs a copy of what it
+	 * submitted, and this app already wrote its own row on the send path, so
+	 * without dedup every sent message appears twice. No other folder has a
+	 * second writer.
+	 *
+	 * Applying the rule anywhere else would be silent data loss, not a saving.
+	 * Clients edit a draft by re-APPENDing it **with the same Message-ID** and
+	 * then expunging the old copy: a dedup hit there would return the original
+	 * uid without ever writing the new body, and the client would then expunge
+	 * the copy it believed it had just replaced. So every folder but Sent
+	 * always gets a new row, matching Message-ID or not.
+	 *
+	 * `flags` is not decoration on this path. A dedup hit still has to honour
+	 * what the client asked for — a Sent copy appended `\Seen` against a row
+	 * the app recorded unread must end up read — so the flags are folded into
+	 * the existing message here, additively, through the same
+	 * `applyStoreFlag` the STORE endpoint uses.
+	 */
+	async imapAppendDedup(
+		folderKey: string,
+		messageId: string | null,
+		flags: string[],
+	): Promise<ImapAppendDedupResult> {
+		const folder = this.#imapFolderRow(folderKey);
+		if (!folder) return { status: "no-folder" };
+
+		const uidValidity = Number(folder.uid_validity);
+		if (folder.id !== Folders.SENT || !messageId) {
+			return { status: "ok", uidValidity, existingUid: null };
+		}
+
+		return this.ctx.storage.transactionSync((): ImapAppendDedupResult => {
+			const existingUid = this.#imapFindUidByMessageId(folder.id, messageId);
+			if (existingUid !== null) this.#imapAddFlags(folder.id, existingUid, flags);
+			return { status: "ok", uidValidity, existingUid };
+		});
+	}
+
+	/**
+	 * IMAP APPEND: insert a message the client handed us into `folderKey`.
+	 *
+	 * The raw bytes are already in R2 by the time this runs — the route puts
+	 * them there and passes the key — because this method is synchronous
+	 * inside a transaction and must not be doing I/O. That ordering also means
+	 * a row never references bytes that are not there yet.
+	 *
+	 * The Sent-only duplicate check is repeated here, inside the transaction,
+	 * so two clients appending the same Sent copy at once still produce one
+	 * row. A duplicate returns the **existing** uid and writes no new row, so
+	 * the client's `APPENDUID` still names a real message.
+	 *
+	 * Flags fold through the same `applyStoreFlag` the STORE endpoint uses, so
+	 * the two cannot disagree about what `\Seen` means or which flags are
+	 * unsettable. `\Recent` and `\Draft` are ignored rather than rejected:
+	 * `\Recent` is session state nothing here keeps and `\Draft` is derived
+	 * from the folder.
+	 */
+	async imapAppend(
+		folderKey: string,
+		message: ImapAppendMessage,
+	): Promise<ImapAppendResult> {
+		const folder = this.#imapFolderRow(folderKey);
+		if (!folder) return { status: "no-folder" };
+
+		const folderId = folder.id;
+		const uidValidity = Number(folder.uid_validity);
+
+		const state = imapFlagStateFrom(message.flags);
+
+		// Same invariant createEmail keeps: a message in Sent is read by
+		// construction, because the sender obviously saw what they wrote and
+		// an "unread" sent copy inflates every thread's unread count. A client
+		// appending its Sent copy almost always sets \Seen anyway; this is the
+		// one that does not.
+		const read = state.read === 1 || folderId === Folders.SENT ? 1 : 0;
+
+		return this.ctx.storage.transactionSync((): ImapAppendResult => {
+			// Sent only, for the reasons on imapAppendDedup. Re-checked here
+			// rather than trusted from the pre-flight so a concurrent APPEND
+			// of the same Sent copy cannot slip a second row in between.
+			if (folderId === Folders.SENT) {
+				const existing = this.#imapFindUidByMessageId(folderId, message.messageId);
+				if (existing !== null) {
+					this.#imapAddFlags(folderId, existing, message.flags);
+					return { status: "ok", uid: existing, uidValidity, deduplicated: true };
+				}
+			}
+
+			// Allocated immediately before the INSERT with no await between,
+			// exactly as createEmail does, so nothing can separate the
+			// allocation from the row that claims it.
+			const uid = this.#allocateUid(folderId);
+
+			this.ctx.storage.sql.exec(
+				`INSERT INTO emails (
+				     id, folder_id, subject, sender, recipient, cc, bcc, date,
+				     read, starred, body, in_reply_to, email_references, thread_id,
+				     message_id, raw_headers, uid, answered, deleted, flags,
+				     rfc822_size, raw_key
+				 ) VALUES (
+				     ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
+				     ?9, ?10, ?11, ?12, ?13, ?14,
+				     ?15, ?16, ?17, ?18, ?19, ?20,
+				     ?21, ?22
+				 )`,
+				message.id,
+				folderId,
+				message.subject,
+				message.sender,
+				message.recipient,
+				message.cc,
+				message.bcc,
+				message.date,
+				read,
+				state.starred,
+				message.body,
+				message.inReplyTo,
+				message.references.length > 0 ? JSON.stringify(message.references) : null,
+				message.threadId,
+				message.messageId,
+				message.rawHeaders,
+				uid,
+				state.answered,
+				state.deleted,
+				state.keywords.length > 0 ? JSON.stringify(state.keywords) : null,
+				message.rfc822Size,
+				message.rawKey,
+			);
+
+			return { status: "ok", uid, uidValidity, deduplicated: false };
+		});
+	}
+
+	/**
+	 * Lowest uid in `folderId` carrying `messageId`, or null.
+	 *
+	 * Null for an absent or empty Message-ID by design: RFC 5322 makes the
+	 * header optional, and treating "no id" as an id would collapse every
+	 * anonymous message in a folder into one row.
+	 */
+	#imapFindUidByMessageId(folderId: string, messageId: string | null): number | null {
+		if (!messageId) return null;
+		const row = [
+			...this.ctx.storage.sql.exec(
+				`SELECT uid
+				   FROM emails
+				  WHERE folder_id = ?1 AND message_id = ?2 AND uid IS NOT NULL
+				  ORDER BY uid ASC
+				  LIMIT 1`,
+				folderId,
+				messageId,
+			),
+		][0] as unknown as { uid: number } | undefined;
+		return row ? Number(row.uid) : null;
+	}
+
+	/**
+	 * Additively set `flags` on one existing message. Used only by the APPEND
+	 * dedup path, where the client's flags must not be dropped just because
+	 * the message it appended was already here.
+	 *
+	 * Additive, never subtractive: APPEND states what the message should have,
+	 * it does not describe flags it wants cleared, so a dedup hit can only ever
+	 * turn flags on. Synchronous, because both callers are inside
+	 * `transactionSync`.
+	 */
+	#imapAddFlags(folderId: string, uid: number, flags: string[]): void {
+		if (flags.length === 0) return;
+
+		const row = [
+			...this.ctx.storage.sql.exec(
+				`SELECT COALESCE(read, 0)     AS read,
+				        COALESCE(starred, 0)  AS starred,
+				        COALESCE(answered, 0) AS answered,
+				        COALESCE(deleted, 0)  AS deleted,
+				        flags                 AS flags
+				   FROM emails
+				  WHERE folder_id = ?1 AND uid = ?2`,
+				folderId,
+				uid,
+			),
+		][0] as unknown as ImapFlagRow | undefined;
+		if (!row) return;
+
+		const state: ImapFlagState = {
+			read: row.read ? 1 : 0,
+			starred: row.starred ? 1 : 0,
+			answered: row.answered ? 1 : 0,
+			deleted: row.deleted ? 1 : 0,
+			keywords: parseJsonStringArray(row.flags),
+			dirty: false,
+		};
+		for (const flag of flags) applyStoreFlag(state, flag, true);
+		if (!state.dirty) return;
+
+		this.ctx.storage.sql.exec(
+			`UPDATE emails
+			    SET read = ?3, starred = ?4, answered = ?5, deleted = ?6, flags = ?7
+			  WHERE folder_id = ?1 AND uid = ?2`,
+			folderId,
+			uid,
+			state.read,
+			state.starred,
+			state.answered,
+			state.deleted,
+			state.keywords.length > 0 ? JSON.stringify(state.keywords) : null,
+		);
+	}
+
 	/** Shared body of COPY and MOVE; they differ only in what they do per uid. */
 	#imapRelocateMessages(
 		folderKey: string,
@@ -1552,17 +1781,19 @@ export class MailboxDO extends DurableObject<Env> {
 	}
 
 	/** Resolve a folder by id (canonical) or, tolerantly, by display name. */
-	#imapFolderRow(folderKey: string): { id: string; uid_next: number } | undefined {
+	#imapFolderRow(folderKey: string): ImapFolderRow | undefined {
 		return [
 			...this.ctx.storage.sql.exec(
-				`SELECT id, COALESCE(uid_next, 1) AS uid_next
+				`SELECT id,
+				        COALESCE(uid_validity, 1) AS uid_validity,
+				        COALESCE(uid_next, 1)     AS uid_next
 				   FROM folders
 				  WHERE id = ?1 OR lower(id) = lower(?1) OR lower(name) = lower(?1)
 				  ORDER BY CASE WHEN id = ?1 THEN 0 ELSE 1 END
 				  LIMIT 1`,
 				folderKey,
 			),
-		][0] as unknown as { id: string; uid_next: number } | undefined;
+		][0] as unknown as ImapFolderRow | undefined;
 	}
 }
 
@@ -1758,6 +1989,71 @@ function imapUidList(uids: number[]): number[] {
 	return [...seen].sort((a, b) => a - b);
 }
 
+/** Row shape of the folder resolution shared by every IMAP method. */
+interface ImapFolderRow {
+	id: string;
+	uid_validity: number;
+	uid_next: number;
+}
+
+/**
+ * Everything APPEND needs to write one row, already extracted from the raw
+ * bytes by the route.
+ *
+ * The raw message itself is deliberately **not** in here. It is streamed
+ * straight from the request into R2 by the route and only its key and byte
+ * length reach the Durable Object, so a 25 MiB APPEND never crosses the RPC
+ * boundary and never sits in the DO's isolate.
+ */
+export interface ImapAppendMessage {
+	/** Row id, minted by the route; also the second half of the R2 raw key. */
+	id: string;
+	/** Message-ID **without** angle brackets, or null. Dedup key. */
+	messageId: string | null;
+	subject: string;
+	sender: string;
+	recipient: string;
+	cc: string | null;
+	bcc: string | null;
+	/** INTERNALDATE, ISO 8601. The client's `internalDate`, or receive time. */
+	date: string;
+	body: string;
+	inReplyTo: string | null;
+	references: string[];
+	threadId: string | null;
+	/** JSON array of `{key, value}`, same shape the inbound parser writes. */
+	rawHeaders: string | null;
+	/** R2 key of the stored raw bytes, or null if the PUT failed. */
+	rawKey: string | null;
+	/** Exact byte length of what the client sent. Never an estimate here. */
+	rfc822Size: number;
+	/** IMAP flags from the APPEND, raw; folded by the same helper as STORE. */
+	flags: string[];
+}
+
+/**
+ * Result of the APPEND pre-flight.
+ *
+ * `existingUid` is non-null only for a Sent-folder duplicate — see
+ * `imapAppendDedup` for why the rule stops there — and by then the client's
+ * flags have already been applied to that message.
+ */
+export type ImapAppendDedupResult =
+	| { status: "no-folder" }
+	| { status: "ok"; uidValidity: number; existingUid: number | null };
+
+/**
+ * Result of an APPEND.
+ *
+ * `deduplicated` is the difference between "here is your new message" and
+ * "you already had this one, here is where it lives" — the uid is real and
+ * usable in both cases, which is what lets the gateway answer `APPENDUID`
+ * either way instead of refusing.
+ */
+export type ImapAppendResult =
+	| { status: "no-folder" }
+	| { status: "ok"; uid: number; uidValidity: number; deduplicated: boolean };
+
 /** Row shape of the state read in MailboxDO.imapStoreFlags. */
 interface ImapFlagRow {
 	uid: number;
@@ -1801,6 +2097,24 @@ const IMAP_SYSTEM_FLAG_COLUMNS: Record<string, "read" | "starred" | "answered" |
  * STORE, which is the failure mode this whole endpoint exists to avoid.
  */
 export const IMAP_MAX_KEYWORDS_PER_MESSAGE = 32;
+
+/**
+ * A fresh flag state with `flags` folded in, for a message that does not exist
+ * yet. Shares `applyStoreFlag` with STORE so APPEND and STORE cannot disagree
+ * about which flags are settable.
+ */
+function imapFlagStateFrom(flags: string[]): ImapFlagState {
+	const state: ImapFlagState = {
+		read: 0,
+		starred: 0,
+		answered: 0,
+		deleted: 0,
+		keywords: [],
+		dirty: false,
+	};
+	for (const flag of flags) applyStoreFlag(state, flag, true);
+	return state;
+}
 
 /** Validate one uid from a store request. Null means "not a possible uid". */
 function imapStoreUid(value: number): number | null {

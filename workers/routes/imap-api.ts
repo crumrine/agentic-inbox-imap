@@ -38,6 +38,7 @@
  */
 
 import { Hono, type Context } from "hono";
+import PostalMime from "postal-mime";
 import { z } from "zod";
 import {
 	IMAP_MAX_UID,
@@ -49,7 +50,7 @@ import {
 } from "../durableObject";
 import { authRateLimiter } from "../durableObject/authRateLimit";
 import { normalizeMailboxId, verifyAppPassword } from "../lib/credentials";
-import { buildRawMime, type RawMimeAttachment } from "../lib/raw-mime";
+import { buildRawMime, type RawMimeAttachment, storeRawMime } from "../lib/raw-mime";
 import type { Env } from "../types";
 
 /** Where workers/app.ts mounts this router. Exported so tests mount it identically. */
@@ -498,6 +499,378 @@ imapApi.post("/:mailboxId/:folder/expunge", async (c) => {
 
 	return c.json({ expunged: result.expunged });
 });
+
+// ── Write API: append ────────────────────────────────────────────────
+
+/**
+ * Hard ceiling on a single APPEND body, matched to `MAX_EMAIL_SIZE` in
+ * workers/index.ts — the 25 MiB this app already accepts from Cloudflare Email
+ * Routing. Two limits for "how big may a message in this mailbox be" that
+ * disagree would mean a message a client could APPEND but the inbound path
+ * would refuse, or the reverse.
+ */
+export const IMAP_APPEND_MAX_BYTES = 25 * 1024 * 1024;
+
+const APPEND_TOO_LARGE_BODY = { error: "Message too large" } as const;
+const EMPTY_MESSAGE_BODY = { error: "Empty message" } as const;
+
+/**
+ * POST /api/imap/v1/{mailbox}/{folder}/append?flags=&internalDate=
+ *   Content-Type: message/rfc822
+ *   body: the raw RFC 5322 bytes
+ *   -> 200 { "uid": 5, "uidValidity": 1787427939, "deduplicated": false }
+ *   -> 400 { "error": "Empty message" }
+ *   -> 404 { "error": "Not found" | "Folder not found" }
+ *   -> 413 { "error": "Message too large" }
+ *
+ * The last routine IMAP command this gateway still answered `NO` to. iOS Mail
+ * APPENDs to save a draft and nearly every client APPENDs a copy of what it
+ * just submitted into Sent; a refusal on either is the reconnect loop that ID,
+ * STORE and EXPUNGE each caused in turn.
+ *
+ * **The stored bytes are the client's bytes.** This is the one path in the
+ * whole app where the `.eml` in R2 is byte-exact by construction rather than
+ * by reconstruction, because the client hands over the actual message. The
+ * body is therefore never round-tripped through the MIME builder;
+ * `postal-mime` is used only to read the columns out of it, and the same
+ * buffer that was parsed is what goes to R2.
+ *
+ * **Deduplication by Message-ID, in `sent` and nowhere else.** The Sent copy a
+ * client appends is the same message the app already recorded on its own send
+ * path, so without dedup every sent message shows up twice. A duplicate
+ * returns the uid that already exists, applies the flags the client sent, and
+ * writes no new row — an answer, not a refusal, so the client still gets a
+ * usable `APPENDUID`.
+ *
+ * The rule stops at Sent deliberately. A client edits a draft by re-APPENDing
+ * it with the **same Message-ID** and expunging the old copy; deduplicating
+ * there would return the original uid without writing the new body, and the
+ * client would then expunge the copy it thought it had just replaced. Silent
+ * data loss on a routine action. See `MailboxDO.imapAppendDedup`.
+ *
+ * Auth is the Access service token, same as every other route on this router.
+ */
+imapApi.post("/:mailboxId/:folder/append", async (c) => {
+	// Cheap rejection before a byte is read, when the client declared a size.
+	// A missing or lying Content-Length is caught by the reader's own cap.
+	const declared = Number(c.req.header("content-length"));
+	if (Number.isFinite(declared) && declared > IMAP_APPEND_MAX_BYTES) {
+		return c.json(APPEND_TOO_LARGE_BODY, 413);
+	}
+
+	const stub = await resolveMailbox(c.env, c.req.param("mailboxId"));
+	if (!stub) return c.json(NOT_FOUND_BODY, 404);
+
+	const raw = await readBoundedBody(c.req.raw, IMAP_APPEND_MAX_BYTES);
+	if (raw === TOO_LARGE) return c.json(APPEND_TOO_LARGE_BODY, 413);
+	if (raw.byteLength === 0) return c.json(EMPTY_MESSAGE_BODY, 400);
+
+	const parsed = await parseAppendMessage(raw);
+	const folderKey = c.req.param("folder");
+	const flags = parseAppendFlags(c.req.query("flags"));
+
+	// Pre-flight: 404 an unknown folder, and settle a Sent-copy duplicate,
+	// before spending an R2 PUT on bytes that would only be deleted again.
+	// The duplicate is the common case for a Sent copy, so this saving is the
+	// normal path rather than an optimisation for a corner. On a hit the
+	// client's flags are applied to the message that is already there.
+	const dedup = await stub.imapAppendDedup(folderKey, parsed.messageId, flags);
+	if (dedup.status === "no-folder") return c.json(FOLDER_NOT_FOUND_BODY, 404);
+	if (dedup.existingUid !== null) {
+		return c.json({
+			uid: dedup.existingUid,
+			uidValidity: dedup.uidValidity,
+			deduplicated: true,
+		});
+	}
+
+	const mailboxId = normalizeMailboxId(c.req.param("mailboxId") ?? "");
+	const emailId = crypto.randomUUID();
+
+	// Bytes before row, so a row never points at an object that is not there.
+	// storeRawMime never throws; a failed PUT yields raw_key null and the row
+	// still lands, exactly as the inbound path does — /raw then falls back to
+	// reconstruction rather than the message vanishing.
+	const stored = await storeRawMime(c.env.BUCKET, mailboxId, emailId, raw);
+
+	const result = await stub.imapAppend(folderKey, {
+		id: emailId,
+		messageId: parsed.messageId,
+		subject: parsed.subject,
+		sender: parsed.sender,
+		recipient: parsed.recipient,
+		cc: parsed.cc,
+		bcc: parsed.bcc,
+		date: appendInternalDate(c.req.query("internalDate")),
+		body: parsed.body,
+		inReplyTo: parsed.inReplyTo,
+		references: parsed.references,
+		threadId: parsed.references[0] ?? parsed.inReplyTo ?? emailId,
+		rawHeaders: parsed.rawHeaders,
+		rawKey: stored.raw_key,
+		rfc822Size: raw.byteLength,
+		flags,
+	});
+
+	// The folder vanished between the pre-flight and the write, or a
+	// concurrent APPEND of the same Message-ID won the race. Either way the
+	// object just written belongs to no row, so take it back out.
+	if (result.status === "no-folder" || result.deduplicated) {
+		if (stored.raw_key) await purgeR2Keys(c.env.BUCKET, [stored.raw_key]);
+	}
+	if (result.status === "no-folder") return c.json(FOLDER_NOT_FOUND_BODY, 404);
+
+	return c.json({
+		uid: result.uid,
+		uidValidity: result.uidValidity,
+		deduplicated: result.deduplicated,
+	});
+});
+
+/** Sentinel for "the body ran past the cap", distinct from any real body. */
+const TOO_LARGE = Symbol("too-large");
+
+/**
+ * Read a request body into one buffer, refusing past `max` bytes.
+ *
+ * `c.req.arrayBuffer()` would be the reflex, but it buffers whatever arrives:
+ * a client that sends no Content-Length, or lies in it, could hand the
+ * isolate far more than the cap before anything noticed. Reading it here
+ * means the cap is enforced against bytes actually received.
+ *
+ * The single-chunk case — every message small enough to arrive in one read —
+ * returns that chunk directly, with no copy at all. Otherwise each chunk is
+ * released as it is copied into the result, so the peak is one full-size
+ * buffer plus one chunk rather than two full-size buffers.
+ */
+async function readBoundedBody(
+	request: Request,
+	max: number,
+): Promise<Uint8Array | typeof TOO_LARGE> {
+	const body = request.body;
+	if (!body) return new Uint8Array(0);
+
+	const reader = body.getReader();
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	try {
+		for (;;) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			if (value.byteLength === 0) continue;
+			total += value.byteLength;
+			if (total > max) {
+				await reader.cancel();
+				return TOO_LARGE;
+			}
+			chunks.push(value);
+		}
+	} finally {
+		reader.releaseLock();
+	}
+
+	if (chunks.length === 0) return new Uint8Array(0);
+	if (chunks.length === 1) return chunks[0];
+
+	const out = new Uint8Array(total);
+	let offset = 0;
+	while (chunks.length > 0) {
+		const chunk = chunks.shift() as Uint8Array;
+		out.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return out;
+}
+
+/**
+ * Per-column caps on what an APPEND writes into SQLite.
+ *
+ * Not style, correctness: the Durable Object's SQLite refuses a value past
+ * roughly 2 MB with `SQLITE_TOOBIG`, and an APPEND is allowed to carry 25 MiB.
+ * A plain-text message anywhere near the cap would therefore throw inside the
+ * insert and come back a 500 — a refused APPEND, which is the exact failure
+ * this endpoint exists to prevent. Measured here: 2,100,000 bytes in one
+ * column succeeds and 2,500,000 does not.
+ *
+ * Truncating is safe in a way it would not be elsewhere in this app, because
+ * on this path the row is only a *projection* of the message for the UI and
+ * for search. The message itself is in R2 intact and byte-exact, and that is
+ * what `/raw` and therefore every IMAP client actually reads. Everything here
+ * sums to well under 1 MB even when every field is at its cap.
+ */
+const APPEND_MAX_BODY_CHARS = 512 * 1024;
+const APPEND_MAX_HEADERS_CHARS = 256 * 1024;
+const APPEND_MAX_ADDRESS_CHARS = 16 * 1024;
+const APPEND_MAX_SUBJECT_CHARS = 8 * 1024;
+/** Long enough for any real Message-ID; a longer one is not one. */
+const APPEND_MAX_MESSAGE_ID_CHARS = 998;
+/** RFC 5322 puts no bound on References; a thread this deep is pathological. */
+const APPEND_MAX_REFERENCES = 100;
+
+/** The headers kept when the full set will not fit. Enough for ENVELOPE. */
+const APPEND_ENVELOPE_HEADERS = new Set([
+	"date",
+	"from",
+	"sender",
+	"reply-to",
+	"to",
+	"cc",
+	"bcc",
+	"subject",
+	"message-id",
+	"in-reply-to",
+	"references",
+]);
+
+/** Truncate to `max` characters. Null in, null out; empty stays empty. */
+function clampText(value: string, max: number): string {
+	return value.length <= max ? value : value.slice(0, max);
+}
+
+/**
+ * Serialise the parsed headers, shrinking rather than corrupting.
+ *
+ * `raw_headers` is read back with SQLite's `json_extract` (see
+ * `imapHeaderSql`), so a value cut off mid-string would not be invalid JSON in
+ * some abstract sense — it would silently stop answering, taking every
+ * envelope field with it. So an over-long set is filtered down to the headers
+ * ENVELOPE actually needs and re-serialised; only if *that* still will not fit
+ * is the column left null.
+ */
+function serializeAppendHeaders(headers: { key: string; value: string }[]): string | null {
+	const full = JSON.stringify(headers);
+	if (full.length <= APPEND_MAX_HEADERS_CHARS) return full;
+
+	const essential = JSON.stringify(
+		headers.filter((h) => APPEND_ENVELOPE_HEADERS.has(h.key.toLowerCase())),
+	);
+	return essential.length <= APPEND_MAX_HEADERS_CHARS ? essential : null;
+}
+
+/** The columns an APPEND fills in, read out of the message the client sent. */
+interface AppendColumns {
+	messageId: string | null;
+	subject: string;
+	sender: string;
+	recipient: string;
+	cc: string | null;
+	bcc: string | null;
+	body: string;
+	inReplyTo: string | null;
+	references: string[];
+	rawHeaders: string | null;
+}
+
+/** An unparseable message still gets stored; it just has nothing to index by. */
+const EMPTY_APPEND_COLUMNS: AppendColumns = {
+	messageId: null,
+	subject: "",
+	sender: "",
+	recipient: "",
+	cc: null,
+	bcc: null,
+	body: "",
+	inReplyTo: null,
+	references: [],
+	rawHeaders: null,
+};
+
+/**
+ * Pull the row's columns out of the raw message.
+ *
+ * Read-only with respect to the bytes: the same buffer is handed to R2
+ * afterwards, so nothing here may rebuild or re-encode it. Attachment *rows*
+ * are deliberately not written either — the blob key embeds the owning email
+ * id and writing them would mean a second pass holding every attachment in
+ * memory, which is exactly what the size discipline on this route exists to
+ * avoid. `/raw` still serves the attachments perfectly, because it streams the
+ * stored bytes. This is the same trade `imapCopyMessages` already makes.
+ *
+ * A message postal-mime cannot parse is stored anyway, with empty columns: the
+ * bytes are the client's and are not ours to reject, and a null Message-ID
+ * simply means it can never be recognised as a duplicate.
+ */
+async function parseAppendMessage(raw: Uint8Array): Promise<AppendColumns> {
+	let parsed: Awaited<ReturnType<PostalMime["parse"]>>;
+	try {
+		parsed = await new PostalMime().parse(raw);
+	} catch (e) {
+		// Never the message: a parser error can quote the body it choked on.
+		console.error("APPEND: could not parse message; storing with empty columns:", (e as Error).name);
+		return EMPTY_APPEND_COLUMNS;
+	}
+
+	const references = (parsed.references ? parsed.references.split(/\s+/) : [])
+		.filter(Boolean)
+		.slice(0, APPEND_MAX_REFERENCES)
+		.map((ref) => clampText(extractMessageId(ref), APPEND_MAX_MESSAGE_ID_CHARS));
+
+	const messageId = parsed.messageId ? extractMessageId(parsed.messageId) : "";
+	const inReplyTo = parsed.inReplyTo ? extractMessageId(parsed.inReplyTo) : "";
+
+	return {
+		// Clamped, not rejected: see the cap block above. Every one of these
+		// columns is a projection for the UI; the message is intact in R2.
+		messageId: messageId ? clampText(messageId, APPEND_MAX_MESSAGE_ID_CHARS) : null,
+		subject: clampText(parsed.subject || "", APPEND_MAX_SUBJECT_CHARS),
+		sender: clampText((parsed.from?.address || "").toLowerCase(), APPEND_MAX_ADDRESS_CHARS),
+		recipient: clampText(addressList(parsed.to), APPEND_MAX_ADDRESS_CHARS),
+		cc: clampText(addressList(parsed.cc), APPEND_MAX_ADDRESS_CHARS) || null,
+		bcc: clampText(addressList(parsed.bcc), APPEND_MAX_ADDRESS_CHARS) || null,
+		body: clampText(parsed.html || parsed.text || "", APPEND_MAX_BODY_CHARS),
+		inReplyTo: inReplyTo ? clampText(inReplyTo, APPEND_MAX_MESSAGE_ID_CHARS) : null,
+		references,
+		rawHeaders: serializeAppendHeaders(parsed.headers),
+	};
+}
+
+function addressList(addresses: { address?: string }[] | undefined): string {
+	if (!addresses) return "";
+	return addresses
+		.map((a) => a.address)
+		.filter((a): a is string => !!a)
+		.join(", ");
+}
+
+/** `<id@host>` -> `id@host`. Same rule the inbound parser uses. */
+function extractMessageId(value: string): string {
+	const match = value.match(/<([^>]+)>/);
+	return match ? match[1] : value.trim().split(/\s+/)[0] || "";
+}
+
+/**
+ * The `flags=` query parameter, comma separated.
+ *
+ * Never rejects. Over the cap is truncated and an over-long atom is dropped,
+ * because the whole point of this endpoint is that a routine command must not
+ * come back `NO` — and a client that sent a flag we will not store is no worse
+ * off than one that sent `\Recent`, which the Durable Object ignores too.
+ */
+function parseAppendFlags(raw: string | undefined): string[] {
+	if (!raw) return [];
+	return raw
+		.split(",")
+		.map((flag) => flag.trim())
+		.filter((flag) => flag !== "" && flag.length <= MAX_FLAG_LENGTH)
+		.slice(0, MAX_FLAGS_PER_UPDATE);
+}
+
+/**
+ * The `internalDate=` query parameter as an ISO timestamp, defaulting to now.
+ *
+ * An unparseable value falls back to now rather than 400ing. The gateway
+ * formats this itself from the APPEND date-time, so a bad one is a bug on our
+ * side of the wire — and losing a timestamp is a far smaller failure than
+ * refusing the command and restarting the reconnect loop.
+ */
+function appendInternalDate(raw: string | undefined): string {
+	if (raw) {
+		const parsed = new Date(raw);
+		if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+		console.error("APPEND: unparseable internalDate; using receive time");
+	}
+	return new Date().toISOString();
+}
 
 /**
  * Parse a copy/move body. Null means "reject with 400".
