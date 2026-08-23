@@ -88,6 +88,7 @@ export async function handleReplyEmail(c: AppContext) {
 			]),
 			raw_key: rawMimeResult.raw_key,
 			rfc822_size: rawMimeResult.rfc822_size,
+			body_structure: rawMimeResult.body_structure,
 		},
 		attachmentData,
 	);
@@ -181,6 +182,7 @@ export async function handleForwardEmail(c: AppContext) {
 			]),
 			raw_key: rawMimeResult.raw_key,
 			rfc822_size: rawMimeResult.rfc822_size,
+			body_structure: rawMimeResult.body_structure,
 		},
 		attachmentData,
 	);

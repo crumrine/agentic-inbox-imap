@@ -10,6 +10,10 @@ import * as schema from "../db/schema";
 import { Folders } from "../../shared/folders";
 import type { Env } from "../types";
 import { applyMigrations, mailboxMigrations } from "./migrations";
+import {
+	parseStoredBodyStructure,
+	type StoredBodyStructureEnvelope,
+} from "../imap/bodystructure";
 
 /**
  * SQL expression to normalize email subjects by stripping common
@@ -123,6 +127,21 @@ interface EmailData {
 	raw_key?: string | null;
 	/** Byte length of the raw RFC822 message. */
 	rfc822_size?: number | null;
+	/**
+	 * Precomputed IMAP BODYSTRUCTURE JSON, from
+	 * `deriveBodyStructure()` in workers/imap/bodystructure.ts.
+	 *
+	 * Only a caller that holds the raw bytes can produce this, which is why
+	 * it is a parameter rather than something derived here: by the time a
+	 * message reaches the Durable Object the bytes are already in R2 and
+	 * reading them back would defeat the point. Omitted or null stores NULL,
+	 * and the gateway falls back to parsing the raw message.
+	 *
+	 * Set it only alongside a non-null `raw_key`. Without stored bytes the
+	 * raw endpoint *synthesizes* a message, and a structure describing bytes
+	 * nobody will be served is worse than no structure at all.
+	 */
+	body_structure?: string | null;
 }
 
 interface AttachmentData {
@@ -1072,6 +1091,7 @@ export class MailboxDO extends DurableObject<Env> {
 				raw_headers: email.raw_headers ?? null,
 				raw_key: email.raw_key ?? null,
 				rfc822_size: email.rfc822_size ?? null,
+				body_structure: email.body_structure ?? null,
 				uid,
 			})
 			.run();
@@ -1083,7 +1103,7 @@ export class MailboxDO extends DurableObject<Env> {
 
 	// ── IMAP read API (raw SQL — see the type block below this class) ──
 	//
-	// These three methods back `workers/routes/imap-api.ts`, which the Go IMAP
+	// These methods back `workers/routes/imap-api.ts`, which the Go IMAP
 	// gateway consumes. Two rules shape all of them:
 	//
 	//   1. Nothing here touches R2. A mail client issuing FETCH over a 5,000
@@ -1095,50 +1115,52 @@ export class MailboxDO extends DurableObject<Env> {
 	/**
 	 * Every folder with its IMAP counts. One query, all aggregates in SQL.
 	 *
-	 * `recent` is always 0: \Recent means "arrived since some other session
-	 * last looked", and this Worker has no session state to answer that from.
-	 * RFC 9051 dropped \Recent entirely and the gateway already reports
-	 * NumRecent 0 on SELECT, so 0 is the consistent answer rather than a
-	 * guess dressed up as a count.
+	 * See `IMAP_FOLDER_STATUS_SQL` and `imapFolderFromRow` for the projection
+	 * — including why `recent` is always 0 — which `imapFolderStatus` shares
+	 * so a single folder's status and its entry in this listing are the same
+	 * object by construction.
 	 */
 	async imapFolders(): Promise<ImapFolder[]> {
 		const rows = [
 			...this.ctx.storage.sql.exec(
-				`SELECT f.id                                AS id,
-				        f.name                              AS name,
-				        COALESCE(f.uid_validity, 1)         AS uid_validity,
-				        COALESCE(f.uid_next, 1)             AS uid_next,
-				        COALESCE(c.exists_count, 0)         AS exists_count,
-				        COALESCE(c.unseen_count, 0)         AS unseen_count
-				   FROM folders f
-				   LEFT JOIN (
-				        SELECT folder_id,
-				               COUNT(*)                                          AS exists_count,
-				               SUM(CASE WHEN COALESCE(read, 0) = 0 THEN 1 ELSE 0 END) AS unseen_count
-				          FROM emails
-				         WHERE uid IS NOT NULL
-				         GROUP BY folder_id
-				   ) c ON c.folder_id = f.id
+				`${IMAP_FOLDER_STATUS_SQL}
 				  ORDER BY f.id`,
 			),
-		] as unknown as {
-			id: string;
-			name: string;
-			uid_validity: number;
-			uid_next: number;
-			exists_count: number;
-			unseen_count: number;
-		}[];
+		] as unknown as ImapFolderStatusRow[];
 
-		return rows.map((row) => ({
-			id: row.id,
-			name: row.name,
-			uidValidity: Number(row.uid_validity),
-			uidNext: Number(row.uid_next),
-			exists: Number(row.exists_count),
-			unseen: Number(row.unseen_count),
-			recent: 0,
-		}));
+		return rows.map(imapFolderFromRow);
+	}
+
+	/**
+	 * One folder's IMAP counts — the same object `imapFolders` would return
+	 * for it, and by construction, not by convention: both go through
+	 * `IMAP_FOLDER_STATUS_SQL` and `imapFolderFromRow`, so the two answers
+	 * cannot drift apart.
+	 *
+	 * This exists because the gateway's poll and IDLE refresh only ever want
+	 * to know whether *one* folder grew (DEV-685). Asking that with
+	 * `/folders` means listing every folder, every 30 seconds, all day, to
+	 * learn that nothing changed. It also gives IMAP `STATUS` a direct
+	 * backing call instead of filtering a full listing.
+	 *
+	 * Null for an unknown folder, which the route turns into a 404.
+	 */
+	async imapFolderStatus(folderKey: string): Promise<ImapFolder | null> {
+		// Resolved the same tolerant way as every other IMAP method: by id
+		// first, then case-insensitively by id or display name.
+		const folder = this.#imapFolderRow(folderKey);
+		if (!folder) return null;
+
+		const row = [
+			...this.ctx.storage.sql.exec(
+				`${IMAP_FOLDER_STATUS_SQL}
+				  WHERE f.id = ?1
+				  LIMIT 1`,
+				folder.id,
+			),
+		][0] as unknown as ImapFolderStatusRow | undefined;
+
+		return row ? imapFolderFromRow(row) : null;
 	}
 
 	/**
@@ -1179,6 +1201,7 @@ export class MailboxDO extends DurableObject<Env> {
 				        e.in_reply_to                        AS in_reply_to,
 				        e.rfc822_size                        AS rfc822_size,
 				        e.raw_key                            AS raw_key,
+				        e.body_structure                     AS body_structure,
 				        ${IMAP_SIZE_ESTIMATE_SQL}            AS size_estimate,
 				        ${imapHeaderSql("date")}             AS hdr_date,
 				        ${imapHeaderSql("from")}             AS hdr_from,
@@ -1683,12 +1706,12 @@ export class MailboxDO extends DurableObject<Env> {
 				     id, folder_id, subject, sender, recipient, cc, bcc, date,
 				     read, starred, body, in_reply_to, email_references, thread_id,
 				     message_id, raw_headers, uid, answered, deleted, flags,
-				     rfc822_size, raw_key
+				     rfc822_size, raw_key, body_structure
 				 ) VALUES (
 				     ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
 				     ?9, ?10, ?11, ?12, ?13, ?14,
 				     ?15, ?16, ?17, ?18, ?19, ?20,
-				     ?21, ?22
+				     ?21, ?22, ?23
 				 )`,
 				message.id,
 				folderId,
@@ -1712,6 +1735,7 @@ export class MailboxDO extends DurableObject<Env> {
 				state.keywords.length > 0 ? JSON.stringify(state.keywords) : null,
 				message.rfc822Size,
 				message.rawKey,
+				message.bodyStructure ?? null,
 			);
 
 			return { status: "ok", uid, uidValidity, deduplicated: false };
@@ -1864,12 +1888,12 @@ export class MailboxDO extends DurableObject<Env> {
 			     id, folder_id, subject, sender, recipient, cc, bcc, date,
 			     read, starred, body, in_reply_to, email_references, thread_id,
 			     message_id, raw_headers, uid, answered, deleted, flags,
-			     rfc822_size, raw_key
+			     rfc822_size, raw_key, body_structure
 			 )
 			 SELECT ?1, ?2, subject, sender, recipient, cc, bcc, date,
 			        read, starred, body, in_reply_to, email_references, thread_id,
 			        message_id, raw_headers, ?3, answered, deleted, flags,
-			        rfc822_size, raw_key
+			        rfc822_size, raw_key, body_structure
 			   FROM emails
 			  WHERE id = ?4`,
 			crypto.randomUUID(),
@@ -1961,6 +1985,17 @@ export interface ImapMessage {
 	 * will not verify against them and rfc822Size is an estimate.
 	 */
 	hasRaw: boolean;
+	/**
+	 * Precomputed BODYSTRUCTURE, when the row has one (DEV-678).
+	 *
+	 * **Additive and optional.** Absent means "no precomputed structure",
+	 * which is the answer for every row written before this landed, for rows
+	 * whose write path has no raw bytes, and for any MIME the deriver would
+	 * not vouch for. The gateway falls back to fetching the raw message and
+	 * parsing it, exactly as it does today, so an absent field costs an R2
+	 * GET and nothing else.
+	 */
+	bodyStructure?: StoredBodyStructureEnvelope;
 }
 
 export interface ImapMessagesPage {
@@ -2129,6 +2164,14 @@ export interface ImapAppendMessage {
 	rfc822Size: number;
 	/** IMAP flags from the APPEND, raw; folded by the same helper as STORE. */
 	flags: string[];
+	/**
+	 * Precomputed BODYSTRUCTURE JSON for the bytes in `rawKey`, or null.
+	 *
+	 * Derived by the route, which is the only place that holds the bytes.
+	 * Null is normal: see `deriveBodyStructure` for what it declines to
+	 * model, and `ImapMessage.bodyStructure` for what null costs.
+	 */
+	bodyStructure?: string | null;
 }
 
 /**
@@ -2282,6 +2325,7 @@ interface ImapMessageRow {
 	in_reply_to: string | null;
 	rfc822_size: number | null;
 	raw_key: string | null;
+	body_structure: string | null;
 	size_estimate: number;
 	hdr_date: string | null;
 	hdr_from: string | null;
@@ -2325,6 +2369,61 @@ const IMAP_SIZE_ESTIMATE_SQL = `(
 	+ ((SELECT COALESCE(SUM(a.size), 0) FROM attachments a WHERE a.email_id = e.id) * 4 + 2) / 3
 	+ ${IMAP_LEGACY_MIME_OVERHEAD_BYTES}
 )`;
+
+/** Row shape of `IMAP_FOLDER_STATUS_SQL`. */
+interface ImapFolderStatusRow {
+	id: string;
+	name: string;
+	uid_validity: number;
+	uid_next: number;
+	exists_count: number;
+	unseen_count: number;
+}
+
+/**
+ * The folder projection behind both `/folders` and `/{folder}/status`.
+ *
+ * Written as correlated counts rather than a grouped join on purpose. A
+ * grouped subquery aggregates *every* message in the mailbox even when the
+ * caller named one folder, which is the cost DEV-685 set out to remove; the
+ * correlated form is two index lookups on `idx_emails_folder_id` per folder,
+ * so the single-folder query touches only that folder's rows. Counts still
+ * come from SQL aggregates and no message row is ever loaded.
+ *
+ * Callers append their own `WHERE` / `ORDER BY` / `LIMIT`.
+ */
+const IMAP_FOLDER_STATUS_SQL = `
+	SELECT f.id                        AS id,
+	       f.name                      AS name,
+	       COALESCE(f.uid_validity, 1) AS uid_validity,
+	       COALESCE(f.uid_next, 1)     AS uid_next,
+	       (SELECT COUNT(*) FROM emails e
+	         WHERE e.folder_id = f.id AND e.uid IS NOT NULL)            AS exists_count,
+	       (SELECT COUNT(*) FROM emails e
+	         WHERE e.folder_id = f.id AND e.uid IS NOT NULL
+	           AND COALESCE(e.read, 0) = 0)                             AS unseen_count
+	  FROM folders f`;
+
+/**
+ * One row of `IMAP_FOLDER_STATUS_SQL` as the wire shape.
+ *
+ * `recent` is always 0: \Recent means "arrived since some other session last
+ * looked", and this Worker has no session state to answer that from. RFC 9051
+ * dropped \Recent entirely and the gateway already reports NumRecent 0 on
+ * SELECT, so 0 is the consistent answer rather than a guess dressed up as a
+ * count.
+ */
+function imapFolderFromRow(row: ImapFolderStatusRow): ImapFolder {
+	return {
+		id: row.id,
+		name: row.name,
+		uidValidity: Number(row.uid_validity),
+		uidNext: Number(row.uid_next),
+		exists: Number(row.exists_count),
+		unseen: Number(row.unseen_count),
+		recent: 0,
+	};
+}
 
 /**
  * SQL that pulls one header value out of the `raw_headers` JSON.
@@ -2542,6 +2641,7 @@ export function deriveImapFlags(
 /** Map one metadata row onto the wire shape the gateway decodes. */
 function imapMessageFromRow(row: ImapMessageRow, isDraftFolder: boolean): ImapMessage {
 	const internalDate = toRfc3339(row.date);
+	const bodyStructure = parseStoredBodyStructure(row.body_structure);
 
 	// INTERNALDATE and the envelope date are different things and are kept
 	// that way: `date` is receive time, the envelope date is the message's own
@@ -2567,5 +2667,10 @@ function imapMessageFromRow(row: ImapMessageRow, isDraftFolder: boolean): ImapMe
 			date: envelopeDate,
 		},
 		hasRaw: row.raw_key !== null && row.raw_key !== undefined,
+		// Omitted rather than null when there is nothing stored, or when what
+		// is stored is not a structure this build recognises. Either way the
+		// gateway sees a message with no bodyStructure and takes its existing
+		// lazy path; it never sees a half-decoded one.
+		...(bodyStructure ? { bodyStructure } : {}),
 	};
 }

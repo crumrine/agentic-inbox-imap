@@ -473,6 +473,7 @@ export async function toolSendReply(
 			message_id: outgoingMessageId,
 			raw_key: rawMimeResult.raw_key,
 			rfc822_size: rawMimeResult.rfc822_size,
+			body_structure: rawMimeResult.body_structure,
 		},
 		[],
 	);
@@ -546,6 +547,7 @@ export async function toolSendEmail(
 			message_id: outgoingMessageId,
 			raw_key: rawMimeResult.raw_key,
 			rfc822_size: rawMimeResult.rfc822_size,
+			body_structure: rawMimeResult.body_structure,
 		},
 		[],
 	);

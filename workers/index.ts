@@ -207,6 +207,7 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 			{ key: "message-id", value: `<${outgoingMessageId}>` },
 		]),
 		raw_key: rawMimeResult.raw_key, rfc822_size: rawMimeResult.rfc822_size,
+		body_structure: rawMimeResult.body_structure,
 	}, attachmentData);
 
 	c.executionCtx.waitUntil(
@@ -433,6 +434,7 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env
 		in_reply_to: inReplyTo, email_references: emailReferences.length > 0 ? JSON.stringify(emailReferences) : null,
 		thread_id: threadId, message_id: originalMessageId, raw_headers: JSON.stringify(parsedEmail.headers),
 		raw_key: rawMimeResult.raw_key, rfc822_size: rawMimeResult.rfc822_size,
+		body_structure: rawMimeResult.body_structure,
 	}, attachmentData);
 
 	const agentStub = env.EMAIL_AGENT.get(env.EMAIL_AGENT.idFromName(mailboxId));

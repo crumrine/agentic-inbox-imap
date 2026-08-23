@@ -103,3 +103,99 @@ describe("receiveEmail: raw MIME storage (DEV-661)", () => {
 		expect(full.rfc822_size).toBe(bytes.byteLength);
 	});
 });
+
+/**
+ * BODYSTRUCTURE is derived once, where the raw bytes already exist, so a
+ * client's initial sync never pulls a message out of R2 just to learn its
+ * shape. Inbound is the path that matters: it is every message received.
+ */
+describe("receiveEmail: precomputed BODYSTRUCTURE (DEV-678)", () => {
+	function multipartBytes(to: string): Uint8Array {
+		const raw = [
+			"From: sender@example.com",
+			`To: ${to}`,
+			"Subject: With an attachment",
+			"Date: Wed, 21 Aug 2026 00:00:00 +0000",
+			"MIME-Version: 1.0",
+			'Content-Type: multipart/mixed; boundary="BOUND"',
+			"",
+			"--BOUND",
+			'Content-Type: text/plain; charset="UTF-8"',
+			"",
+			"See attached.",
+			"--BOUND",
+			"Content-Type: application/pdf",
+			"Content-Transfer-Encoding: base64",
+			'Content-Disposition: attachment; filename="r.pdf"',
+			"",
+			"aGVsbG8=",
+			"--BOUND--",
+			"",
+		].join("\r\n");
+		return new TextEncoder().encode(raw);
+	}
+
+	async function deliver(mailboxId: string, bytes: Uint8Array) {
+		await env.BUCKET.put(`mailboxes/${mailboxId}.json`, "{}");
+		const ctx = createExecutionContext();
+		await receiveEmail(
+			{ raw: streamFromBytes(bytes), rawSize: bytes.byteLength },
+			env as unknown as Env,
+			ctx,
+		);
+		await waitOnExecutionContext(ctx);
+		const stub = mailbox(mailboxId);
+		const emails = (await stub.getEmails({ folder: "inbox" })) as { id: string }[];
+		return (await stub.getEmail(emails[0].id)) as {
+			raw_key: string | null;
+			body_structure: string | null;
+		};
+	}
+
+	it("populates body_structure alongside raw_key", async () => {
+		const full = await deliver("bs-inbound@brian404.com", multipartBytes("bs-inbound@brian404.com"));
+
+		expect(full.raw_key).not.toBeNull();
+		expect(full.body_structure).not.toBeNull();
+
+		const parsed = JSON.parse(full.body_structure as string);
+		expect(parsed.type).toBe("multipart");
+		expect(parsed.subtype).toBe("mixed");
+		expect(parsed.children).toHaveLength(2);
+		expect(parsed.children[1].subtype).toBe("pdf");
+	});
+
+	it("leaves body_structure NULL when the raw bytes could not be stored", async () => {
+		// A structure describing bytes nobody will be served is worse than none:
+		// with raw_key NULL the raw endpoint synthesizes a different message.
+		const mailboxId = "bs-r2-outage@brian404.com";
+		await env.BUCKET.put(`mailboxes/${mailboxId}.json`, "{}");
+
+		const original = env.BUCKET.put.bind(env.BUCKET);
+		(env.BUCKET as unknown as { put: unknown }).put = async (key: string, ...rest: unknown[]) => {
+			if (key.startsWith("raw/")) throw new Error("simulated R2 outage");
+			return original(key, ...(rest as [never]));
+		};
+		try {
+			const bytes = multipartBytes(mailboxId);
+			const ctx = createExecutionContext();
+			await receiveEmail(
+				{ raw: streamFromBytes(bytes), rawSize: bytes.byteLength },
+				env as unknown as Env,
+				ctx,
+			);
+			await waitOnExecutionContext(ctx);
+		} finally {
+			(env.BUCKET as unknown as { put: unknown }).put = original;
+		}
+
+		const stub = mailbox(mailboxId);
+		const emails = (await stub.getEmails({ folder: "inbox" })) as { id: string }[];
+		const full = (await stub.getEmail(emails[0].id)) as {
+			raw_key: string | null;
+			body_structure: string | null;
+		};
+		expect(full.raw_key).toBeNull();
+		expect(full.body_structure).toBeNull();
+	});
+});

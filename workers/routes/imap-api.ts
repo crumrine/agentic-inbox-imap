@@ -270,6 +270,35 @@ imapApi.get("/:mailboxId/folders", async (c) => {
 });
 
 /**
+ * GET /api/imap/v1/{mailbox}/{folder}/status
+ *   -> 200 { id, name, uidValidity, uidNext, exists, unseen, recent }
+ *   -> 404 { "error": "Not found" | "Folder not found" }
+ *
+ * One folder, in the shape of one element of `/folders` — the same object,
+ * from the same SQL, so the gateway decodes it into the `Folder` struct it
+ * already has and cannot see the two endpoints disagree.
+ *
+ * This exists because `/folders` was answering a question nobody asked
+ * (DEV-685). The gateway's poll loop and its IDLE refresh only want to know
+ * whether *this* folder grew, and with a client idling that is one full
+ * listing of every folder every 30 seconds, all day, almost always to learn
+ * nothing changed. It also gives IMAP `STATUS` a direct backing call instead
+ * of fetching every folder and throwing all but one away.
+ *
+ * An unknown folder is a plain 404: same body as everywhere else on this
+ * router, naming nothing about what does exist.
+ */
+imapApi.get("/:mailboxId/:folder/status", async (c) => {
+	const stub = await resolveMailbox(c.env, c.req.param("mailboxId"));
+	if (!stub) return c.json(NOT_FOUND_BODY, 404);
+
+	const status = await stub.imapFolderStatus(c.req.param("folder"));
+	if (!status) return c.json(FOLDER_NOT_FOUND_BODY, 404);
+
+	return c.json(status);
+});
+
+/**
  * GET /api/imap/v1/{mailbox}/{folder}/messages?sinceUid=&limit=
  *   -> 200 { messages: [...], uidNext }
  *   -> 400 { "error": "Invalid request" }
@@ -616,6 +645,11 @@ imapApi.post("/:mailboxId/:folder/append", async (c) => {
 		rawHeaders: parsed.rawHeaders,
 		rawKey: stored.raw_key,
 		rfc822Size: raw.byteLength,
+		// Derived from the bytes that were just stored, and only when they
+		// were stored: if the PUT failed, `/raw` will *synthesize* a message
+		// instead of serving these bytes, and a structure describing bytes
+		// nobody will ever be served is the one thing worse than none.
+		bodyStructure: stored.body_structure,
 		flags,
 	});
 
@@ -1290,6 +1324,10 @@ imapApi.post("/:mailboxId/submit", async (c) => {
 		rawHeaders: parsed.rawHeaders,
 		rawKey: stored.raw_key,
 		rfc822Size: outbound.byteLength,
+		// `outbound`, not `raw`: those differ by a generated Message-ID
+		// header, and `outbound` is what went to R2 and to the recipient.
+		// Null when the PUT failed, for the same reason as APPEND.
+		bodyStructure: stored.body_structure,
 		flags: ["\\Seen"],
 	});
 

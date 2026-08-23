@@ -53,6 +53,14 @@ export const emails = sqliteTable("emails", {
 	rfc822_size: integer("rfc822_size"),
 	/** R2 key for the raw RFC822 message. NULL for legacy messages. */
 	raw_key: text("raw_key"),
+	/**
+	 * Precomputed IMAP BODYSTRUCTURE as JSON (see
+	 * workers/imap/bodystructure.ts). NULL for legacy rows, for rows written
+	 * by a path that has no raw bytes, and for any message whose MIME the
+	 * deriver declined to model — all three degrade to the gateway parsing
+	 * the raw message itself.
+	 */
+	body_structure: text("body_structure"),
 });
 
 export const attachments = sqliteTable("attachments", {

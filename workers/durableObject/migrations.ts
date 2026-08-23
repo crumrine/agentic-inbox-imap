@@ -228,4 +228,29 @@ export const mailboxMigrations: Migration[] = [
                 ON emails(folder_id, uid);
         `,
 	},
+	{
+		// Precomputed IMAP BODYSTRUCTURE (DEV-678).
+		//
+		// No txn() wrapper, same reason as migration 9: the DO runtime
+		// forbids SQL-level BEGIN TRANSACTION and applyMigrations() already
+		// runs the batch inside state.storage.transactionSync().
+		//
+		// One nullable TEXT column holding the JSON produced by
+		// workers/imap/bodystructure.ts. Nullable is the whole design, not a
+		// concession to ALTER TABLE: NULL means "no precomputed structure",
+		// and the gateway answers BODYSTRUCTURE for those rows the way it
+		// always has, by fetching the raw message and parsing it. Every row
+		// that exists when this migration runs is therefore correct as-is.
+		//
+		// **There is deliberately no backfill.** Deriving the structure for
+		// an existing row means reading its raw bytes back out of R2 — the
+		// exact cost this feature exists to avoid — once per message in the
+		// mailbox, inside a DO constructor, with no bound on how long that
+		// takes. Rows written from here on carry the column; older ones keep
+		// the lazy path, which is already shipped and already correct.
+		name: "10_add_body_structure",
+		sql: `
+            ALTER TABLE emails ADD COLUMN body_structure TEXT;
+        `,
+	},
 ];

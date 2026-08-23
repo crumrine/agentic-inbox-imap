@@ -17,6 +17,8 @@
  * breaks.
  */
 
+import { deriveBodyStructure } from "../imap/bodystructure";
+
 const CRLF = "\r\n";
 
 // -- Public types -----------------------------------------------------
@@ -53,6 +55,16 @@ export interface BuildRawMimeInput {
 export interface StoreRawMimeResult {
 	raw_key: string | null;
 	rfc822_size: number;
+	/**
+	 * Precomputed IMAP BODYSTRUCTURE as JSON, or null when it could not be
+	 * derived exactly. Deriving it here means a mail client's initial sync
+	 * never has to pull raw bytes out of R2 just to learn a message's shape.
+	 *
+	 * Set only when raw_key is non-null. With no stored bytes the raw endpoint
+	 * synthesizes a message instead, and a structure describing bytes nobody
+	 * will be served is worse than no structure at all.
+	 */
+	body_structure: string | null;
 }
 
 // -- R2 storage ---------------------------------------------------------
@@ -72,15 +84,25 @@ export async function storeRawMime(
 	emailId: string,
 	raw: Uint8Array | ArrayBuffer | string,
 ): Promise<StoreRawMimeResult> {
-	const bytes = typeof raw === "string" ? new TextEncoder().encode(raw) : raw;
-	const size = bytes instanceof Uint8Array ? bytes.byteLength : bytes.byteLength;
+	const bytes =
+		typeof raw === "string"
+			? new TextEncoder().encode(raw)
+			: raw instanceof Uint8Array
+				? raw
+				: new Uint8Array(raw);
+	const size = bytes.byteLength;
 	const key = rawMimeKey(mailboxId, emailId);
 	try {
 		await bucket.put(key, bytes);
-		return { raw_key: key, rfc822_size: size };
+		return {
+			raw_key: key,
+			rfc822_size: size,
+			body_structure: deriveBodyStructure(bytes),
+		};
 	} catch (e) {
 		console.error(`Failed to store raw MIME at ${key}:`, (e as Error).message);
-		return { raw_key: null, rfc822_size: size };
+		// No stored bytes, so no structure: see StoreRawMimeResult.body_structure.
+		return { raw_key: null, rfc822_size: size, body_structure: null };
 	}
 }
 
