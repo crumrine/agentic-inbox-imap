@@ -20,10 +20,10 @@ import (
 	"github.com/crumrine/agentic-inbox/gateway/internal/backend"
 )
 
-const testMessage = "From: bc@bpxo.cc\r\n" +
+const testMessage = "From: bc@example.com\r\n" +
 	"To: a@example.com\r\n" +
 	"Subject: hello from the phone\r\n" +
-	"Message-ID: <out-1@bpxo.cc>\r\n" +
+	"Message-ID: <out-1@example.com>\r\n" +
 	"\r\n" +
 	"sent from a real client\r\n"
 
@@ -120,7 +120,7 @@ func TestMailFromMismatchRejectedBeforeData(t *testing.T) {
 func TestMailFromIsCaseInsensitive(t *testing.T) {
 	c := startRawClient(t, newFakeBackend())
 	authenticate(t, c)
-	requireCode(t, c.do("MAIL FROM:<BC@BPXO.CC>"), 250)
+	requireCode(t, c.do("MAIL FROM:<BC@EXAMPLE.COM>"), 250)
 }
 
 func TestNullReturnPathIsRefused(t *testing.T) {

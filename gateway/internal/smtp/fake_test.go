@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	testMailbox  = "bc@bpxo.cc"
+	testMailbox  = "bc@example.com"
 	testPassword = "correct-horse-battery-staple"
 )
 
@@ -123,7 +123,7 @@ func (f *fakeBackend) Submit(ctx context.Context, mailbox string, body io.Reader
 	f.submitCalls = append(f.submitCalls, call)
 	f.mu.Unlock()
 
-	return &backend.SubmitResult{MessageID: "<sent-1@bpxo.cc>", SentUID: 7, SentUIDValidity: 1787427939}, nil
+	return &backend.SubmitResult{MessageID: "<sent-1@example.com>", SentUID: 7, SentUIDValidity: 1787427939}, nil
 }
 
 func (f *fakeBackend) lastSubmit() (submitCall, bool) {

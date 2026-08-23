@@ -1,5 +1,8 @@
-Agentic Inbox
+Agentic Inbox IMAP
 Copyright (c) 2026 Brian Crumrine
+
+This is an unofficial fork. It is not maintained by, endorsed by, or affiliated
+with Cloudflare, Inc.
 
 This product includes software originally developed by Cloudflare, Inc.:
 
@@ -12,6 +15,41 @@ This repository was seeded from that project and has been modified. Files
 carrying a Cloudflare copyright notice are upstream work, retained under the
 Apache License, Version 2.0. Files added since carry their own notice.
 
-The IMAP/SMTP gateway under gateway/ is independent work. It is not derived
-from the upstream project and may be distributed separately. See
-gateway/NOTICE.
+CHANGES FROM UPSTREAM
+---------------------
+
+Per Apache License 2.0 section 4(b), the following states the changes made to
+the original work. This is a summary; see the git history for detail.
+
+Added:
+
+  * gateway/ - agentic-imapd, an IMAP and SMTP submission server in Go. This
+    is independent work, not derived from the upstream project. It is a
+    separate Go module with its own LICENSE and NOTICE.
+  * Raw RFC 5322 message retention in R2 for inbound and outbound mail, so
+    the original bytes can be served rather than a reconstruction.
+  * Per-mailbox app passwords (workers/lib/credentials.ts) and a rate limiter
+    for them (workers/durableObject/authRateLimit.ts).
+  * An HTTP API for mail clients under /api/imap/v1
+    (workers/routes/imap-api.ts): authentication, folder and message listing,
+    raw message retrieval, flag writes, copy, move, expunge, append, and SMTP
+    submission.
+  * A test suite. The upstream project had no test framework.
+  * Continuous integration.
+
+Modified:
+
+  * workers/durableObject/ - schema migration adding IMAP identity (per-folder
+    UIDs, UIDVALIDITY), IMAP flags, message size and raw-object references,
+    plus the read and write methods those endpoints require. Reference-counted
+    R2 cleanup on delete.
+  * workers/index.ts - inbound mail now stores the raw message; the delete
+    path purges R2 objects it previously leaked.
+  * workers/lib/tools.ts, workers/routes/reply-forward.ts - outbound paths now
+    store a raw copy of what was sent.
+  * workers/app.ts - mounts the new API surface.
+  * README.md - rewritten to describe this fork.
+
+Trademarks are not licensed. "Cloudflare" and any Cloudflare project names are
+the property of Cloudflare, Inc. and are used here only to identify the
+upstream work.

@@ -13,7 +13,7 @@
  * Everything here mirrors constants in that module. If they change there,
  * change them here. The parameters are asserted against it by a unit test.
  *
- *   node scripts/mint-app-password.mjs bc@bpxo.cc "apple mail"
+ *   node scripts/mint-app-password.mjs you@example.com "apple mail"
  */
 
 // Cloudflare Workers caps PBKDF2 at 100,000 iterations. See
