@@ -479,6 +479,9 @@ function trackBucket(calls: string[]): ImapApiEnv {
 	});
 	return {
 		BUCKET: bucket,
+		// Never called on a read path; present only because the submit
+		// endpoint added it to ImapApiEnv.
+		EMAIL: env.EMAIL,
 		MAILBOX: env.MAILBOX,
 		IMAP_AUTH_RATE_LIMIT: env.IMAP_AUTH_RATE_LIMIT,
 	};

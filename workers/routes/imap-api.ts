@@ -37,6 +37,7 @@
  * — more exposure for the same trust decision, not less.
  */
 
+import { EmailMessage } from "cloudflare:email";
 import { Hono, type Context } from "hono";
 import PostalMime from "postal-mime";
 import { z } from "zod";
@@ -50,8 +51,14 @@ import {
 } from "../durableObject";
 import { authRateLimiter } from "../durableObject/authRateLimit";
 import { normalizeMailboxId, verifyAppPassword } from "../lib/credentials";
+import {
+	generateMessageId,
+	SenderValidationError,
+	validateSender,
+} from "../lib/email-helpers";
 import { buildRawMime, type RawMimeAttachment, storeRawMime } from "../lib/raw-mime";
 import type { Env } from "../types";
+import { Folders } from "../../shared/folders";
 
 /** Where workers/app.ts mounts this router. Exported so tests mount it identically. */
 export const IMAP_API_BASE = "/api/imap/v1";
@@ -61,7 +68,7 @@ export const IMAP_API_BASE = "/api/imap/v1";
  * folder/message endpoints landed; keeping the `Pick` narrow means a route
  * here cannot reach the `AI` binding by accident.
  */
-export type ImapApiEnv = Pick<Env, "BUCKET" | "IMAP_AUTH_RATE_LIMIT" | "MAILBOX">;
+export type ImapApiEnv = Pick<Env, "BUCKET" | "EMAIL" | "IMAP_AUTH_RATE_LIMIT" | "MAILBOX">;
 
 /**
  * The single failure response. Wrong password, unknown mailbox, mailbox with no
@@ -1105,4 +1112,337 @@ function toBase64(bytes: Uint8Array): string {
 		binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
 	}
 	return btoa(binary);
+}
+
+// ── Write API: submit ────────────────────────────────────────────────
+
+/**
+ * Hard ceiling on a submitted message.
+ *
+ * **Deliberately not `IMAP_APPEND_MAX_BYTES`.** Cloudflare accepts 25 MiB
+ * *inbound* but caps what a Worker may *send* at 5 MiB, attachments included,
+ * and because attachments travel base64 that is roughly 3.75 MB of real file.
+ * Discovering the difference as an opaque upstream refusal after the whole
+ * body has been read and the rate limit spent is the bad version of this;
+ * refusing here, with the numbers in the message, is the good one.
+ */
+export const IMAP_SUBMIT_MAX_BYTES = 5 * 1024 * 1024;
+
+/** RFC 5321 §4.5.3.1.8 sets 100 as the minimum a server must accept. */
+const SUBMIT_MAX_RECIPIENTS = 100;
+
+/** RFC 5321 §4.5.3.1.3 caps a path at 256 octets. Anything longer is not one. */
+const SUBMIT_MAX_ADDRESS_CHARS = 256;
+
+const SUBMIT_EMPTY_BODY = { error: "Empty message" } as const;
+
+/**
+ * POST /api/imap/v1/{mailbox}/submit?envelopeFrom=&envelopeTo=
+ *   Content-Type: message/rfc822
+ *   body: the raw RFC 5322 message the client submitted
+ *   -> 200 { "messageId": "<id@domain>", "sentUid": 7, "sentUidValidity": 1787427939 }
+ *   -> 400 { "error": ... }   malformed envelope, or an empty body
+ *   -> 403 { "error": ... }   sender validation failed
+ *   -> 404 { "error": "Not found" }
+ *   -> 413 { "error": ... }   over the outbound size cap
+ *   -> 429 { "error": ... }   rate limited, with Retry-After
+ *   -> 502 { "error": ... }   upstream send failed
+ *
+ * ## Why this exists
+ *
+ * Until now a mail client's *outgoing* server pointed somewhere else
+ * entirely, so mail sent from a phone never entered this app at all: nothing
+ * landed in Sent, `validateSender` never ran, and the per-mailbox rate limit
+ * did not apply to the one path most able to abuse it. This endpoint is what
+ * the gateway's SMTP submission listener calls, so a client's send goes
+ * through the same three gates the SPA already passes.
+ *
+ * ## The envelope is not the headers
+ *
+ * Delivery uses `envelopeTo`, never the `To:`/`Cc:` of the message. They
+ * differ whenever there is a Bcc — that *is* Bcc — so reading recipients out
+ * of the headers would silently drop every blind copy while appearing to
+ * work. The gateway has the real RCPT TO list; it passes it here and it is
+ * what gets used.
+ *
+ * ## `validateSender` runs twice, on purpose
+ *
+ * Once on the SMTP envelope (`envelopeFrom`) and once on the message's own
+ * `From:` header. A client that authenticated as one mailbox and put another
+ * address in either place is refused. Both go through the same
+ * `validateSender` the SPA and MCP send paths use, rather than a hand-rolled
+ * comparison, so there is exactly one definition of "the sender matches".
+ *
+ * ## The bytes are the client's bytes
+ *
+ * What goes to the upstream, what goes to R2 and what `/raw` later serves are
+ * the same buffer. Nothing here re-encodes the message: an MSA that rewrites
+ * a submission breaks S/MIME signatures and mangles anything the builder does
+ * not model. The single exception is a message with no `Message-ID:` at all,
+ * below.
+ *
+ * ## Message-ID is preserved, and that is load-bearing
+ *
+ * Clients APPEND their own Sent copy right after submitting, and
+ * `/{folder}/append` deduplicates against `sent` **by Message-ID**. Minting a
+ * fresh id here would leave the client's copy unable to match, and every sent
+ * message would appear twice. So the id read out of the submitted message is
+ * what the Sent row records.
+ *
+ * A message with no `Message-ID:` gets one generated *and inserted into the
+ * bytes*, which is what RFC 4409 §8.1 asks a submission server to do. Note
+ * that the client's later APPEND still carries no Message-ID, so that one copy
+ * genuinely cannot dedup and will show up twice. Every real client sets the
+ * header; this path exists so a message without one is still delivered rather
+ * than refused.
+ */
+imapApi.post("/:mailboxId/submit", async (c) => {
+	// Cheap rejection before a byte is read, when the client declared a size.
+	// A missing or lying Content-Length is caught by the reader's own cap.
+	const declared = Number(c.req.header("content-length"));
+	if (Number.isFinite(declared) && declared > IMAP_SUBMIT_MAX_BYTES) {
+		return c.json(tooLargeBody(declared), 413);
+	}
+
+	const rawMailboxId = c.req.param("mailboxId") ?? "";
+	const mailboxId = normalizeMailboxId(rawMailboxId);
+	const stub = await resolveMailbox(c.env, rawMailboxId);
+	if (!stub) return c.json(NOT_FOUND_BODY, 404);
+
+	const envelope = parseEnvelope(c.req.query("envelopeFrom"), c.req.queries("envelopeTo"));
+	if (!envelope) return c.json(INVALID_REQUEST_BODY, 400);
+
+	// Envelope first, so a mismatched MAIL FROM is refused without reading a
+	// 5 MiB body off the wire.
+	const envelopeCheck = checkSender(envelope.to, envelope.from, mailboxId);
+	if (envelopeCheck) return c.json({ error: `Envelope sender rejected: ${envelopeCheck}` }, 403);
+
+	const raw = await readBoundedBody(c.req.raw, IMAP_SUBMIT_MAX_BYTES);
+	if (raw === TOO_LARGE) return c.json(tooLargeBody(null), 413);
+	if (raw.byteLength === 0) return c.json(SUBMIT_EMPTY_BODY, 400);
+
+	const parsed = await parseAppendMessage(raw);
+
+	// The header `From:`, through the same validator. `parsed.sender` is the
+	// address already lowercased; a message with no From at all arrives here
+	// as "" and is refused, which is the right answer.
+	const headerCheck = checkSender(envelope.to, parsed.sender, mailboxId);
+	if (headerCheck) return c.json({ error: `From header rejected: ${headerCheck}` }, 403);
+
+	const limited = await stub.checkSendRateLimitDetailed();
+	if (limited) {
+		return c.json({ error: limited.error }, 429, {
+			"Retry-After": String(limited.retryAfterSeconds),
+		});
+	}
+
+	// RFC 4409 §8.1: supply a Message-ID when the submission has none. Done by
+	// prepending a header line — header order is free in RFC 5322 — so the
+	// bytes sent, the bytes stored and the id reported all still agree.
+	let outbound = raw;
+	let messageId = parsed.messageId;
+	if (!messageId) {
+		const fromDomain = mailboxId.split("@")[1] ?? "invalid";
+		messageId = generateMessageId(fromDomain).outgoingMessageId;
+		outbound = concatBytes(
+			new TextEncoder().encode(`Message-ID: <${messageId}>\r\n`),
+			raw,
+		);
+		console.error(
+			"SUBMIT: message had no Message-ID; generated one. The client's own " +
+				"APPENDed Sent copy will not deduplicate against this row.",
+		);
+	}
+
+	// Send before recording. A Sent row for a message that never left is worse
+	// than no row: it is what the user reads to decide whether to send again,
+	// and it also counts against the rate limit. The other send paths record
+	// first and deliver in `waitUntil` because their caller is a browser that
+	// wants a 202; here the caller is an SMTP listener holding a client
+	// connection open for a real answer.
+	const delivery = await deliverToEnvelope(c.env.EMAIL, envelope.from, envelope.to, outbound);
+	if (delivery.delivered.length === 0) {
+		return c.json({ error: `Upstream send failed: ${delivery.reason}` }, 502);
+	}
+
+	const emailId = crypto.randomUUID();
+	// Bytes before row, so a row never points at an object that is not there.
+	// storeRawMime never throws; a failed PUT yields raw_key null and the row
+	// still lands, exactly as APPEND and the inbound path do.
+	const stored = await storeRawMime(c.env.BUCKET, mailboxId, emailId, outbound);
+
+	const recorded = await stub.imapAppend(Folders.SENT, {
+		id: emailId,
+		messageId,
+		subject: parsed.subject,
+		sender: parsed.sender,
+		// The header recipients, not the envelope: this column is what the SPA
+		// renders as "To", and showing Bcc'd addresses there would leak them
+		// back into the thread view. The envelope list is not persisted.
+		recipient: parsed.recipient,
+		cc: parsed.cc,
+		bcc: parsed.bcc,
+		date: new Date().toISOString(),
+		body: parsed.body,
+		inReplyTo: parsed.inReplyTo,
+		references: parsed.references,
+		threadId: parsed.references[0] ?? parsed.inReplyTo ?? emailId,
+		rawHeaders: parsed.rawHeaders,
+		rawKey: stored.raw_key,
+		rfc822Size: outbound.byteLength,
+		flags: ["\\Seen"],
+	});
+
+	if (recorded.status === "no-folder" || recorded.deduplicated) {
+		// The object just written belongs to no row. `no-folder` cannot
+		// normally happen — every mailbox gets `sent` from the migrations —
+		// and `deduplicated` means the client raced its own APPEND in ahead of
+		// this response.
+		if (stored.raw_key) await purgeR2Keys(c.env.BUCKET, [stored.raw_key]);
+	}
+
+	if (recorded.status === "no-folder") {
+		// The mail is already gone. Reporting a failure here would make the
+		// gateway retry and send it a second time, so this answers 200 with a
+		// uid of 0: the gateway simply omits APPENDUID.
+		console.error(`SUBMIT: mailbox has no ${Folders.SENT} folder; message sent but not recorded`);
+		return c.json({ messageId: `<${messageId}>`, sentUid: 0, sentUidValidity: 0 });
+	}
+
+	if (delivery.failed.length > 0) {
+		// Partial delivery. The message left for someone, so it is recorded and
+		// the call succeeds; the gateway needs the list to tell the client
+		// which recipients to retry, and re-submitting the whole message would
+		// double-deliver to everyone who did get it.
+		console.error(`SUBMIT: ${delivery.failed.length} of ${envelope.to.length} recipients failed`);
+	}
+
+	return c.json({
+		messageId: `<${messageId}>`,
+		sentUid: recorded.uid,
+		sentUidValidity: recorded.uidValidity,
+		...(delivery.failed.length > 0 ? { failedRecipients: delivery.failed } : {}),
+	});
+});
+
+/**
+ * The 413 body. Says what the limit is and, when the size is known, what was
+ * sent — a human staring at a stuck Outbox can act on "your attachment is too
+ * big", not on "too large".
+ */
+function tooLargeBody(declaredBytes: number | null): { error: string } {
+	const limit = `${IMAP_SUBMIT_MAX_BYTES / (1024 * 1024)} MiB`;
+	const actual = declaredBytes === null ? "" : ` (this one is ${(declaredBytes / (1024 * 1024)).toFixed(1)} MiB)`;
+	return {
+		error:
+			`Message too large to send${actual}. The outbound limit is ${limit} including ` +
+			"attachments, which are base64-encoded and so about a third larger than the " +
+			"original files. Send fewer or smaller attachments, or share a link instead.",
+	};
+}
+
+/**
+ * The `envelopeFrom` / `envelopeTo` query parameters.
+ *
+ * `envelopeTo` may repeat and each occurrence may be a comma-separated list,
+ * because both spellings are natural for a caller building a query string out
+ * of a RCPT TO list. Null means "reject with 400": an envelope is not
+ * something to guess at, and falling back to the header recipients is exactly
+ * the Bcc-dropping bug this endpoint exists to avoid.
+ */
+function parseEnvelope(
+	from: string | undefined,
+	to: string[] | undefined,
+): { from: string; to: string[] } | null {
+	const fromAddress = (from ?? "").trim();
+	if (!fromAddress || fromAddress.length > SUBMIT_MAX_ADDRESS_CHARS) return null;
+
+	const recipients = (to ?? [])
+		.flatMap((value) => value.split(","))
+		.map((value) => value.trim())
+		.filter(Boolean);
+
+	if (recipients.length === 0 || recipients.length > SUBMIT_MAX_RECIPIENTS) return null;
+	if (recipients.some((r) => !r.includes("@") || r.length > SUBMIT_MAX_ADDRESS_CHARS)) return null;
+
+	return { from: fromAddress, to: recipients };
+}
+
+/**
+ * Run `validateSender` and return its message, or null when it passes.
+ *
+ * Wrapping rather than reimplementing matters: this is the invariant the whole
+ * app rests on, and a second copy of the comparison here is how the two would
+ * eventually disagree.
+ */
+function checkSender(to: string[], from: string, mailboxId: string): string | null {
+	try {
+		validateSender(to, from, mailboxId);
+		return null;
+	} catch (e) {
+		if (e instanceof SenderValidationError) return e.message;
+		throw e;
+	}
+}
+
+/**
+ * Hand the raw message to the upstream, once per envelope recipient.
+ *
+ * The binding's raw form takes a single RCPT TO, so a multi-recipient
+ * submission is N sends of the same bytes. They go out together rather than in
+ * a loop of awaits: `SUBMIT_MAX_RECIPIENTS` is 100, and a hundred round trips
+ * in series would keep the client's SMTP connection open long past where it
+ * gives up.
+ *
+ * `allSettled` rather than `all`, because a partial failure is a real outcome
+ * here and the caller has to be able to tell it from a total one — the message
+ * has left for some recipients and re-submitting would deliver to them twice.
+ *
+ * `reason` is the first failure's message, and it is a message from the
+ * binding — not a stack, not a key, not the message body — so it is safe to
+ * hand back to the gateway, which is what makes a 502 diagnosable rather than
+ * opaque.
+ */
+async function deliverToEnvelope(
+	binding: SendEmail,
+	from: string,
+	recipients: string[],
+	raw: Uint8Array,
+): Promise<{ delivered: string[]; failed: string[]; reason: string }> {
+	const results = await Promise.allSettled(
+		// A stream of the original bytes, not `TextDecoder().decode(raw)`.
+		// Decoding would run the message through UTF-8 replacement, so a
+		// submission carrying 8-bit non-UTF-8 content — an 8BITMIME body in a
+		// legacy charset is the everyday case — would arrive full of U+FFFD.
+		// A stream is consumed once, so each recipient gets its own over the
+		// same underlying buffer.
+		recipients.map((to) => binding.send(new EmailMessage(from, to, bytesToStream(raw)))),
+	);
+
+	const delivered: string[] = [];
+	const failed: string[] = [];
+	let reason = "";
+
+	results.forEach((result, i) => {
+		if (result.status === "fulfilled") {
+			delivered.push(recipients[i]);
+			return;
+		}
+		failed.push(recipients[i]);
+		const error = result.reason as Error;
+		if (!reason) reason = error?.message || error?.name || "unknown error";
+		console.error("SUBMIT: upstream refused a recipient:", error?.name);
+	});
+
+	return { delivered, failed, reason: reason || "no recipients" };
+}
+
+/** A single-chunk stream over `bytes`. Nothing is copied. */
+function bytesToStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
+	return new ReadableStream({
+		start(controller) {
+			controller.enqueue(bytes);
+			controller.close();
+		},
+	});
 }
