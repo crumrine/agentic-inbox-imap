@@ -14,6 +14,7 @@ import {
 	generateMessageId,
 	buildThreadingHeaders,
 	listMailboxes,
+	toClientEmail,
 } from "./lib/email-helpers";
 import { SendEmailRequestSchema } from "./lib/schemas";
 import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
@@ -50,40 +51,6 @@ function slugify(text: string) { // can return "" for non-alphanumeric input
 	return text.toString().toLowerCase()
 		.replace(/\s+/g, "-").replace(/[^\w-]+/g, "")
 		.replace(/--+/g, "-").replace(/^-+/, "").replace(/-+$/, "");
-}
-
-/**
- * The `emails` columns the SPA is allowed to see — an allowlist, so a column
- * added to the table later cannot silently start crossing this boundary.
- *
- * Migration 9 added `uid`, `answered`, `deleted`, `flags`, `rfc822_size` and
- * `raw_key` for IMAP, and the two single-email reads (`getEmail`,
- * `getThreadEmails`) hand back whole rows, so all six started appearing in SPA
- * responses. None of them mean anything to the client and `raw_key` is an
- * internal R2 path.
- *
- * The narrowing lives here rather than in the DO on purpose: the IMAP read
- * paths, the raw-MIME code and the agent all read those same rows and
- * legitimately need the full set. This is the one place a browser is on the
- * other end.
- *
- * Keep in step with the `Email` interface in app/types/index.ts. The thread
- * aggregate fields there (`thread_count`, `participants`, …) come from the
- * list queries, which already project explicitly, and are simply absent here.
- */
-const CLIENT_EMAIL_FIELDS = [
-	"id", "thread_id", "folder_id", "subject", "sender", "recipient",
-	"cc", "bcc", "date", "read", "starred", "body", "in_reply_to",
-	"email_references", "message_id", "raw_headers", "snippet", "attachments",
-] as const;
-
-function toClientEmail(email: object): Record<string, unknown> {
-	const row = email as Record<string, unknown>;
-	const projected: Record<string, unknown> = {};
-	for (const key of CLIENT_EMAIL_FIELDS) {
-		if (key in row) projected[key] = row[key];
-	}
-	return projected;
 }
 
 function intQuery(c: AppContext, key: string): number | undefined {

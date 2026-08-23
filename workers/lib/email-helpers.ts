@@ -219,6 +219,52 @@ export function buildQuotedReplyBlock(original: {
 	return `<br><blockquote style="border-left: 2px solid #ccc; margin: 0; padding-left: 1em; color: #666;">On ${originalDate}, ${originalSender} wrote:<br><br>${bodyToQuote}</blockquote>`;
 }
 
+// ── Client Email Projection ─────────────────────────────────────────
+
+/**
+ * The `emails` columns that are safe to hand to something outside the DO's
+ * own trust boundary — the SPA, the MCP tool results, and the AI agent's
+ * context. An allowlist, so a column added to the table later cannot
+ * silently start crossing this boundary.
+ *
+ * Migration 9 added `uid`, `answered`, `deleted`, `flags`, `rfc822_size` and
+ * `raw_key` for IMAP, and the wide-row reads (`getEmail`, `getThreadEmails`)
+ * hand back whole rows, so all six started leaking out through both the SPA
+ * endpoints (DEV-679) and `getFullEmail`/`getFullThread` below (DEV-688),
+ * which feed the MCP `get_email`/`get_thread` tool results and, from there,
+ * an LLM's context window. None of the six mean anything to a client or a
+ * model, and `raw_key` names an object in R2 — an internal storage path
+ * that has no business appearing in prompt content.
+ *
+ * `/mcp` is reachable by any external client past the Cloudflare Access
+ * gate, not just the first-party SPA, so this boundary matters even though
+ * neither leak is exploitable on its own (Access gates both).
+ *
+ * The narrowing lives here rather than in the DO on purpose: the IMAP read
+ * paths, the raw-MIME code, `send_reply`/`send_email` and the reply/forward
+ * routes all read the same wide rows directly (via `stub.getEmail`) and
+ * legitimately need the full set — they are not projected through this.
+ *
+ * Keep in step with the `Email` interface in app/types/index.ts. The thread
+ * aggregate fields there (`thread_count`, `participants`, …) come from the
+ * list queries, which already project explicitly, and are simply absent here.
+ */
+export const CLIENT_EMAIL_FIELDS = [
+	"id", "thread_id", "folder_id", "subject", "sender", "recipient",
+	"cc", "bcc", "date", "read", "starred", "body", "in_reply_to",
+	"email_references", "message_id", "raw_headers", "snippet", "attachments",
+] as const;
+
+/** Project a wide `emails` row down to `CLIENT_EMAIL_FIELDS`. */
+export function toClientEmail(email: object): Record<string, unknown> {
+	const row = email as Record<string, unknown>;
+	const projected: Record<string, unknown> = {};
+	for (const key of CLIENT_EMAIL_FIELDS) {
+		if (key in row) projected[key] = row[key];
+	}
+	return projected;
+}
+
 // ── Tool Logic (getFullEmail / getFullThread) ──────────────────────
 
 type MailboxThreadReaderStub = {
@@ -226,8 +272,11 @@ type MailboxThreadReaderStub = {
 };
 
 /**
- * Fetch a single email and return it with both HTML and plain-text body.
- * Returns null if the email is not found.
+ * Fetch a single email and return it, narrowed to `CLIENT_EMAIL_FIELDS`,
+ * with both HTML and plain-text body added. Returns null if not found.
+ *
+ * Feeds the MCP `get_email` tool result and the AI agent's context — see
+ * the block comment on `CLIENT_EMAIL_FIELDS` for why this is narrowed.
  */
 export async function getFullEmail(
 	stub: DurableObjectStub<MailboxDO>,
@@ -237,13 +286,17 @@ export async function getFullEmail(
 	if (!email) return null;
 
 	const textBody = email.body ? stripHtmlToText(email.body) : "";
-	return { ...email, body_text: textBody, body_html: email.body };
+	return { ...toClientEmail(email), body_text: textBody, body_html: email.body };
 }
 
 /**
- * Fetch all emails in a thread with full bodies in a single DO call.
- * Uses `getThreadEmails` which runs 2 SQL queries (emails + attachments)
- * instead of the previous N+1 pattern (1 list query + N getEmail calls).
+ * Fetch all emails in a thread with full bodies in a single DO call, each
+ * narrowed to `CLIENT_EMAIL_FIELDS`. Uses `getThreadEmails` which runs 2 SQL
+ * queries (emails + attachments) instead of the previous N+1 pattern (1 list
+ * query + N getEmail calls).
+ *
+ * Feeds the MCP `get_thread` tool result and the AI agent's context — see
+ * the block comment on `CLIENT_EMAIL_FIELDS` for why this is narrowed.
  */
 export async function getFullThread(
 	stub: DurableObjectStub<MailboxDO>,
@@ -252,14 +305,14 @@ export async function getFullThread(
 	const threadStub = stub as unknown as MailboxThreadReaderStub;
 	const emails = await threadStub.getThreadEmails(threadId);
 
-	const enriched = emails.map((email) => {
+	const enriched: Record<string, unknown>[] = emails.map((email) => {
 		const textBody = email.body ? stripHtmlToText(email.body) : "";
-		return { ...email, body_text: textBody };
+		return { ...toClientEmail(email), body_text: textBody };
 	});
 
 	// Already sorted ASC by the DO query, but ensure consistency
 	enriched.sort(
-		(a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+		(a, b) => new Date(a.date as string).getTime() - new Date(b.date as string).getTime(),
 	);
 
 	return { thread_id: threadId, message_count: enriched.length, messages: enriched };
