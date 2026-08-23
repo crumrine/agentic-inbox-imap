@@ -69,13 +69,18 @@ func mapBackendError(err error, notFoundText string) error {
 	}
 }
 
-// errReadOnly builds the response returned for every command that would
-// mutate the mailbox. Phase 1 of the gateway is read-only by design.
-func errReadOnly(command string) error {
+// errNotYetSupported builds the response for a mutating command the
+// gateway does not implement yet.
+//
+// Flag writes are served (see Store); moving, copying, appending and
+// expunging messages are phase 2. The distinction matters to a client:
+// PERMANENTFLAGS advertises what STORE will accept, and everything below
+// is what remains genuinely absent.
+func errNotYetSupported(command string) error {
 	return &imap.Error{
 		Type: imap.StatusResponseTypeNo,
 		Code: imap.ResponseCodeCannot,
-		Text: command + " is not supported: this mailbox is served read-only",
+		Text: command + " is not supported by this gateway yet",
 	}
 }
 
@@ -106,4 +111,14 @@ var errNotAuthenticated = &imap.Error{
 	Type: imap.StatusResponseTypeBad,
 	Code: imap.ResponseCodeClientBug,
 	Text: "Not authenticated",
+}
+
+// errClientBug reports a command the client should not have sent. go-imap
+// keeps its own equivalent unexported.
+func errClientBug(text string) error {
+	return &imap.Error{
+		Type: imap.StatusResponseTypeBad,
+		Code: imap.ResponseCodeClientBug,
+		Text: text,
+	}
 }

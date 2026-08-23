@@ -419,13 +419,6 @@ func TestWriteCommandsAnswerNoAndKeepTheConnection(t *testing.T) {
 		{"RENAME", func() error { return client.Rename("Archive", "Old", nil).Wait() }},
 		{"SUBSCRIBE", func() error { return client.Subscribe("Archive").Wait() }},
 		{"UNSUBSCRIBE", func() error { return client.Unsubscribe("Archive").Wait() }},
-		{"STORE", func() error {
-			_, err := client.Store(imap.SeqSetNum(1), &imap.StoreFlags{
-				Op:    imap.StoreFlagsAdd,
-				Flags: []imap.Flag{imap.FlagSeen},
-			}, nil).Collect()
-			return err
-		}},
 		{"COPY", func() error { _, err := client.Copy(imap.SeqSetNum(1), "Archive").Wait(); return err }},
 		{"UID EXPUNGE", func() error { return client.UIDExpunge(imap.UIDSetNum(5)).Close() }},
 		{"APPEND", func() error {

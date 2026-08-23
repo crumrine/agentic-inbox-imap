@@ -168,8 +168,10 @@ func TestSelectBuildsSeqNumMapping(t *testing.T) {
 	if data.UIDNext != 13 {
 		t.Errorf("UIDNext = %d, want 13", data.UIDNext)
 	}
-	if len(data.PermanentFlags) != 0 {
-		t.Errorf("PermanentFlags = %v, want empty (read-only mailbox)", data.PermanentFlags)
+	// PERMANENTFLAGS must list what STORE will actually persist: it is what
+	// a client reads to decide whether to try.
+	if !sameFlags(data.PermanentFlags, permanentFlags) {
+		t.Errorf("PermanentFlags = %v, want %v", data.PermanentFlags, permanentFlags)
 	}
 	// uid 5 is \Seen, uid 9 is \Seen, uid 12 is not: first unseen is seq 3.
 	if data.FirstUnseenSeqNum != 3 {
@@ -566,9 +568,6 @@ func TestOutOfScopeCommandsReturnCleanErrors(t *testing.T) {
 			_, err := s.Append("INBOX", nil, nil)
 			return err
 		},
-		"Store": func(s *Session) error {
-			return s.Store(nil, imap.SeqSetNum(1), &imap.StoreFlags{Op: imap.StoreFlagsAdd, Flags: []imap.Flag{imap.FlagSeen}}, nil)
-		},
 		"Copy": func(s *Session) error {
 			_, err := s.Copy(imap.SeqSetNum(1), "Archive")
 			return err
@@ -577,7 +576,8 @@ func TestOutOfScopeCommandsReturnCleanErrors(t *testing.T) {
 			set := imap.UIDSetNum(5)
 			return s.Expunge(nil, &set)
 		},
-		"Idle": func(s *Session) error { return s.Idle(nil, nil) },
+		// IDLE is deliberately absent: it is implemented now, by polling.
+		// See idle_test.go.
 	}
 
 	for name, call := range calls {
@@ -734,9 +734,35 @@ func TestSelectServesExamineTheSameWay(t *testing.T) {
 	if examine.NumMessages != selectData.NumMessages || examine.UIDValidity != selectData.UIDValidity {
 		t.Errorf("EXAMINE %+v differs from SELECT %+v", examine, selectData)
 	}
-	if len(selectData.PermanentFlags) != 0 {
-		t.Errorf("SELECT PermanentFlags = %v, want empty so clients know no flag change sticks", selectData.PermanentFlags)
+
+	// The two differ in exactly one respect: an examined mailbox cannot be
+	// changed, so it advertises no permanent flags and refuses STORE.
+	if len(examine.PermanentFlags) != 0 {
+		t.Errorf("EXAMINE PermanentFlags = %v, want empty", examine.PermanentFlags)
 	}
+	if !sameFlags(selectData.PermanentFlags, permanentFlags) {
+		t.Errorf("SELECT PermanentFlags = %v, want %v", selectData.PermanentFlags, permanentFlags)
+	}
+}
+
+// sameFlags compares two flag lists as sets, case-insensitively.
+func sameFlags(got, want []imap.Flag) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	seen := make(map[imap.Flag]int, len(got))
+	for _, f := range got {
+		seen[canonicalFlag(f)]++
+	}
+	for _, f := range want {
+		seen[canonicalFlag(f)]--
+	}
+	for _, n := range seen {
+		if n != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // TestListLSubPath covers the LSUB code path: go-imap turns LSUB into a

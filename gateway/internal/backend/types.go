@@ -57,3 +57,31 @@ type MessagesPage struct {
 	Messages []Message `json:"messages"`
 	UIDNext  uint32    `json:"uidNext"`
 }
+
+// FlagUpdate is one message's flag change in a POST
+// /api/imap/v1/{mailbox}/{folder}/flags request.
+//
+// Add and Remove are applied in that order by the Worker, so naming the
+// same flag in both is a set, not a clear.
+type FlagUpdate struct {
+	UID    uint32   `json:"uid"`
+	Add    []string `json:"add"`
+	Remove []string `json:"remove"`
+}
+
+// FlagResult is one message's complete flag set after the update, which is
+// what lets the gateway emit an accurate untagged FETCH without re-reading
+// the message.
+type FlagResult struct {
+	UID   uint32   `json:"uid"`
+	Flags []string `json:"flags"`
+}
+
+// FlagsPage is the response body of POST
+// /api/imap/v1/{mailbox}/{folder}/flags.
+//
+// UIDs the Worker does not recognise are silently absent from Updated;
+// that is how a message deleted underneath the session is reported.
+type FlagsPage struct {
+	Updated []FlagResult `json:"updated"`
+}

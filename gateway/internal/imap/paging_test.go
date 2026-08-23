@@ -204,7 +204,7 @@ func TestPollPagesABurstLargerThanOnePage(t *testing.T) {
 	}
 
 	w := &recordingUpdateWriter{}
-	if err := s.poll(w); err != nil {
+	if err := s.poll(context.Background(), w); err != nil {
 		t.Fatalf("poll: %v", err)
 	}
 	if len(w.exists) != 1 || w.exists[0] != 15 {
@@ -217,7 +217,7 @@ func TestPollPagesABurstLargerThanOnePage(t *testing.T) {
 	}
 	// A second poll must find nothing left over.
 	w2 := &recordingUpdateWriter{}
-	if err := s.poll(w2); err != nil {
+	if err := s.poll(context.Background(), w2); err != nil {
 		t.Fatalf("second poll: %v", err)
 	}
 	if len(w2.exists) != 0 {

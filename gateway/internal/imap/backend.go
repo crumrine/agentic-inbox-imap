@@ -26,6 +26,10 @@ type Backend interface {
 	Messages(ctx context.Context, mailbox, folder string, opts backend.MessagesOptions) (*backend.MessagesPage, error)
 	// RawMessage streams the original RFC822 bytes of one message.
 	RawMessage(ctx context.Context, mailbox, folder string, uid uint32) (*backend.RawMessageReader, error)
+	// SetFlags applies a batch of per-message flag changes and returns each
+	// message's complete resulting flag set. UIDs the Worker does not know
+	// are omitted from the result rather than reported as an error.
+	SetFlags(ctx context.Context, mailbox, folder string, updates []backend.FlagUpdate) ([]backend.FlagResult, error)
 }
 
 // Compile-time proof that the real client satisfies the interface, so a

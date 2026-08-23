@@ -305,6 +305,42 @@ func (c *Client) Messages(ctx context.Context, mailbox, folder string, opts Mess
 	return &page, nil
 }
 
+// SetFlags calls POST /api/imap/v1/{mailbox}/{folder}/flags, applying a
+// batch of per-message flag changes.
+//
+// It returns each updated message's complete resulting flag set. UIDs the
+// Worker does not know are omitted from the result rather than reported as
+// an error, so a caller must treat a missing UID as "that message is gone"
+// and not as a failure.
+func (c *Client) SetFlags(ctx context.Context, mailbox, folder string, updates []FlagUpdate) ([]FlagResult, error) {
+	// Normalise here rather than trusting callers: a nil slice marshals to
+	// JSON null, and the endpoint's schema expects arrays.
+	normalised := make([]FlagUpdate, 0, len(updates))
+	for _, u := range updates {
+		if u.Add == nil {
+			u.Add = []string{}
+		}
+		if u.Remove == nil {
+			u.Remove = []string{}
+		}
+		normalised = append(normalised, u)
+	}
+
+	payload, err := json.Marshal(struct {
+		Updates []FlagUpdate `json:"updates"`
+	}{Updates: normalised})
+	if err != nil {
+		return nil, fmt.Errorf("backend: encoding flag update request: %w", err)
+	}
+
+	var page FlagsPage
+	path := mailboxPath(mailbox) + "/" + url.PathEscape(folder) + "/flags"
+	if err := c.doJSON(ctx, http.MethodPost, path, nil, bytes.NewReader(payload), "application/json", &page); err != nil {
+		return nil, err
+	}
+	return page.Updated, nil
+}
+
 // RawMessageReader is the streamed body of a raw message fetch. Callers
 // MUST call Close when done, even on error paths after a successful call,
 // to return the connection to the pool.

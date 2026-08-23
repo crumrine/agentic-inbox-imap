@@ -509,3 +509,115 @@ func TestNew_RejectsNonHTTPBaseURL(t *testing.T) {
 		t.Fatal("expected error for non-http(s) scheme")
 	}
 }
+
+func TestSetFlags_Success(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requireAccessHeaders(t, r)
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != "/api/imap/v1/user@example.com/inbox/flags" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			t.Errorf("Content-Type = %q, want application/json", ct)
+		}
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"updated":[{"uid":3,"flags":["\\Seen","\\Answered"]}]}`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, srv)
+	got, err := c.SetFlags(context.Background(), "user@example.com", "inbox", []FlagUpdate{
+		{UID: 3, Add: []string{`\Seen`}, Remove: []string{`\Flagged`}},
+	})
+	if err != nil {
+		t.Fatalf("SetFlags: %v", err)
+	}
+	if len(got) != 1 || got[0].UID != 3 {
+		t.Fatalf("updated = %+v", got)
+	}
+	if len(got[0].Flags) != 2 || got[0].Flags[0] != `\Seen` || got[0].Flags[1] != `\Answered` {
+		t.Errorf("flags = %v", got[0].Flags)
+	}
+
+	const wantBody = `{"updates":[{"uid":3,"add":["\\Seen"],"remove":["\\Flagged"]}]}`
+	if strings.TrimSpace(gotBody) != wantBody {
+		t.Errorf("request body = %s\nwant           %s", gotBody, wantBody)
+	}
+}
+
+// TestSetFlags_NilSlicesBecomeArrays: a nil Go slice marshals to JSON null,
+// which the endpoint's schema does not accept. The client normalises.
+func TestSetFlags_NilSlicesBecomeArrays(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"updated":[]}`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, srv)
+	if _, err := c.SetFlags(context.Background(), "user@example.com", "inbox", []FlagUpdate{{UID: 7}}); err != nil {
+		t.Fatalf("SetFlags: %v", err)
+	}
+	if strings.Contains(gotBody, "null") {
+		t.Errorf("request body = %s, want empty arrays rather than null", gotBody)
+	}
+	const wantBody = `{"updates":[{"uid":7,"add":[],"remove":[]}]}`
+	if strings.TrimSpace(gotBody) != wantBody {
+		t.Errorf("request body = %s\nwant           %s", gotBody, wantBody)
+	}
+}
+
+func TestSetFlags_ErrorMapping(t *testing.T) {
+	tests := []struct {
+		name   string
+		status int
+		want   error
+	}{
+		{"not found", http.StatusNotFound, ErrNotFound},
+		{"server error", http.StatusInternalServerError, ErrServer},
+		{"unauthorized", http.StatusUnauthorized, ErrAuthFailed},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				w.Write([]byte(`{"error":"nope"}`))
+			}))
+			defer srv.Close()
+
+			c := newTestClient(t, srv)
+			_, err := c.SetFlags(context.Background(), "user@example.com", "inbox", []FlagUpdate{{UID: 1}})
+			if !errors.Is(err, tc.want) {
+				t.Errorf("err = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestSetFlags_HonoursRequestTimeout pins that the new method goes through
+// doJSON and therefore inherits the same timeout discipline as the rest.
+func TestSetFlags_HonoursRequestTimeout(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release
+	}))
+	defer srv.Close()
+	defer close(release)
+
+	c := newTestClient(t, srv, WithRequestTimeout(50*time.Millisecond))
+	start := time.Now()
+	if _, err := c.SetFlags(context.Background(), "user@example.com", "inbox", []FlagUpdate{{UID: 1}}); err == nil {
+		t.Fatal("SetFlags succeeded against a hung server")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("SetFlags took %v; the request timeout did not apply", elapsed)
+	}
+}
