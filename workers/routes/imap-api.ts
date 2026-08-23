@@ -59,7 +59,7 @@ import { normalizeMailboxId, verifyAppPassword } from "../lib/credentials";
 import {
 	generateMessageId,
 	SenderValidationError,
-	validateSender,
+	validateSenderWithAliases,
 } from "../lib/email-helpers";
 import { buildRawMime, type RawMimeAttachment, storeRawMime } from "../lib/raw-mime";
 import type { Env } from "../types";
@@ -73,7 +73,12 @@ export const IMAP_API_BASE = "/api/imap/v1";
  * folder/message endpoints landed; keeping the `Pick` narrow means a route
  * here cannot reach the `AI` binding by accident.
  */
-export type ImapApiEnv = Pick<Env, "BUCKET" | "EMAIL" | "IMAP_AUTH_RATE_LIMIT" | "MAILBOX">;
+// `EMAIL_ADDRESSES` is here because submission consults the alias registry
+// (`validateSenderWithAliases`), whose `AliasEnv` includes it.
+export type ImapApiEnv = Pick<
+	Env,
+	"BUCKET" | "EMAIL" | "EMAIL_ADDRESSES" | "IMAP_AUTH_RATE_LIMIT" | "MAILBOX"
+>;
 
 /**
  * The single failure response. Wrong password, unknown mailbox, mailbox with no
@@ -1294,13 +1299,25 @@ const SUBMIT_EMPTY_BODY = { error: "Empty message" } as const;
  * work. The gateway has the real RCPT TO list; it passes it here and it is
  * what gets used.
  *
- * ## `validateSender` runs twice, on purpose
+ * ## Sender validation runs twice, on purpose
  *
  * Once on the SMTP envelope (`envelopeFrom`) and once on the message's own
  * `From:` header. A client that authenticated as one mailbox and put another
  * address in either place is refused. Both go through the same
- * `validateSender` the SPA and MCP send paths use, rather than a hand-rolled
- * comparison, so there is exactly one definition of "the sender matches".
+ * `validateSenderWithAliases` the SPA send paths use, rather than a
+ * hand-rolled comparison, so there is exactly one definition of "the sender
+ * matches".
+ *
+ * ## Aliases (DEV-692 part two)
+ *
+ * "Matches" means the mailbox's own address **or** an address the registry
+ * says aliases to it. This path used the synchronous `validateSender`, which
+ * accepts only the mailbox's own address, so a real mail client could not send
+ * as `info@` at all — the one client where there is no server-side reply flow
+ * to pick the address for the user, and so the one that most needs to be able
+ * to say it itself. Nothing is inferred: `validateSenderWithAliases` reads
+ * `aliases/{from}.json` and checks it points here. An address on a configured
+ * domain with no record is still refused, exactly as before.
  *
  * ## The bytes are the client's bytes
  *
@@ -1343,7 +1360,7 @@ imapApi.post("/:mailboxId/submit", async (c) => {
 
 	// Envelope first, so a mismatched MAIL FROM is refused without reading a
 	// 5 MiB body off the wire.
-	const envelopeCheck = checkSender(envelope.to, envelope.from, mailboxId);
+	const envelopeCheck = await checkSender(c.env, envelope.to, envelope.from, mailboxId);
 	if (envelopeCheck) return c.json({ error: `Envelope sender rejected: ${envelopeCheck}` }, 403);
 
 	const raw = await readBoundedBody(c.req.raw, IMAP_SUBMIT_MAX_BYTES);
@@ -1355,7 +1372,7 @@ imapApi.post("/:mailboxId/submit", async (c) => {
 	// The header `From:`, through the same validator. `parsed.sender` is the
 	// address already lowercased; a message with no From at all arrives here
 	// as "" and is refused, which is the right answer.
-	const headerCheck = checkSender(envelope.to, parsed.sender, mailboxId);
+	const headerCheck = await checkSender(c.env, envelope.to, parsed.sender, mailboxId);
 	if (headerCheck) return c.json({ error: `From header rejected: ${headerCheck}` }, 403);
 
 	const limited = await stub.checkSendRateLimitDetailed();
@@ -1502,15 +1519,21 @@ function parseEnvelope(
 }
 
 /**
- * Run `validateSender` and return its message, or null when it passes.
+ * Run sender validation and return its message, or null when it passes.
  *
  * Wrapping rather than reimplementing matters: this is the invariant the whole
  * app rests on, and a second copy of the comparison here is how the two would
- * eventually disagree.
+ * eventually disagree. Async because the alias check is one keyed R2 read —
+ * and it is skipped entirely when From already equals the mailbox.
  */
-function checkSender(to: string[], from: string, mailboxId: string): string | null {
+async function checkSender(
+	env: ImapApiEnv,
+	to: string[],
+	from: string,
+	mailboxId: string,
+): Promise<string | null> {
 	try {
-		validateSender(to, from, mailboxId);
+		await validateSenderWithAliases(env, to, from, mailboxId);
 		return null;
 	} catch (e) {
 		if (e instanceof SenderValidationError) return e.message;

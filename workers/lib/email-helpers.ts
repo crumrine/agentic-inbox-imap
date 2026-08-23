@@ -118,6 +118,61 @@ export async function validateSenderWithAliases(
 	return validateSender(to, from, mailboxId, allowedSenders);
 }
 
+/**
+ * Which address a reply or forward should go out as, when the caller named
+ * none: the address the message being answered was delivered to, or the
+ * mailbox's own address.
+ *
+ * ## The stored value is a hint, never an authorisation
+ *
+ * `delivered_to` was written when the message arrived, possibly months ago.
+ * Between then and now the alias can have been deleted, or re-pointed at a
+ * different mailbox — `createAlias(..., { allowRepoint: true })` exists and
+ * the settings page uses it. So the stored address is re-resolved against the
+ * registry here, on every send, and is used only if it still points at *this*
+ * mailbox. Anything else falls back to the mailbox's own address rather than
+ * failing the send: the user asked to reply, and refusing because a piece of
+ * configuration changed underneath them would be a worse answer than replying
+ * as themselves.
+ *
+ * Falling back is safe precisely because the fallback is the one address the
+ * mailbox can always send as. This function can therefore only ever return an
+ * address the caller is entitled to, which is why `validateSenderWithAliases`
+ * running over its result afterwards is a belt-and-braces check rather than
+ * the load-bearing one.
+ *
+ * NULL/undefined `deliveredTo` — every row written before migration 11, and
+ * every outbound row — means "not known", and lands on the same fallback.
+ */
+export async function resolveReplyFrom(
+	env: AliasEnv,
+	mailboxId: string,
+	deliveredTo: string | null | undefined,
+): Promise<string> {
+	const mailbox = normalizeAddress(mailboxId);
+	const candidate = normalizeAddress(deliveredTo ?? "");
+	if (!candidate || candidate === mailbox) return mailbox;
+
+	return (await resolveAlias(env, candidate)) === mailbox ? candidate : mailbox;
+}
+
+/**
+ * The `from` value to hand the send path, given what the caller asked for and
+ * what the routing address turned out to be.
+ *
+ * `from_name` exists so a client can omit `from` — the only way to opt into
+ * automatic send-as — and still put a display name on the envelope. It is
+ * ignored when `from` is given, because that form already carries its own.
+ */
+export function applySendAs(
+	requested: string | { email: string; name: string } | undefined,
+	resolvedAddress: string,
+	fromName: string | undefined,
+): string | { email: string; name: string } {
+	if (requested !== undefined) return requested;
+	return fromName ? { email: resolvedAddress, name: fromName } : resolvedAddress;
+}
+
 export class SenderValidationError extends Error {
 	constructor(message: string) {
 		super(message);
@@ -293,6 +348,16 @@ export function buildQuotedReplyBlock(original: {
  * routes all read the same wide rows directly (via `stub.getEmail`) and
  * legitimately need the full set — they are not projected through this.
  *
+ * `delivered_to` (migration 11, DEV-692 part two) is here on purpose, unlike
+ * those six. It is not an internal identifier: it is which of the mailbox's
+ * own addresses the message arrived at, the same fact the `Delivered-To:`
+ * header states, and `raw_headers` — already on this list — often carries
+ * that header verbatim. It is also a closed set the operator controls, since
+ * it can only ever be the mailbox id or an address in the alias registry, so
+ * it is not attacker-supplied free text the way `sender` or `subject` are.
+ * For a model it is the difference between drafting as `info@` and drafting
+ * as the mailbox's own address, which is the whole point of the feature.
+ *
  * Keep in step with the `Email` interface in app/types/index.ts. The thread
  * aggregate fields there (`thread_count`, `participants`, …) come from the
  * list queries, which already project explicitly, and are simply absent here.
@@ -301,6 +366,7 @@ export const CLIENT_EMAIL_FIELDS = [
 	"id", "thread_id", "folder_id", "subject", "sender", "recipient",
 	"cc", "bcc", "date", "read", "starred", "body", "in_reply_to",
 	"email_references", "message_id", "raw_headers", "snippet", "attachments",
+	"delivered_to",
 ] as const;
 
 /** Project a wide `emails` row down to `CLIENT_EMAIL_FIELDS`. */

@@ -151,6 +151,16 @@ interface EmailData {
 	 * nobody will be served is worse than no structure at all.
 	 */
 	body_structure?: string | null;
+	/**
+	 * Which of the mailbox's own addresses this message was delivered to —
+	 * the mailbox id itself, or one of its aliases (workers/lib/aliases.ts).
+	 *
+	 * Only the inbound path can know this: it comes from the SMTP envelope
+	 * recipient, which exists for the duration of `receiveEmail` and nowhere
+	 * else. Outbound rows leave it unset. Omitted or null stores NULL, and
+	 * every reader takes NULL to mean the mailbox's own address.
+	 */
+	delivered_to?: string | null;
 }
 
 interface AttachmentData {
@@ -1101,6 +1111,7 @@ export class MailboxDO extends DurableObject<Env> {
 				raw_key: email.raw_key ?? null,
 				rfc822_size: email.rfc822_size ?? null,
 				body_structure: email.body_structure ?? null,
+				delivered_to: email.delivered_to ?? null,
 				uid,
 			})
 			.run();

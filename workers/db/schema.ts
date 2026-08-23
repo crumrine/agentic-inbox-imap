@@ -61,6 +61,14 @@ export const emails = sqliteTable("emails", {
 	 * the raw message itself.
 	 */
 	body_structure: text("body_structure"),
+	/**
+	 * Which of this mailbox's own addresses the message was delivered to: its
+	 * own address, or one of its aliases (see workers/lib/aliases.ts). Set on
+	 * the inbound path only, and NULL for every row written before migration
+	 * 11 and for every outbound row. NULL means "not known" and every reader
+	 * falls back to the mailbox's own address.
+	 */
+	delivered_to: text("delivered_to"),
 });
 
 export const attachments = sqliteTable("attachments", {

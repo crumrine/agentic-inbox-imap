@@ -476,9 +476,12 @@ describe("validateSender: sending as an alias", () => {
 		const alias = `sync-alias-${n}@example.com`;
 		await createAlias(testEnv, alias, box);
 
-		// workers/routes/imap-api.ts calls it exactly like this. A registered
-		// alias must NOT slip through a call that never asked for one — the
-		// SMTP submission path keeps the strictness it had.
+		// A registered alias must NOT slip through a call that never asked for
+		// one: `allowedSenders` is the whole permission, and defaulting it to
+		// empty is what keeps every caller that has not opted in strict.
+		// (The SMTP submission path in workers/routes/imap-api.ts did call it
+		// exactly like this; DEV-692 part two moved it to the async form so a
+		// mail client can send as an alias. This still pins the sync form.)
 		expect(() => validateSender("someone@example.com", alias, box)).toThrow(
 			SenderValidationError,
 		);

@@ -239,12 +239,17 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		if (toRecipients.length === 0) { setError("Add at least one recipient."); return; }
 		const ccRecipients = splitEmailList(cc); const bccRecipients = splitEmailList(bcc);
 		const fromName = currentMailbox.settings?.fromName || currentMailbox.name;
-		const from = fromName && fromName !== currentMailbox.email ? { email: currentMailbox.email, name: fromName } : currentMailbox.email;
+		// No `from`, on purpose (DEV-692 part two). The server picks the
+		// sending address: the reply and forward routes send back out as the
+		// address the original was delivered to, so a thread that arrived at
+		// an alias stays on that alias, and compose falls back to the
+		// mailbox's own address — which is exactly what this used to send.
+		// `from_name` keeps the display name on the envelope either way.
 		const emailData = {
 			to: toEmailListValue(toRecipients),
 			cc: toEmailListValue(ccRecipients),
 			bcc: toEmailListValue(bccRecipients),
-			from,
+			...(fromName && fromName !== currentMailbox.email ? { from_name: fromName } : {}),
 			subject,
 			html: body,
 			text: htmlToPlainText(body),

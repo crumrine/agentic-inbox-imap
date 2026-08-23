@@ -78,6 +78,13 @@ export interface Email {
 	raw_headers?: string | null;
 	attachments?: Attachment[];
 	snippet?: string | null;
+	/**
+	 * Which of the mailbox's addresses this message arrived at — its own, or
+	 * one of its aliases. Null on outbound rows and on anything received
+	 * before migration 11; the server treats null as the mailbox's own
+	 * address when it picks the sending address for a reply.
+	 */
+	delivered_to?: string | null;
 	// Thread aggregate fields (only present in threaded list view)
 	thread_count?: number;
 	thread_unread_count?: number;

@@ -7,12 +7,14 @@ import { sendEmail } from "../email-sender";
 import { storeAttachments } from "../lib/attachments";
 import type { EmailFull } from "../lib/schemas";
 import {
+	applySendAs,
 	validateSenderWithAliases,
 	SenderValidationError,
 	generateMessageId,
 	buildReferencesChain,
 	buildThreadingHeaders,
 	resolveOriginalEmail,
+	resolveReplyFrom,
 } from "../lib/email-helpers";
 import { SendEmailRequestSchema } from "../lib/schemas";
 import { buildAndStoreOutboundMime } from "../lib/raw-mime";
@@ -26,7 +28,7 @@ export async function handleReplyEmail(c: AppContext) {
 	const mailboxId = c.req.param("mailboxId") ?? "";
 	const id = c.req.param("id") ?? "";
 	const body = SendEmailRequestSchema.parse(await c.req.json());
-	const { to, cc, bcc, from, subject, html, text, attachments } = body;
+	const { to, cc, bcc, subject, html, text, attachments, from_name } = body;
 
 	const stub = c.var.mailboxStub;
 	const rawOriginal = (await stub.getEmail(id)) as EmailFull | null;
@@ -37,6 +39,16 @@ export async function handleReplyEmail(c: AppContext) {
 
 	const originalEmail = await resolveOriginalEmail(stub, rawOriginal);
 	const { originalMsgId, references, threadId: thread_id } = buildReferencesChain(originalEmail);
+
+	// Automatic send-as (DEV-692 part two): a reply to something that arrived
+	// at `info@` goes back out as `info@`, with no picker and no user action.
+	// `resolveOriginalEmail` matters here — replying from a draft row must read
+	// the routing address off the message being answered, not off the draft,
+	// which never had one. The stored value is re-resolved against the alias
+	// registry inside `resolveReplyFrom`; see the comment there for why it
+	// cannot be trusted as stored.
+	const sendAsAddress = await resolveReplyFrom(c.env, mailboxId, originalEmail.delivered_to);
+	const from = applySendAs(body.from, sendAsAddress, from_name);
 
 	let toStr: string, fromEmail: string, fromDomain: string;
 	try {
@@ -126,7 +138,7 @@ export async function handleForwardEmail(c: AppContext) {
 	const mailboxId = c.req.param("mailboxId") ?? "";
 	const id = c.req.param("id") ?? "";
 	const body = SendEmailRequestSchema.parse(await c.req.json());
-	const { to, cc, bcc, from, subject, html, text, attachments } = body;
+	const { to, cc, bcc, subject, html, text, attachments, from_name } = body;
 
 	const stub = c.var.mailboxStub;
 	const rawOriginal = (await stub.getEmail(id)) as EmailFull | null;
@@ -135,7 +147,12 @@ export async function handleForwardEmail(c: AppContext) {
 		return c.json({ error: "Original email not found" }, 404);
 	}
 
-	await resolveOriginalEmail(stub, rawOriginal);
+	const originalEmail = await resolveOriginalEmail(stub, rawOriginal);
+
+	// Same automatic send-as as the reply route: a message that came in on an
+	// alias is forwarded on from that alias.
+	const sendAsAddress = await resolveReplyFrom(c.env, mailboxId, originalEmail.delivered_to);
+	const from = applySendAs(body.from, sendAsAddress, from_name);
 
 	let toStr: string, fromEmail: string, fromDomain: string;
 	try {

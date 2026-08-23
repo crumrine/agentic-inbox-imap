@@ -9,6 +9,7 @@ import { z } from "zod";
 import { sendEmail } from "./email-sender";
 import { storeAttachments, type StoredAttachment } from "./lib/attachments";
 import {
+	applySendAs,
 	validateSenderWithAliases,
 	SenderValidationError,
 	generateMessageId,
@@ -207,7 +208,13 @@ app.get("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 	const mailboxId = c.req.param("mailboxId")!;
 	const body = SendEmailRequestSchema.parse(await c.req.json());
-	const { to, cc, bcc, from, subject, html, text, attachments, in_reply_to, references, thread_id } = body;
+	const { to, cc, bcc, subject, html, text, attachments, in_reply_to, references, thread_id, from_name } = body;
+
+	// A brand-new message has no message it is answering, so there is no
+	// routing address to inherit and nothing to infer one from: compose sends
+	// as the mailbox itself. Automatic send-as lives in the reply and forward
+	// routes, which do have an original to read `delivered_to` off.
+	const from = applySendAs(body.from, mailboxId.toLowerCase(), from_name);
 
 	let toStr: string, fromEmail: string, fromDomain: string;
 	try {
@@ -580,13 +587,12 @@ async function receiveEmail(event: InboundEvent, env: Env, ctx: ExecutionContext
 	 * that string later is a heuristic, and it guesses wrong in exactly the
 	 * multi-alias cases aliases exist for.
 	 *
-	 * The `delivered_to` COLUMN DOES NOT EXIST YET (DEV-692 part two adds it
-	 * to workers/durableObject/migrations.ts + workers/db/schema.ts).
-	 * `MailboxDO.createEmail` builds its INSERT from an explicit list of
-	 * fields, so an unknown key is dropped on the floor rather than throwing —
-	 * this line is inert today and becomes live the moment the column lands,
-	 * with no change here. Nothing reads it yet; automatic send-as picks it up
-	 * in that same pass.
+	 * Migration 11 added the column and `MailboxDO.createEmail` now inserts
+	 * it. The reply and forward routes read it back to pick the sending
+	 * address automatically — but they re-resolve it against the alias
+	 * registry first (`resolveReplyFrom` in workers/lib/email-helpers.ts),
+	 * because an alias can be deleted or re-pointed long after the message
+	 * that named it arrived.
 	 */
 	const inboundRow = {
 		id: messageId, subject: parsedEmail.subject || "",

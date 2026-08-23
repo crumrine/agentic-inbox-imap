@@ -253,4 +253,35 @@ export const mailboxMigrations: Migration[] = [
             ALTER TABLE emails ADD COLUMN body_structure TEXT;
         `,
 	},
+	{
+		// Which of the mailbox's own addresses a message was delivered to
+		// (DEV-692 part two), so a reply can go back out as that address.
+		//
+		// No txn() wrapper, same reason as migrations 9 and 10: the DO runtime
+		// forbids SQL-level BEGIN TRANSACTION and applyMigrations() already
+		// runs the batch inside state.storage.transactionSync().
+		//
+		// One nullable TEXT column holding the address `resolveInboundDelivery`
+		// in workers/lib/aliases.ts picked for the message — the mailbox's own
+		// address when the mail was addressed to it directly, an alias address
+		// when it routed through `aliases/{address}.json`.
+		//
+		// **There is deliberately no backfill, and none is possible.** The
+		// answer lived in the SMTP envelope recipient, which exists only for
+		// the duration of the inbound `email()` call and was never stored.
+		// `recipient` on the row is every To address joined with commas, so it
+		// cannot stand in: one message can name several of this mailbox's
+		// aliases at once, can arrive by Bcc with none of its addresses in the
+		// headers, or can come through a list that rewrote them. Reconstructing
+		// the routing address from that string is a heuristic, and it guesses
+		// wrong in exactly the multi-alias cases aliases exist for.
+		//
+		// NULL therefore means "not known", and every reader treats it as "use
+		// the mailbox's own address" — which is the behaviour every row that
+		// exists when this migration runs already had.
+		name: "11_add_delivered_to",
+		sql: `
+            ALTER TABLE emails ADD COLUMN delivered_to TEXT;
+        `,
+	},
 ];

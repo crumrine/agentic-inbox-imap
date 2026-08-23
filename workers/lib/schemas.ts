@@ -36,6 +36,14 @@ export interface EmailFull extends EmailMetadata {
 	message_id?: string | null;
 	raw_headers?: string | null;
 	attachments?: AttachmentInfo[];
+	/**
+	 * Which of the mailbox's own addresses this message arrived at — the
+	 * mailbox id, or one of its aliases. NULL/absent on outbound rows and on
+	 * anything stored before migration 11, and every reader treats that as
+	 * "the mailbox's own address". Never trusted as-is on a send path: see
+	 * `resolveReplyFrom` in workers/lib/email-helpers.ts.
+	 */
+	delivered_to?: string | null;
 }
 
 export interface AttachmentInfo {
@@ -63,10 +71,28 @@ export const SendEmailRequestSchema = z
 		to: RecipientFieldSchema,
 		cc: RecipientFieldSchema.optional(),
 		bcc: RecipientFieldSchema.optional(),
-		from: z.union([
-			z.string().email(),
-			z.object({ email: z.string().email(), name: z.string() }),
-		]),
+		/**
+		 * Optional. Omitting it hands the choice of sending address to the
+		 * server, which is what makes automatic send-as work (DEV-692 part
+		 * two): the reply and forward routes default it to the address the
+		 * message being answered was delivered to, and everything else
+		 * defaults it to the mailbox's own address. A caller that names an
+		 * address still gets it validated exactly as before — the mailbox, or
+		 * an address the registry says aliases to it.
+		 */
+		from: z
+			.union([
+				z.string().email(),
+				z.object({ email: z.string().email(), name: z.string() }),
+			])
+			.optional(),
+		/**
+		 * Display name to pair with a server-chosen address. Ignored when
+		 * `from` is given, because that already carries its own name. It
+		 * exists so a client can drop `from` — and so opt into automatic
+		 * send-as — without losing the friendly name on the envelope.
+		 */
+		from_name: z.string().optional(),
 		subject: z.string(),
 		html: z.string().optional(),
 		text: z.string().optional(),
