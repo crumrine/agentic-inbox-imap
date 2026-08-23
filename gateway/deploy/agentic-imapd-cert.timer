@@ -1,0 +1,16 @@
+[Unit]
+Description=Renew the agentic-imapd TLS certificate weekly
+Documentation=https://github.com/crumrine/agentic-inbox-imap/blob/main/gateway/README.md
+
+[Timer]
+# Weekly, with a randomised delay so every node on a tailnet does not hit the
+# ACME path at the same instant. Certificates last about 90 days, so weekly
+# gives roughly twelve chances to renew before expiry rather than one.
+OnCalendar=weekly
+RandomizedDelaySec=6h
+# Catch up after downtime. A box that was off over the renewal window would
+# otherwise wait for the next scheduled run with an already-expired cert.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

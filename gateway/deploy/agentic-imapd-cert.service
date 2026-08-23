@@ -1,0 +1,29 @@
+[Unit]
+Description=Renew the agentic-imapd TLS certificate
+Documentation=https://github.com/crumrine/agentic-inbox-imap/blob/main/gateway/README.md
+After=network-online.target tailscaled.service
+Wants=network-online.target
+Requires=tailscaled.service
+
+[Service]
+Type=oneshot
+
+# `tailscale cert` is a no-op when the certificate is still comfortably valid,
+# so running this on a schedule is cheap. It renews inside the last third of
+# the lifetime.
+#
+# CERT_DOMAIN must be the node's MagicDNS name and must appear in
+# `tailscale status --json | jq .CertDomains`. Set it in the same env file the
+# service uses so there is one place to edit.
+EnvironmentFile=/etc/agentic-imapd/agentic-imapd.env
+ExecStart=/usr/bin/tailscale cert \
+    --cert-file /etc/agentic-imapd/tls.crt \
+    --key-file /etc/agentic-imapd/tls.key \
+    ${AGENTIC_CERT_DOMAIN}
+
+# The gateway reads the certificate once at startup, so a renewed file on disk
+# does nothing until the process restarts. Renewal without this line looks
+# like it works and then serves an expired certificate.
+ExecStartPost=/usr/bin/chown root:agentic-imapd /etc/agentic-imapd/tls.crt /etc/agentic-imapd/tls.key
+ExecStartPost=/usr/bin/chmod 0640 /etc/agentic-imapd/tls.crt /etc/agentic-imapd/tls.key
+ExecStartPost=/usr/bin/systemctl try-restart agentic-imapd.service
