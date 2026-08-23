@@ -502,3 +502,181 @@ export function buildRawMime(input: BuildRawMimeInput): string {
 	const headerBlock = headers.map(([n, v]) => foldHeaderLine(n, v)).join(CRLF);
 	return `${headerBlock}${CRLF}${CRLF}${bodyContent}`;
 }
+
+// -- From-header rewriting (SMTP submission send-as) -----------------------
+
+/**
+ * Largest header block this will look at, in bytes. A message whose headers
+ * run past this is not rewritten at all — the caller falls back to sending
+ * the client's bytes untouched, which is the pre-existing behaviour and never
+ * wrong, only less helpful.
+ *
+ * The cap exists because the rewrite decodes the header region into a string
+ * to work on it. The body never is: it is spliced back as the original bytes.
+ */
+const REWRITE_MAX_HEADER_BYTES = 256 * 1024;
+
+/** RFC 5322 §2.1.1 hard limit on one physical line, excluding the CRLF. */
+const MAX_HEADER_LINE_OCTETS = 998;
+
+/**
+ * The `From:` header, captured whole: everything after the colon on that line
+ * plus every folded continuation (a following line that starts with SP/HTAB).
+ *
+ * `^` under `m` anchors to a line start, so `Resent-From:` and a `From:`
+ * appearing inside a folded value of some other header cannot match.
+ */
+const FROM_HEADER_RE = /^From:([^\r\n]*(?:\r?\n[ \t][^\r\n]*)*)/im;
+
+/**
+ * Swap the address inside a message's `From:` header, changing nothing else
+ * in the message — not one byte of the body, not another header, and not the
+ * `Message-ID:` the Sent-copy deduplication depends on.
+ *
+ * ## Why an in-place splice rather than a rebuild
+ *
+ * The SMTP submission path (`workers/routes/imap-api.ts`) is the one place in
+ * this app where the stored `.eml` is byte-exact by construction, because the
+ * client hands over the actual message. Round-tripping it through
+ * `buildRawMime` would break S/MIME signatures and quietly drop anything the
+ * builder does not model. So this finds the address, replaces exactly that
+ * span, and leaves the rest of the octets alone. A display name — including
+ * an RFC 2047 encoded word, which this deliberately never decodes — survives
+ * verbatim, folding and all.
+ *
+ * ## Refusing is a normal outcome
+ *
+ * Returns `null` whenever it is not certain which span is the address: no
+ * `From:` at all, angle brackets around something that is not `oldAddress`,
+ * an unbracketed value where the address appears more than once, a rewrite
+ * that would push a header line past 998 octets, or a `newAddress` that the
+ * sanitiser had to alter. The caller treats `null` as "send the client's
+ * bytes as they are". A half-understood header is not something to guess at
+ * when the alternative is merely the old, correct-but-less-helpful behaviour.
+ *
+ * @param oldAddress The current From address, lowercased. The caller has
+ *   already established this equals the mailbox's own address.
+ * @param newAddress The address to put in its place.
+ */
+export function rewriteFromAddress(
+	raw: Uint8Array,
+	oldAddress: string,
+	newAddress: string,
+): Uint8Array | null {
+	if (!oldAddress || !newAddress || oldAddress === newAddress) return null;
+
+	// SECURITY: the replacement goes through the same sanitiser every built
+	// header value does, and then the result is required to be *identical* to
+	// the input. Equality is the stricter test: it refuses anything the
+	// sanitiser had to touch, rather than trusting that what came back is
+	// safe. A CR/LF here would end the header block and let the rest of the
+	// value become attacker-chosen headers and body — the injection this
+	// module's folding helper was once found to re-open.
+	const safeAddress = sanitizeHeaderValue(newAddress);
+	if (safeAddress !== newAddress || /[\r\n\t ]/.test(safeAddress)) return null;
+
+	const headerBytes = headerBlockLength(raw);
+	if (headerBytes > REWRITE_MAX_HEADER_BYTES) return null;
+
+	const head = bytesToLatin1(raw.subarray(0, headerBytes));
+	const match = FROM_HEADER_RE.exec(head);
+	if (!match) return null;
+
+	const value = match[1];
+	const span = locateFromAddress(value, oldAddress);
+	if (!span) return null;
+
+	const newValue = value.slice(0, span.start) + safeAddress + value.slice(span.end);
+
+	// Never emit a line longer than RFC 5322 allows. Re-folding to fit would
+	// mean changing octets outside the address, which is the one thing this
+	// function promises not to do, so an over-long result is refused instead.
+	const tooLong = `From:${newValue}`
+		.split(/\r?\n/)
+		.some((line) => line.length > MAX_HEADER_LINE_OCTETS);
+	if (tooLong) return null;
+
+	const rewrittenHead =
+		head.slice(0, match.index) + `From:${newValue}` + head.slice(match.index + match[0].length);
+
+	return concatBytes(latin1ToBytes(rewrittenHead), raw.subarray(headerBytes));
+}
+
+/**
+ * Where `address` sits inside a raw `From:` header value, or null when that
+ * cannot be answered unambiguously.
+ *
+ * Angle brackets win when present: `Name <addr>` is the common form, and the
+ * bracketed span is the addr-spec by definition, so a display name that
+ * happens to repeat the address (`user@example.com <user@example.com>`) resolves
+ * correctly instead of ambiguously. Without brackets the value is an
+ * addr-spec possibly trailed by a comment (`addr (Name)`), and a single
+ * occurrence of the address is the answer; two or more is ambiguous.
+ */
+function locateFromAddress(
+	value: string,
+	address: string,
+): { start: number; end: number } | null {
+	const open = value.lastIndexOf("<");
+	if (open !== -1) {
+		const close = value.indexOf(">", open + 1);
+		if (close === -1) return null;
+		const inner = value.slice(open + 1, close);
+		if (inner.trim().toLowerCase() !== address) return null;
+		const lead = inner.length - inner.trimStart().length;
+		const trail = inner.length - inner.trimEnd().length;
+		return { start: open + 1 + lead, end: close - trail };
+	}
+
+	const lower = value.toLowerCase();
+	const first = lower.indexOf(address);
+	if (first === -1) return null;
+	if (lower.indexOf(address, first + 1) !== -1) return null;
+	return { start: first, end: first + address.length };
+}
+
+/**
+ * Bytes in `raw` up to and including the LF that ends the last header line.
+ *
+ * The blank line separating headers from body, and everything after it, stays
+ * in the caller's hands as untouched original bytes. A message with no blank
+ * line at all is all headers.
+ */
+function headerBlockLength(raw: Uint8Array): number {
+	for (let i = 0; i < raw.length - 1; i++) {
+		if (raw[i] !== 0x0a) continue;
+		if (raw[i + 1] === 0x0a) return i + 1;
+		if (raw[i + 1] === 0x0d && raw[i + 2] === 0x0a) return i + 1;
+	}
+	return raw.length;
+}
+
+/** Chunked so a large header block cannot blow the argument limit. */
+const LATIN1_CHUNK = 0x8000;
+
+/**
+ * One byte to one char, so string indices are byte offsets and a non-ASCII
+ * octet that has no business being in a header survives the round trip
+ * unchanged. `TextDecoder` would replace it with U+FFFD and corrupt bytes the
+ * caller promised not to touch.
+ */
+function bytesToLatin1(bytes: Uint8Array): string {
+	let out = "";
+	for (let i = 0; i < bytes.length; i += LATIN1_CHUNK) {
+		out += String.fromCharCode(...bytes.subarray(i, i + LATIN1_CHUNK));
+	}
+	return out;
+}
+
+function latin1ToBytes(text: string): Uint8Array {
+	const out = new Uint8Array(text.length);
+	for (let i = 0; i < text.length; i++) out[i] = text.charCodeAt(i) & 0xff;
+	return out;
+}
+
+function concatBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
+	const combined = new Uint8Array(a.length + b.length);
+	combined.set(a, 0);
+	combined.set(b, a.length);
+	return combined;
+}

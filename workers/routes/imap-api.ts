@@ -56,12 +56,19 @@ import {
 } from "../imap/search";
 import { authRateLimiter } from "../durableObject/authRateLimit";
 import { normalizeMailboxId, verifyAppPassword } from "../lib/credentials";
+import { normalizeAddress } from "../lib/aliases";
 import {
 	generateMessageId,
+	resolveReplyFrom,
 	SenderValidationError,
 	validateSenderWithAliases,
 } from "../lib/email-helpers";
-import { buildRawMime, type RawMimeAttachment, storeRawMime } from "../lib/raw-mime";
+import {
+	buildRawMime,
+	type RawMimeAttachment,
+	rewriteFromAddress,
+	storeRawMime,
+} from "../lib/raw-mime";
 import type { Env } from "../types";
 import { Folders } from "../../shared/folders";
 
@@ -1324,8 +1331,35 @@ const SUBMIT_EMPTY_BODY = { error: "Empty message" } as const;
  * What goes to the upstream, what goes to R2 and what `/raw` later serves are
  * the same buffer. Nothing here re-encodes the message: an MSA that rewrites
  * a submission breaks S/MIME signatures and mangles anything the builder does
- * not model. The single exception is a message with no `Message-ID:` at all,
- * below.
+ * not model. The two exceptions are a message with no `Message-ID:` at all,
+ * below, and automatic send-as, next.
+ *
+ * ## Automatic send-as (DEV-692 part three)
+ *
+ * Part two made an alias *permitted* here: the client picks the From address
+ * and this endpoint stopped refusing it. That is enough for a client that can
+ * pick — macOS Mail can — and no help at all to iOS Mail, which only ever
+ * emits the account address. So a reply to something that arrived at `info@`
+ * went back out as the mailbox, which is the bug the whole feature exists to
+ * fix, on the one client the user actually sends from.
+ *
+ * `resolveSubmissionSendAs` below rewrites the From address, but only when the
+ * client is demonstrably using its default. If the client set From to anything
+ * other than the mailbox's own address that is a deliberate choice by a client
+ * that supports alias selection, and it is honoured untouched — silently
+ * overriding it would be a worse bug than the one being fixed. There is no way
+ * to tell "the user chose the default" from "the client can only produce the
+ * default", so confining the rewrite to the default is what keeps this from
+ * overriding intent.
+ *
+ * The rewrite changes the `From:` header **in the raw bytes** and the SMTP
+ * envelope sender together. Either alone is an inconsistent message: a
+ * mismatched envelope is what SPF and DMARC alignment are checked against.
+ *
+ * `rewriteFromAddress` splices the address in place rather than rebuilding the
+ * message, so the byte-exactness above still holds everywhere except that one
+ * span — `Message-ID:` included, which is what keeps the client's own APPENDed
+ * Sent copy able to deduplicate against the row written here.
  *
  * ## Message-ID is preserved, and that is load-bearing
  *
@@ -1382,17 +1416,38 @@ imapApi.post("/:mailboxId/submit", async (c) => {
 		});
 	}
 
+	let outbound = raw;
+	// The envelope sender and the Sent row's `sender`, which automatic send-as
+	// moves in step with the `From:` header — see the block comment above.
+	let envelopeFrom = envelope.from;
+	let sender = parsed.sender;
+
+	const sendAs = await resolveSubmissionSendAs(c.env, stub, mailboxId, envelope.from, parsed);
+	if (sendAs) {
+		const rewritten = rewriteFromAddress(raw, parsed.sender, sendAs);
+		if (rewritten) {
+			outbound = rewritten;
+			envelopeFrom = sendAs;
+			sender = sendAs;
+		} else {
+			// A `From:` this cannot splice unambiguously. Falling through sends
+			// the client's bytes untouched, which is the pre-send-as behaviour:
+			// the reply goes out as the mailbox rather than the alias. Worth a
+			// line in the log, not worth refusing a send over.
+			console.error("SUBMIT: could not rewrite From for automatic send-as; sending as the mailbox");
+		}
+	}
+
 	// RFC 4409 §8.1: supply a Message-ID when the submission has none. Done by
 	// prepending a header line — header order is free in RFC 5322 — so the
 	// bytes sent, the bytes stored and the id reported all still agree.
-	let outbound = raw;
 	let messageId = parsed.messageId;
 	if (!messageId) {
 		const fromDomain = mailboxId.split("@")[1] ?? "invalid";
 		messageId = generateMessageId(fromDomain).outgoingMessageId;
 		outbound = concatBytes(
 			new TextEncoder().encode(`Message-ID: <${messageId}>\r\n`),
-			raw,
+			outbound,
 		);
 		console.error(
 			"SUBMIT: message had no Message-ID; generated one. The client's own " +
@@ -1406,7 +1461,7 @@ imapApi.post("/:mailboxId/submit", async (c) => {
 	// first and deliver in `waitUntil` because their caller is a browser that
 	// wants a 202; here the caller is an SMTP listener holding a client
 	// connection open for a real answer.
-	const delivery = await deliverToEnvelope(c.env.EMAIL, envelope.from, envelope.to, outbound);
+	const delivery = await deliverToEnvelope(c.env.EMAIL, envelopeFrom, envelope.to, outbound);
 	if (delivery.delivered.length === 0) {
 		return c.json({ error: `Upstream send failed: ${delivery.reason}` }, 502);
 	}
@@ -1421,7 +1476,9 @@ imapApi.post("/:mailboxId/submit", async (c) => {
 		id: emailId,
 		messageId,
 		subject: parsed.subject,
-		sender: parsed.sender,
+		// `sender`, not `parsed.sender`: after a send-as rewrite the two differ,
+		// and this column has to agree with the `From:` in the stored bytes.
+		sender,
 		// The header recipients, not the envelope: this column is what the SPA
 		// renders as "To", and showing Bcc'd addresses there would leak them
 		// back into the thread view. The envelope list is not persisted.
@@ -1516,6 +1573,61 @@ function parseEnvelope(
 	if (recipients.some((r) => !r.includes("@") || r.length > SUBMIT_MAX_ADDRESS_CHARS)) return null;
 
 	return { from: fromAddress, to: recipients };
+}
+
+/**
+ * The address this submission should go out as, or null for "leave the
+ * client's message exactly as it is".
+ *
+ * Three conditions, all of which must hold. Each is a guard against a
+ * different way this could be wrong:
+ *
+ * 1. **The client is using its default.** Both the message's `From:` and the
+ *    SMTP envelope sender are the mailbox's own address. iOS Mail can produce
+ *    nothing else, which is why this feature is needed at all; a client that
+ *    put an alias in either place chose it deliberately and is honoured
+ *    untouched. "The user picked the default" and "the client can only emit
+ *    the default" are indistinguishable from here, so the default is the only
+ *    thing safe to overwrite.
+ *
+ * 2. **It is a reply to a message this mailbox actually holds, which knows
+ *    where it was delivered.** No `In-Reply-To`/`References` means a fresh
+ *    compose, and a fresh compose has no routing address to inherit and
+ *    nothing to infer one from — the same reasoning as the `POST /emails`
+ *    route in workers/index.ts. `In-Reply-To` is tried first and the tail of
+ *    `References` second, per the threading logic in `receiveEmail`: both name
+ *    the direct parent, and the direct parent is the message being answered.
+ *    A parent with a NULL `delivered_to` — every row written before migration
+ *    11, and every outbound row — is a complete answer meaning "not known".
+ *
+ * 3. **The alias still resolves here, checked now.** `resolveReplyFrom` does
+ *    exactly this and falls back to the mailbox address, so a `delivered_to`
+ *    naming an alias that has since been deleted or re-pointed at somebody
+ *    else's mailbox comes back as the mailbox's own address — which this reads
+ *    as "nothing to do". The stored string is never trusted as stored; see the
+ *    block comment on `resolveReplyFrom` for why that matters.
+ */
+async function resolveSubmissionSendAs(
+	env: ImapApiEnv,
+	stub: DurableObjectStub<MailboxDO>,
+	mailboxId: string,
+	envelopeFrom: string,
+	parsed: AppendColumns,
+): Promise<string | null> {
+	if (parsed.sender !== mailboxId) return null;
+	if (normalizeAddress(envelopeFrom) !== mailboxId) return null;
+
+	const parents = [parsed.inReplyTo, parsed.references.at(-1)].filter(
+		(id): id is string => !!id,
+	);
+	const candidates = [...new Set(parents)];
+	if (candidates.length === 0) return null;
+
+	const deliveredTo = await stub.lookupDeliveredTo(candidates);
+	if (!deliveredTo) return null;
+
+	const address = await resolveReplyFrom(env, mailboxId, deliveredTo);
+	return address === mailboxId ? null : address;
 }
 
 /**

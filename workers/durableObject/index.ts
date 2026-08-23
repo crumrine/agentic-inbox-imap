@@ -72,6 +72,16 @@ const SEND_LIMIT_PER_DAY = 100;
 const HOUR_SECONDS = 3600;
 const DAY_SECONDS = 86400;
 
+/**
+ * How many Message-IDs `lookupDeliveredTo` will try before giving up.
+ *
+ * There is no index on `emails.message_id`, so each candidate is a table
+ * scan. Two — a reply's `In-Reply-To` and the tail of its `References` — is
+ * every candidate the submission path can produce, and the cap is here so a
+ * future caller cannot turn one send into an unbounded number of them.
+ */
+const MAX_DELIVERED_TO_CANDIDATES = 2;
+
 /** A refused send, with the interval the caller should wait before retrying. */
 export interface SendRateLimitRefusal {
 	error: string;
@@ -983,6 +993,38 @@ export class MailboxDO extends DurableObject<Env> {
 			}
 
 			return String((row as any).thread_id);
+		}
+		return null;
+	}
+
+	/**
+	 * The routing address of the first of `messageIds` that names a message in
+	 * this mailbox and knows which of its addresses that message arrived at.
+	 *
+	 * Ordered: the caller's preference order is the answer's, because the
+	 * candidates are a reply's `In-Reply-To` and the tail of its `References`
+	 * and the direct parent is the better evidence of the two.
+	 *
+	 * `delivered_to` is written on inbound rows only, so this never matches a
+	 * Sent copy and a NULL is a complete answer — see the block comment on
+	 * `resolveReplyFrom` in workers/lib/email-helpers.ts. It is also only ever
+	 * a hint: the caller must re-resolve it against the alias registry before
+	 * sending as it, since an alias can be deleted or re-pointed long after
+	 * the message that named it arrived.
+	 */
+	async lookupDeliveredTo(messageIds: readonly string[]): Promise<string | null> {
+		for (const messageId of messageIds.slice(0, MAX_DELIVERED_TO_CANDIDATES)) {
+			if (!messageId) continue;
+			const row = [
+				...this.ctx.storage.sql.exec(
+					`SELECT delivered_to
+					   FROM emails
+					  WHERE message_id = ?1 AND delivered_to IS NOT NULL
+					  LIMIT 1`,
+					messageId,
+				),
+			][0] as unknown as { delivered_to: string } | undefined;
+			if (row?.delivered_to) return row.delivered_to;
 		}
 		return null;
 	}
