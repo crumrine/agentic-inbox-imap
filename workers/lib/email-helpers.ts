@@ -10,7 +10,7 @@
  */
 import type { MailboxDO } from "../durableObject";
 import type { EmailFull } from "./schemas";
-import { type AliasEnv, normalizeAddress, resolveAlias } from "./aliases";
+import { type AliasEnv, normalizeAddress, readAlias, resolveAlias } from "./aliases";
 import { Folders } from "../../shared/folders";
 import type { Env } from "../types";
 import { formatQuotedDate } from "../../shared/dates";
@@ -149,11 +149,56 @@ export async function resolveReplyFrom(
 	mailboxId: string,
 	deliveredTo: string | null | undefined,
 ): Promise<string> {
+	return (await resolveSendAs(env, mailboxId, deliveredTo)).address;
+}
+
+/**
+ * The address a send should go out as, together with the display name that
+ * address is configured to present itself under.
+ *
+ * The two travel together because they come out of the same record and the
+ * same one R2 read; splitting them into two lookups would double the reads and
+ * — worse — open a window where the address comes from one version of the
+ * record and the name from another.
+ */
+export interface SendAsIdentity {
+	/** Always an address this mailbox is entitled to send as. */
+	address: string;
+	/**
+	 * The alias's configured display name, in the three states documented on
+	 * `AliasDisplayName` in workers/lib/aliases.ts: `undefined` is "not
+	 * configured, leave the display name alone", `""` is "configured blank,
+	 * send a bare address", anything else is the name to use.
+	 *
+	 * Always `undefined` when `address` is the mailbox's own address, which has
+	 * no alias record and therefore nothing configured on it.
+	 */
+	name?: string;
+}
+
+/**
+ * `resolveReplyFrom`, plus the display name off the same record.
+ *
+ * Everything in the block comment above about the stored `delivered_to` being
+ * a hint rather than an authorisation applies here unchanged — this is the
+ * function that actually performs that re-resolution, and `resolveReplyFrom`
+ * is now a projection of it. The name is only ever taken from a record that
+ * has just been confirmed to point at *this* mailbox, so a re-pointed alias
+ * cannot lend its name to a mailbox that no longer owns it.
+ */
+export async function resolveSendAs(
+	env: AliasEnv,
+	mailboxId: string,
+	deliveredTo: string | null | undefined,
+): Promise<SendAsIdentity> {
 	const mailbox = normalizeAddress(mailboxId);
 	const candidate = normalizeAddress(deliveredTo ?? "");
-	if (!candidate || candidate === mailbox) return mailbox;
+	if (!candidate || candidate === mailbox) return { address: mailbox };
 
-	return (await resolveAlias(env, candidate)) === mailbox ? candidate : mailbox;
+	const record = await readAlias(env, candidate);
+	if (!record || record.mailbox !== mailbox) return { address: mailbox };
+
+	return { address: candidate, ...(record.name !== undefined ? { name: record.name } : {}) };
 }
 
 /**
@@ -163,14 +208,30 @@ export async function resolveReplyFrom(
  * `from_name` exists so a client can omit `from` — the only way to opt into
  * automatic send-as — and still put a display name on the envelope. It is
  * ignored when `from` is given, because that form already carries its own.
+ *
+ * ## A configured alias name outranks `from_name`
+ *
+ * `from_name` is the mailbox's own display name: the SPA fills it from the
+ * mailbox settings, so it is a personal name. A display name configured *on
+ * the alias* is a statement about how that one address presents itself, and
+ * the reason to configure one is precisely to keep the personal name off a
+ * role address. So when the alias has one it wins, and a name configured as
+ * blank strips `from_name` too rather than letting it back in through the side
+ * door. An alias with nothing configured changes nothing at all: `from_name`
+ * applies exactly as it did before.
  */
 export function applySendAs(
 	requested: string | { email: string; name: string } | undefined,
-	resolvedAddress: string,
+	sendAs: SendAsIdentity,
 	fromName: string | undefined,
 ): string | { email: string; name: string } {
 	if (requested !== undefined) return requested;
-	return fromName ? { email: resolvedAddress, name: fromName } : resolvedAddress;
+	if (sendAs.name !== undefined) {
+		// A bare string `from` is what every downstream builder renders as an
+		// address with no display name.
+		return sendAs.name === "" ? sendAs.address : { email: sendAs.address, name: sendAs.name };
+	}
+	return fromName ? { email: sendAs.address, name: fromName } : sendAs.address;
 }
 
 export class SenderValidationError extends Error {

@@ -17,8 +17,14 @@ npm run deploy         # build + wrangler deploy
 gitignored. A fresh clone will not typecheck until it exists, so run `npm run typecheck` (which
 regenerates it) rather than bare `tsc`.
 
-There is **no test framework and no linter** in this repo. "Verified" means `npm run typecheck`
-passes plus an actual exercise of the path (send/receive an email, hit the endpoint).
+Tests are vitest via `@cloudflare/vitest-pool-workers`, which runs them inside `workerd` against
+real Durable Object and R2 bindings: `npm test`. There is **no linter**.
+
+"Verified" means `npm run typecheck` passes, `npm test` is green, **and** the path was exercised
+for real (send/receive an email, hit the endpoint). The third one is not optional. Send-as was
+reported complete three times off a green suite while doing nothing on the path the user actually
+sends from, because the tests covered the wrong surface rather than being wrong. Anything with
+more than one caller is not done until each caller is either exercised or explicitly ruled out.
 
 Local secrets go in `.dev.vars` (see `.dev.vars.example`): `POLICY_AUD`, `TEAM_DOMAIN`.
 Access JWT validation is skipped when `import.meta.env.DEV`, and **fails closed** otherwise.

@@ -8,8 +8,10 @@
  *
  * ## Why a separate R2 key, and not the settings blob
  *
- * An alias lives at `aliases/{address}.json` holding `{"mailbox": "..."}`.
- * Two properties fall out of that shape and both are the reason for it:
+ * An alias lives at `aliases/{address}.json` holding `{"mailbox": "..."}` and,
+ * optionally, the display name that address sends under (see
+ * `AliasDisplayName`). Two properties fall out of that shape and both are the
+ * reason for it:
  *
  * 1. **Resolution is one keyed R2 read.** The inbound path runs on every
  *    message that does not match a mailbox outright, and a listing/scan there
@@ -35,6 +37,20 @@
  * silently does nothing. An empty list means "any address on DOMAINS", exactly
  * as it does for mailbox creation.
  *
+ * ## Display names
+ *
+ * An alias can carry the display name it presents itself under, so `info@`
+ * sends as `Acme Info <info@example.com>` rather than inheriting the mailbox
+ * owner's personal name from whatever client is sending. The name is stored
+ * here, beside the address it belongs to, because it is a property *of the
+ * alias* — the alternative, per-mailbox settings, would have no place to put a
+ * different name for each address. It never reaches an AI code path for the
+ * same reason the mapping does not: see point 2 above.
+ *
+ * Nothing in this module encodes or escapes the name. Storing it is gated on
+ * `isValidAliasName`, and the one encoder is `formatFromMailbox` in
+ * workers/lib/raw-mime.ts, which every send path goes through.
+ *
  * ## What this module deliberately does not do
  *
  * It never infers an alias from a pattern or a domain. `resolveAlias` reads a
@@ -53,6 +69,25 @@ import type { Env } from "../types";
  */
 export type AliasEnv = Pick<Env, "BUCKET" | "EMAIL_ADDRESSES">;
 
+/**
+ * A display name configured on an alias, in three states that are all real and
+ * all different:
+ *
+ * - `undefined` — **not configured.** Nothing about the outgoing display name
+ *   changes; whatever the sending client set is what goes out. This is what
+ *   every alias created before this feature has, and it is the default, so
+ *   adding the field changed no existing behaviour.
+ * - `""` — **configured as blank.** The address goes out bare, with no display
+ *   name at all. This is the deliberate way to keep a personal name off a role
+ *   address without inventing one for it.
+ * - anything else — that name, on every send from this address.
+ *
+ * The three survive a JSON round trip without a marker field: `JSON.stringify`
+ * drops an `undefined` value, so "not configured" is the absence of the key and
+ * "blank" is the key present holding `""`.
+ */
+export type AliasDisplayName = string | undefined;
+
 /** An alias as it is persisted, and as the API hands it back. */
 export interface AliasRecord {
 	/** The alias address itself. Normalised. */
@@ -60,12 +95,45 @@ export interface AliasRecord {
 	/** The mailbox id (also an email address) this alias delivers into. */
 	mailbox: string;
 	createdAt: string;
+	/** See `AliasDisplayName`. Absent means "not configured". */
+	name?: string;
 }
 
 /** What `aliases/{address}.json` actually contains. `address` is the key. */
 interface StoredAlias {
 	mailbox: string;
 	createdAt: string;
+	name?: string;
+}
+
+/**
+ * Longest display name accepted. RFC 5322 hard-limits one physical header line
+ * at 998 octets and `rewriteFromAddress` refuses rather than re-folding, so a
+ * name long enough to blow the line would silently cost the alias its send-as.
+ * A ceiling well under that keeps room for the address, the quoting and — for
+ * a non-ASCII name, whose every character can cost four base64 characters —
+ * the RFC 2047 encoding.
+ */
+export const ALIAS_NAME_MAX_CHARS = 120;
+
+/**
+ * Whether a display name may be stored at all.
+ *
+ * This is a validation predicate, not a sanitiser: nothing here rewrites the
+ * name. The encoding and quoting is `formatFromMailbox`'s job in
+ * workers/lib/raw-mime.ts, and it refuses again at the point of use. What this
+ * adds is a boundary that a bad name never gets past in the first place, so a
+ * stored record cannot carry one.
+ *
+ * Control characters are the whole point. CR and LF in a header value end the
+ * header — and a CRLF CRLF ends the header block and starts an
+ * attacker-chosen body — which is the injection `sanitizeHeaderValue` exists
+ * to stop. A display name has no legitimate use for any C0 character, DEL
+ * included, so all of them are refused outright rather than repaired.
+ */
+export function isValidAliasName(name: string): boolean {
+	if (name.length > ALIAS_NAME_MAX_CHARS) return false;
+	return !/[\u0000-\u001f\u007f]/.test(name);
 }
 
 export type AliasRejection =
@@ -78,11 +146,17 @@ export type AliasRejection =
 	/** An alias record already exists here (possibly pointing elsewhere). */
 	| "alias-exists"
 	/** The target mailbox does not exist. */
-	| "no-such-mailbox";
+	| "no-such-mailbox"
+	/** The display name has a control character in it, or is too long. */
+	| "invalid-name";
 
 export type AliasCreateResult =
 	| { ok: true; alias: AliasRecord }
 	| { ok: false; reason: AliasRejection; message: string };
+
+export type AliasUpdateResult =
+	| { ok: true; alias: AliasRecord }
+	| { ok: false; reason: "invalid-name" | "no-such-alias"; message: string };
 
 /**
  * Mailbox ids and alias addresses are email addresses, normalised the same
@@ -181,15 +255,25 @@ export async function listAliases(
 			if (!address) continue;
 
 			const hinted = object.customMetadata?.mailbox;
-			if (hinted !== undefined) {
+			// `nameState` tells the listing which of the three display-name
+			// states this record is in without opening it. Only "set" — the
+			// state whose *content* the listing needs — costs a `get`; the
+			// other two, and every record written before the field existed,
+			// are answered from the listing alone.
+			const nameState = object.customMetadata?.nameState;
+			if (hinted !== undefined && nameState !== NAME_STATE.set) {
 				if (normalizeAddress(hinted) !== owner) continue;
 				found.push({
 					address,
 					mailbox: owner,
 					createdAt: object.customMetadata?.createdAt ?? object.uploaded.toISOString(),
+					...(nameState === NAME_STATE.blank ? { name: "" } : {}),
 				});
 				continue;
 			}
+			// A "set" record still short-circuits on the wrong owner: the
+			// mailbox hint is enough to skip it, and skipping it is free.
+			if (hinted !== undefined && normalizeAddress(hinted) !== owner) continue;
 
 			const record = await readAlias(env, address);
 			if (record && record.mailbox === owner) found.push(record);
@@ -201,7 +285,13 @@ export async function listAliases(
 	return found;
 }
 
-async function readAlias(
+/**
+ * The whole record at an address, or null when there is none (or it is
+ * corrupt). Exported because the send paths need the display name alongside
+ * the mailbox, and `resolveAlias` — which is on the inbound delivery path —
+ * deliberately answers only the one question it is asked.
+ */
+export async function readAlias(
 	env: AliasEnv,
 	address: string,
 ): Promise<AliasRecord | null> {
@@ -215,6 +305,12 @@ async function readAlias(
 			address: normalized,
 			mailbox: normalizeAddress(parsed.mailbox),
 			createdAt: parsed.createdAt ?? object.uploaded.toISOString(),
+			// A name that is not a string is not a name. A record hand-written
+			// with `"name": 42` reads as "not configured" rather than throwing
+			// on a send path, for the same reason the catch below is here.
+			...(typeof parsed.name === "string" && isValidAliasName(parsed.name)
+				? { name: parsed.name }
+				: {}),
 		};
 	} catch {
 		return null;
@@ -235,18 +331,29 @@ async function readAlias(
  * Re-pointing an existing alias requires `allowRepoint`. Without it an alias
  * that already exists is refused, because a silent overwrite moves someone's
  * inbound mail to a different mailbox with no trace of the previous target.
+ *
+ * `options.name` sets the display name at creation. Omitting it leaves the
+ * name **not configured**, which is the behaviour every alias had before the
+ * field existed; on a repoint it carries the existing name across rather than
+ * dropping it, exactly as `createdAt` is carried across. Changing the name of
+ * an alias that already exists is `setAliasName`'s job, not this one — the
+ * `alias-exists` guard above is about moving somebody's mail, and naming an
+ * address is not that operation.
  */
 export async function createAlias(
 	env: AliasEnv,
 	address: string,
 	mailboxId: string,
-	options: { allowRepoint?: boolean } = {},
+	options: { allowRepoint?: boolean; name?: string } = {},
 ): Promise<AliasCreateResult> {
 	const alias = normalizeAddress(address);
 	const mailbox = normalizeAddress(mailboxId);
 
 	if (!isPlausibleAddress(alias)) {
 		return { ok: false, reason: "invalid", message: "Not a valid email address" };
+	}
+	if (options.name !== undefined && !isValidAliasName(options.name)) {
+		return { ok: false, reason: "invalid-name", message: INVALID_NAME_MESSAGE };
 	}
 	if (alias === mailbox) {
 		return {
@@ -285,16 +392,17 @@ export async function createAlias(
 		};
 	}
 
+	const name = options.name !== undefined ? options.name : existing?.name;
 	const record: AliasRecord = {
 		address: alias,
 		mailbox,
 		createdAt: existing?.createdAt ?? new Date().toISOString(),
+		...(name !== undefined ? { name } : {}),
 	};
-	const body: StoredAlias = { mailbox: record.mailbox, createdAt: record.createdAt };
 
-	const written = await env.BUCKET.put(aliasKey(alias), JSON.stringify(body), {
+	const written = await env.BUCKET.put(aliasKey(alias), JSON.stringify(storedBody(record)), {
 		httpMetadata: { contentType: "application/json" },
-		customMetadata: { mailbox: record.mailbox, createdAt: record.createdAt },
+		customMetadata: aliasMetadata(record),
 		// Two concurrent creates must not both believe they won. On a repoint
 		// the record is expected to be there, so the precondition is dropped.
 		...(existing ? {} : { onlyIf: { etagDoesNotMatch: "*" } }),
@@ -309,6 +417,90 @@ export async function createAlias(
 
 	return { ok: true, alias: record };
 }
+
+const INVALID_NAME_MESSAGE =
+	`A display name cannot contain control characters, and must be at most ` +
+	`${ALIAS_NAME_MAX_CHARS} characters`;
+
+/**
+ * Set, change or clear the display name on an alias that already exists.
+ *
+ * `null` clears it back to **not configured** — the client's display name is
+ * used again. `""` is not the same thing: it configures the name as blank, so
+ * the address goes out bare. See `AliasDisplayName`.
+ *
+ * Ownership-checked the way `deleteAlias` is, and for the same reason: the
+ * routes are per-mailbox and Cloudflare Access is the only trust boundary this
+ * app has, so a mailbox's settings page should at least not be able to rename
+ * another mailbox's address out from under it.
+ *
+ * The mailbox and `createdAt` are re-written unchanged rather than patched in,
+ * so a name change can never move where the alias delivers.
+ */
+export async function setAliasName(
+	env: AliasEnv,
+	address: string,
+	mailboxId: string,
+	name: string | null,
+): Promise<AliasUpdateResult> {
+	const alias = normalizeAddress(address);
+	if (name !== null && !isValidAliasName(name)) {
+		return { ok: false, reason: "invalid-name", message: INVALID_NAME_MESSAGE };
+	}
+	if (!isPlausibleAddress(alias)) {
+		return { ok: false, reason: "no-such-alias", message: "Alias not found" };
+	}
+
+	const existing = await readAlias(env, alias);
+	if (!existing || existing.mailbox !== normalizeAddress(mailboxId)) {
+		return { ok: false, reason: "no-such-alias", message: "Alias not found" };
+	}
+
+	const record: AliasRecord = {
+		address: existing.address,
+		mailbox: existing.mailbox,
+		createdAt: existing.createdAt,
+		...(name !== null ? { name } : {}),
+	};
+
+	await env.BUCKET.put(aliasKey(alias), JSON.stringify(storedBody(record)), {
+		httpMetadata: { contentType: "application/json" },
+		customMetadata: aliasMetadata(record),
+	});
+
+	return { ok: true, alias: record };
+}
+
+/** The JSON body. `name` is omitted entirely when it is not configured. */
+function storedBody(record: AliasRecord): StoredAlias {
+	return {
+		mailbox: record.mailbox,
+		createdAt: record.createdAt,
+		...(record.name !== undefined ? { name: record.name } : {}),
+	};
+}
+
+/**
+ * The R2 `customMetadata`, which `listAliases` reads instead of opening every
+ * object.
+ *
+ * The display name itself is deliberately **not** in here. customMetadata
+ * travels in HTTP headers, and a display name is free text that can be
+ * non-ASCII (`Björn`) or empty — neither of which a header field round-trips
+ * dependably. So the metadata carries only which of the three states the
+ * record is in, and the JSON body stays the single source of the name.
+ */
+function aliasMetadata(record: AliasRecord): Record<string, string> {
+	const nameState =
+		record.name === undefined
+			? NAME_STATE.unset
+			: record.name === ""
+				? NAME_STATE.blank
+				: NAME_STATE.set;
+	return { mailbox: record.mailbox, createdAt: record.createdAt, nameState };
+}
+
+const NAME_STATE = { unset: "unset", blank: "blank", set: "set" } as const;
 
 /**
  * Delete an alias, but only if it belongs to the given mailbox. Passing a

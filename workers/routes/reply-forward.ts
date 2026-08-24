@@ -14,7 +14,7 @@ import {
 	buildReferencesChain,
 	buildThreadingHeaders,
 	resolveOriginalEmail,
-	resolveReplyFrom,
+	resolveSendAs,
 } from "../lib/email-helpers";
 import { SendEmailRequestSchema } from "../lib/schemas";
 import { buildAndStoreOutboundMime } from "../lib/raw-mime";
@@ -45,10 +45,12 @@ export async function handleReplyEmail(c: AppContext) {
 	// `resolveOriginalEmail` matters here — replying from a draft row must read
 	// the routing address off the message being answered, not off the draft,
 	// which never had one. The stored value is re-resolved against the alias
-	// registry inside `resolveReplyFrom`; see the comment there for why it
-	// cannot be trusted as stored.
-	const sendAsAddress = await resolveReplyFrom(c.env, mailboxId, originalEmail.delivered_to);
-	const from = applySendAs(body.from, sendAsAddress, from_name);
+	// registry inside `resolveSendAs`; see the comment there for why it
+	// cannot be trusted as stored. That same read carries the alias's own
+	// display name, so `info@` can go out as "Support" rather than under the
+	// mailbox owner's personal name.
+	const sendAs = await resolveSendAs(c.env, mailboxId, originalEmail.delivered_to);
+	const from = applySendAs(body.from, sendAs, from_name);
 
 	let toStr: string, fromEmail: string, fromDomain: string;
 	try {
@@ -150,9 +152,9 @@ export async function handleForwardEmail(c: AppContext) {
 	const originalEmail = await resolveOriginalEmail(stub, rawOriginal);
 
 	// Same automatic send-as as the reply route: a message that came in on an
-	// alias is forwarded on from that alias.
-	const sendAsAddress = await resolveReplyFrom(c.env, mailboxId, originalEmail.delivered_to);
-	const from = applySendAs(body.from, sendAsAddress, from_name);
+	// alias is forwarded on from that alias, under that alias's display name.
+	const sendAs = await resolveSendAs(c.env, mailboxId, originalEmail.delivered_to);
+	const from = applySendAs(body.from, sendAs, from_name);
 
 	let toStr: string, fromEmail: string, fromDomain: string;
 	try {

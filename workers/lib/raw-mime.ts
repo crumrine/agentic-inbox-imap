@@ -165,6 +165,29 @@ function formatMailbox(email: string, name?: string): string {
 	return `${name} <${email}>`;
 }
 
+/**
+ * `Name <addr>` for a `From:` header, or null when `name` cannot be carried in
+ * a header value as written.
+ *
+ * Exported for the send-as paths, which put an operator-configured per-alias
+ * display name on the wire. An empty `name` yields the bare `<addr>` form —
+ * that is the "explicitly no display name" answer, not a failure.
+ *
+ * SECURITY: a display name is free text, and once it is stored it is as
+ * attacker-influenced as any other configuration this app holds. It ends up in
+ * a header, so it obeys the same two rules every other header value here does:
+ * quote or RFC 2047-encode it (`formatMailbox`, unchanged), then run the result
+ * through `sanitizeHeaderValue` and require it back *identical*. Equality is
+ * the stricter test — it refuses anything the sanitiser had to touch rather
+ * than trusting the repaired value — and it is exactly what
+ * `rewriteFromAddress` already does for the address. There is deliberately no
+ * second encoder and no second sanitiser here.
+ */
+export function formatFromMailbox(email: string, name: string): string | null {
+	const formatted = formatMailbox(email, name);
+	return sanitizeHeaderValue(formatted) === formatted ? formatted : null;
+}
+
 function joinAddresses(addr: string | string[] | null | undefined): string | undefined {
 	if (!addr) return undefined;
 	const joined = Array.isArray(addr) ? addr.join(", ") : addr;
@@ -529,8 +552,9 @@ const MAX_HEADER_LINE_OCTETS = 998;
 const FROM_HEADER_RE = /^From:([^\r\n]*(?:\r?\n[ \t][^\r\n]*)*)/im;
 
 /**
- * Swap the address inside a message's `From:` header, changing nothing else
- * in the message — not one byte of the body, not another header, and not the
+ * Swap the address inside a message's `From:` header — and, when the caller
+ * supplies one, the display name beside it — changing nothing else in the
+ * message: not one byte of the body, not another header, and not the
  * `Message-ID:` the Sent-copy deduplication depends on.
  *
  * ## Why an in-place splice rather than a rebuild
@@ -540,30 +564,57 @@ const FROM_HEADER_RE = /^From:([^\r\n]*(?:\r?\n[ \t][^\r\n]*)*)/im;
  * client hands over the actual message. Round-tripping it through
  * `buildRawMime` would break S/MIME signatures and quietly drop anything the
  * builder does not model. So this finds the address, replaces exactly that
- * span, and leaves the rest of the octets alone. A display name — including
- * an RFC 2047 encoded word, which this deliberately never decodes — survives
- * verbatim, folding and all.
+ * span, and leaves the rest of the octets alone.
+ *
+ * ## The display name, and why it is opt-in
+ *
+ * With `newName` omitted, the client's display name survives verbatim —
+ * including an RFC 2047 encoded word, which this deliberately never decodes —
+ * folding and all. That is the default and it is unchanged: nothing about a
+ * plain address rewrite touches the name.
+ *
+ * With `newName` given, the whole header *value* is replaced by
+ * `formatFromMailbox(newAddress, newName)`, so the name is quoted per RFC 5322
+ * and RFC 2047-encoded when non-ASCII by the one encoder this module has. The
+ * empty string is a real value meaning "no display name": it yields the bare
+ * `<addr>` form, which is how an operator says a role address should not carry
+ * a personal name. The edit is still confined to the `From:` header's own
+ * span; every other octet in the message is copied through untouched.
+ *
+ * Replacing the value discards whatever was outside the address, so this mode
+ * additionally insists — via `isSingleMailbox` — that the header names exactly
+ * one mailbox. A `From:` with a second address or a group list is refused
+ * outright rather than silently collapsed to one, even though the address-only
+ * rewrite could have handled it: mixing the two outcomes would make the
+ * caller's fallback log say something untrue.
  *
  * ## Refusing is a normal outcome
  *
  * Returns `null` whenever it is not certain which span is the address: no
  * `From:` at all, angle brackets around something that is not `oldAddress`,
  * an unbracketed value where the address appears more than once, a rewrite
- * that would push a header line past 998 octets, or a `newAddress` that the
- * sanitiser had to alter. The caller treats `null` as "send the client's
- * bytes as they are". A half-understood header is not something to guess at
- * when the alternative is merely the old, correct-but-less-helpful behaviour.
+ * that would push a header line past 998 octets, a `newAddress` that the
+ * sanitiser had to alter, or — in name-replacing mode — a value that is not a
+ * single mailbox or a `newName` the sanitiser had to alter. The caller treats
+ * `null` as "send the client's bytes as they are". A half-understood header is
+ * not something to guess at when the alternative is merely the old,
+ * correct-but-less-helpful behaviour.
  *
  * @param oldAddress The current From address, lowercased. The caller has
  *   already established this equals the mailbox's own address.
  * @param newAddress The address to put in its place.
+ * @param newName The display name to put in its place, or `undefined` to keep
+ *   whatever the client set. `""` means "no display name at all".
  */
 export function rewriteFromAddress(
 	raw: Uint8Array,
 	oldAddress: string,
 	newAddress: string,
+	newName?: string,
 ): Uint8Array | null {
-	if (!oldAddress || !newAddress || oldAddress === newAddress) return null;
+	if (!oldAddress || !newAddress) return null;
+	// Same address and nothing to say about the name: there is no edit to make.
+	if (oldAddress === newAddress && newName === undefined) return null;
 
 	// SECURITY: the replacement goes through the same sanitiser every built
 	// header value does, and then the result is required to be *identical* to
@@ -586,7 +637,18 @@ export function rewriteFromAddress(
 	const span = locateFromAddress(value, oldAddress);
 	if (!span) return null;
 
-	const newValue = value.slice(0, span.start) + safeAddress + value.slice(span.end);
+	let newValue: string;
+	if (newName === undefined) {
+		newValue = value.slice(0, span.start) + safeAddress + value.slice(span.end);
+	} else {
+		if (!isSingleMailbox(value)) return null;
+		const formatted = formatFromMailbox(safeAddress, newName);
+		if (formatted === null) return null;
+		// The leading space is the one that followed the colon in the original;
+		// `match[1]` captured it, and a value replaced wholesale has to put it
+		// back or `From:Name <addr>` is what lands on the wire.
+		newValue = ` ${formatted}`;
+	}
 
 	// Never emit a line longer than RFC 5322 allows. Re-folding to fit would
 	// mean changing octets outside the address, which is the one thing this
@@ -633,6 +695,69 @@ function locateFromAddress(
 	if (first === -1) return null;
 	if (lower.indexOf(address, first + 1) !== -1) return null;
 	return { start: first, end: first + address.length };
+}
+
+/**
+ * True when a raw `From:` header value names exactly one mailbox and nothing
+ * else: no second address, no group list, nothing trailing the angle brackets.
+ *
+ * Only the display-name replacement needs this. Swapping the *address* edits
+ * one span and leaves everything around it, so a value it cannot fully account
+ * for still comes out right. Replacing the *name* discards everything outside
+ * the address, so a second mailbox hiding in the value would be dropped
+ * without a trace — hence: understand the whole value, or refuse it.
+ *
+ * Quoted strings are masked first, because a comma inside one
+ * (`"Owner, Test" <owner@example.com>`) belongs to the display name and is not
+ * a separator. An unbalanced quote or an unbalanced angle bracket is not
+ * something to interpret, so both are refusals.
+ */
+function isSingleMailbox(value: string): boolean {
+	const masked = maskQuoted(value);
+	if (masked === null) return false;
+	// A comma separates mailboxes; a colon opens a group and a semicolon closes
+	// one. None of the three can appear unquoted in a lone mailbox.
+	if (/[,:;]/.test(masked)) return false;
+
+	const opens = masked.split("<").length - 1;
+	const closes = masked.split(">").length - 1;
+	if (opens !== closes || opens > 1) return false;
+	if (opens === 1) {
+		const open = masked.indexOf("<");
+		const close = masked.indexOf(">");
+		if (close < open) return false;
+		// `Name <addr> (note)` — a trailing comment is a shape this does not
+		// model, and dropping it silently is the thing being avoided.
+		if (masked.slice(close + 1).trim() !== "") return false;
+	}
+	return true;
+}
+
+/**
+ * Replace the contents of every quoted-string with `x`, so a structural scan
+ * cannot trip over a special character that is really part of a display name.
+ * Returns null when a quote is left open, since the value's structure is then
+ * anybody's guess. Backslash escapes inside a quoted-string are honoured.
+ */
+function maskQuoted(value: string): string | null {
+	let out = "";
+	let inQuotes = false;
+	for (let i = 0; i < value.length; i++) {
+		const char = value[i];
+		if (inQuotes && char === "\\") {
+			// The escape and whatever it escapes are both content.
+			out += i + 1 < value.length ? "xx" : "x";
+			i += 1;
+			continue;
+		}
+		if (char === '"') {
+			inQuotes = !inQuotes;
+			out += '"';
+			continue;
+		}
+		out += inQuotes ? "x" : char;
+	}
+	return inQuotes ? null : out;
 }
 
 /**

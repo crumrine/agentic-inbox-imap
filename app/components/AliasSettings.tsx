@@ -11,6 +11,15 @@
  * alias. The removal dialog spells out both halves for the same reason — a
  * removed alias stops delivering (mail to it is dropped, not bounced into some
  * other mailbox) and stops being a permitted From address.
+ *
+ * ## The display name has three states, and the UI says which one it is in
+ *
+ * `undefined` (nothing configured), `""` (configured blank) and a real name are
+ * three different settings, not two — see `AliasDisplayName` in
+ * workers/lib/aliases.ts. Collapsing "not configured" and "blank" into one
+ * empty text box would make it impossible to say "send a bare address" as
+ * distinct from "leave it to the mail client", so the dialog offers the two as
+ * separate, named actions and every row states which state it is in.
  */
 
 import {
@@ -23,12 +32,18 @@ import {
 } from "@cloudflare/kumo";
 import {
 	AtIcon,
+	PencilSimpleIcon,
 	PlusIcon,
 	TrashIcon,
 	WarningIcon,
 } from "@phosphor-icons/react";
 import { useState } from "react";
-import { useAliases, useCreateAlias, useDeleteAlias } from "~/queries/aliases";
+import {
+	useAliases,
+	useCreateAlias,
+	useDeleteAlias,
+	useSetAliasName,
+} from "~/queries/aliases";
 import type { Alias } from "~/types";
 
 function formatCreated(iso: string): string {
@@ -41,23 +56,68 @@ function formatCreated(iso: string): string {
 	});
 }
 
+/** How a row describes the alias's display-name state, in words. */
+function describeName(alias: Alias): string {
+	if (alias.name === undefined) return "uses your mailbox name";
+	if (alias.name === "") return "sends with no display name";
+	return `sends as "${alias.name}"`;
+}
+
 export default function AliasSettings({ mailboxId }: { mailboxId: string }) {
 	const { data: aliases, isLoading, error } = useAliases(mailboxId);
 	const createMutation = useCreateAlias();
 	const deleteMutation = useDeleteAlias();
+	const nameMutation = useSetAliasName();
 
 	const [address, setAddress] = useState("");
+	const [newName, setNewName] = useState("");
 	const [pendingDelete, setPendingDelete] = useState<Alias | null>(null);
+	const [pendingName, setPendingName] = useState<Alias | null>(null);
+	const [draftName, setDraftName] = useState("");
 
 	const trimmed = address.trim();
+	const trimmedNewName = newName.trim();
+	const trimmedDraft = draftName.trim();
 
 	const handleCreate = (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!trimmed || createMutation.isPending) return;
 		createMutation.mutate(
-			{ mailboxId, address: trimmed },
-			{ onSuccess: () => setAddress("") },
+			{
+				mailboxId,
+				address: trimmed,
+				// Omitted, not empty: an empty box at creation means "say
+				// nothing about the display name", which is not the same as
+				// configuring it blank.
+				...(trimmedNewName ? { name: trimmedNewName } : {}),
+			},
+			{
+				onSuccess: () => {
+					setAddress("");
+					setNewName("");
+				},
+			},
 		);
+	};
+
+	const openNameDialog = (alias: Alias) => {
+		setDraftName(alias.name ?? "");
+		setPendingName(alias);
+	};
+
+	const applyName = async (name: string | null) => {
+		if (!pendingName) return;
+		try {
+			await nameMutation.mutateAsync({
+				mailboxId,
+				address: pendingName.address,
+				name,
+			});
+			setPendingName(null);
+		} catch {
+			// The banner in the dialog renders the error; keep it open so the
+			// typed name is not lost.
+		}
 	};
 
 	const handleDelete = async () => {
@@ -117,17 +177,28 @@ export default function AliasSettings({ mailboxId }: { mailboxId: string }) {
 									{alias.address}
 								</div>
 								<div className="text-xs text-kumo-subtle truncate">
-									delivers here · added {formatCreated(alias.createdAt)}
+									delivers here · {describeName(alias)} · added{" "}
+									{formatCreated(alias.createdAt)}
 								</div>
 							</div>
-							<Button
-								variant="ghost"
-								size="xs"
-								icon={<TrashIcon size={14} />}
-								onClick={() => setPendingDelete(alias)}
-							>
-								Remove
-							</Button>
+							<div className="flex items-center gap-1 shrink-0">
+								<Button
+									variant="ghost"
+									size="xs"
+									icon={<PencilSimpleIcon size={14} />}
+									onClick={() => openNameDialog(alias)}
+								>
+									Name
+								</Button>
+								<Button
+									variant="ghost"
+									size="xs"
+									icon={<TrashIcon size={14} />}
+									onClick={() => setPendingDelete(alias)}
+								>
+									Remove
+								</Button>
+							</div>
 						</li>
 					))}
 				</ul>
@@ -141,6 +212,15 @@ export default function AliasSettings({ mailboxId }: { mailboxId: string }) {
 						placeholder="e.g. info@example.com"
 						value={address}
 						onChange={(e) => setAddress(e.target.value)}
+					/>
+				</div>
+				<div className="flex-1">
+					<Input
+						label="Display name (optional)"
+						type="text"
+						placeholder="e.g. Acme Info"
+						value={newName}
+						onChange={(e) => setNewName(e.target.value)}
 					/>
 				</div>
 				<Button
@@ -165,8 +245,86 @@ export default function AliasSettings({ mailboxId }: { mailboxId: string }) {
 			<p className="text-xs text-kumo-subtle mt-4">
 				The address has to be one this deployment receives mail for, and it
 				cannot already be a mailbox or an alias of another mailbox. To move an
-				alias between mailboxes, remove it from the first one first.
+				alias between mailboxes, remove it from the first one first. A display
+				name can be added or changed at any time.
 			</p>
+
+			<Dialog.Root
+				open={pendingName !== null}
+				onOpenChange={(open) => {
+					if (!open && !nameMutation.isPending) setPendingName(null);
+				}}
+			>
+				<Dialog size="sm" className="p-6">
+					<Dialog.Title className="text-base font-semibold mb-1">
+						Display name for "{pendingName?.address}"
+					</Dialog.Title>
+					<Dialog.Description className="text-xs text-kumo-subtle mb-4">
+						What recipients see beside the address on mail sent from it. Set one
+						to keep a personal name off a shared address.
+					</Dialog.Description>
+
+					<Input
+						label="Display name"
+						type="text"
+						placeholder="e.g. Acme Info"
+						value={draftName}
+						onChange={(e) => setDraftName(e.target.value)}
+					/>
+
+					<p className="text-xs text-kumo-subtle mt-3">
+						Currently {pendingName ? describeName(pendingName) : ""}.
+					</p>
+
+					{nameMutation.isError && (
+						<Banner
+							variant="error"
+							className="mt-3"
+							title="Could not save the display name"
+							description={nameMutation.error.message}
+						/>
+					)}
+
+					<div className="flex flex-wrap justify-end gap-2 mt-4">
+						<Button
+							variant="secondary"
+							onClick={() => setPendingName(null)}
+							disabled={nameMutation.isPending}
+						>
+							Cancel
+						</Button>
+						{/* `null` clears the setting; the mail client's own display
+						    name is used again. Only offered when there is one to
+						    clear, so the two empty-ish choices cannot be confused. */}
+						{pendingName?.name !== undefined && (
+							<Button
+								variant="secondary"
+								onClick={() => void applyName(null)}
+								disabled={nameMutation.isPending}
+							>
+								Use mailbox name
+							</Button>
+						)}
+						{/* `""` is a setting, not the absence of one: send a bare
+						    address, with no display name at all. */}
+						<Button
+							variant="secondary"
+							onClick={() => void applyName("")}
+							disabled={nameMutation.isPending || pendingName?.name === ""}
+						>
+							No display name
+						</Button>
+						<Button
+							variant="primary"
+							onClick={() => void applyName(trimmedDraft)}
+							loading={nameMutation.isPending}
+							disabled={!trimmedDraft}
+						>
+							Save
+						</Button>
+					</div>
+				</Dialog>
+			</Dialog.Root>
 
 			<Dialog.Root
 				open={pendingDelete !== null}

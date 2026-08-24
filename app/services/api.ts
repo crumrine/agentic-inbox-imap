@@ -88,6 +88,13 @@ function put<T>(url: string, body?: unknown) {
 	});
 }
 
+function patch<T>(url: string, body?: unknown) {
+	return request<T>(url, {
+		method: "PATCH",
+		body: body != null ? JSON.stringify(body) : undefined,
+	});
+}
+
 function del<T>(url: string) {
 	return request<T>(url, { method: "DELETE" });
 }
@@ -180,8 +187,18 @@ const api = {
 	// Aliases
 	listAliases: (mailboxId: string) =>
 		get<Alias[]>(`/api/v1/mailboxes/${mailboxId}/aliases`),
-	createAlias: (mailboxId: string, address: string) =>
-		post<Alias>(`/api/v1/mailboxes/${mailboxId}/aliases`, { address }),
+	createAlias: (mailboxId: string, address: string, name?: string) =>
+		post<Alias>(`/api/v1/mailboxes/${mailboxId}/aliases`, {
+			address,
+			...(name !== undefined ? { name } : {}),
+		}),
+	// `null` clears the display name back to "not configured"; `""` sets it to
+	// blank, which is a different thing — see the `Alias` type.
+	setAliasName: (mailboxId: string, address: string, name: string | null) =>
+		patch<Alias>(
+			`/api/v1/mailboxes/${mailboxId}/aliases/${encodeURIComponent(address)}`,
+			{ name },
+		),
 	deleteAlias: (mailboxId: string, address: string) =>
 		del<void>(`/api/v1/mailboxes/${mailboxId}/aliases/${encodeURIComponent(address)}`),
 

@@ -57,6 +57,14 @@ export interface Alias {
 	address: string;
 	mailbox: string;
 	createdAt: string;
+	/**
+	 * The display name this address sends under, in three states: the field
+	 * absent means none is configured and the sending client's own display
+	 * name is used; `""` means configured-as-blank, so the address goes out
+	 * bare; anything else is the name itself. See `AliasDisplayName` in
+	 * workers/lib/aliases.ts.
+	 */
+	name?: string;
 }
 
 export interface Email {

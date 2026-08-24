@@ -28,8 +28,36 @@ export function useAliases(mailboxId: string | undefined) {
 
 export function useCreateAlias() {
 	const qc = useQueryClient();
-	return useMutation<Alias, Error, { mailboxId: string; address: string }>({
-		mutationFn: ({ mailboxId, address }) => api.createAlias(mailboxId, address),
+	return useMutation<
+		Alias,
+		Error,
+		{ mailboxId: string; address: string; name?: string }
+	>({
+		mutationFn: ({ mailboxId, address, name }) =>
+			api.createAlias(mailboxId, address, name),
+		onSuccess: (_alias, { mailboxId }) => {
+			qc.invalidateQueries({ queryKey: queryKeys.aliases.list(mailboxId) });
+		},
+	});
+}
+
+/**
+ * Set, change or clear an alias's display name.
+ *
+ * `name: null` clears it back to "not configured" (the client's own display
+ * name is used again); `name: ""` configures it as blank, so the address goes
+ * out bare. They are different settings and the mutation passes them through
+ * unflattened.
+ */
+export function useSetAliasName() {
+	const qc = useQueryClient();
+	return useMutation<
+		Alias,
+		Error,
+		{ mailboxId: string; address: string; name: string | null }
+	>({
+		mutationFn: ({ mailboxId, address, name }) =>
+			api.setAliasName(mailboxId, address, name),
 		onSuccess: (_alias, { mailboxId }) => {
 			qc.invalidateQueries({ queryKey: queryKeys.aliases.list(mailboxId) });
 		},

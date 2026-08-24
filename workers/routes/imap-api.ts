@@ -59,7 +59,8 @@ import { normalizeMailboxId, verifyAppPassword } from "../lib/credentials";
 import { normalizeAddress } from "../lib/aliases";
 import {
 	generateMessageId,
-	resolveReplyFrom,
+	resolveSendAs,
+	type SendAsIdentity,
 	SenderValidationError,
 	validateSenderWithAliases,
 } from "../lib/email-helpers";
@@ -1361,6 +1362,17 @@ const SUBMIT_EMPTY_BODY = { error: "Empty message" } as const;
  * span — `Message-ID:` included, which is what keeps the client's own APPENDed
  * Sent copy able to deduplicate against the row written here.
  *
+ * ## Per-alias display names
+ *
+ * An alias can carry a display name, and when it does the rewrite replaces the
+ * whole `From:` value rather than only the address: a reply from `info@` goes
+ * out as `Support <info@example.com>` instead of inheriting the phone's account
+ * name. A name configured as the empty string is a real setting meaning "no
+ * display name", and produces the bare `<info@example.com>` form. An alias with
+ * nothing configured is untouched in every respect — the client's own display
+ * name survives verbatim, exactly as before. The whole edit still lives inside
+ * the `From:` header's span.
+ *
  * ## Message-ID is preserved, and that is load-bearing
  *
  * Clients APPEND their own Sent copy right after submitting, and
@@ -1424,11 +1436,14 @@ imapApi.post("/:mailboxId/submit", async (c) => {
 
 	const sendAs = await resolveSubmissionSendAs(c.env, stub, mailboxId, envelope.from, parsed);
 	if (sendAs) {
-		const rewritten = rewriteFromAddress(raw, parsed.sender, sendAs);
+		// `sendAs.name` is the alias's configured display name, or undefined
+		// when it has none — in which case the client's own display name is
+		// left exactly where it is, as it always was.
+		const rewritten = rewriteFromAddress(raw, parsed.sender, sendAs.address, sendAs.name);
 		if (rewritten) {
 			outbound = rewritten;
-			envelopeFrom = sendAs;
-			sender = sendAs;
+			envelopeFrom = sendAs.address;
+			sender = sendAs.address;
 		} else {
 			// A `From:` this cannot splice unambiguously. Falling through sends
 			// the client's bytes untouched, which is the pre-send-as behaviour:
@@ -1600,12 +1615,14 @@ function parseEnvelope(
  *    A parent with a NULL `delivered_to` — every row written before migration
  *    11, and every outbound row — is a complete answer meaning "not known".
  *
- * 3. **The alias still resolves here, checked now.** `resolveReplyFrom` does
+ * 3. **The alias still resolves here, checked now.** `resolveSendAs` does
  *    exactly this and falls back to the mailbox address, so a `delivered_to`
  *    naming an alias that has since been deleted or re-pointed at somebody
  *    else's mailbox comes back as the mailbox's own address — which this reads
  *    as "nothing to do". The stored string is never trusted as stored; see the
- *    block comment on `resolveReplyFrom` for why that matters.
+ *    block comment on `resolveReplyFrom` for why that matters. The same read
+ *    also yields the alias's configured display name, which the rewrite puts
+ *    on the header alongside the address.
  */
 async function resolveSubmissionSendAs(
 	env: ImapApiEnv,
@@ -1613,7 +1630,7 @@ async function resolveSubmissionSendAs(
 	mailboxId: string,
 	envelopeFrom: string,
 	parsed: AppendColumns,
-): Promise<string | null> {
+): Promise<SendAsIdentity | null> {
 	if (parsed.sender !== mailboxId) return null;
 	if (normalizeAddress(envelopeFrom) !== mailboxId) return null;
 
@@ -1626,8 +1643,8 @@ async function resolveSubmissionSendAs(
 	const deliveredTo = await stub.lookupDeliveredTo(candidates);
 	if (!deliveredTo) return null;
 
-	const address = await resolveReplyFrom(env, mailboxId, deliveredTo);
-	return address === mailboxId ? null : address;
+	const identity = await resolveSendAs(env, mailboxId, deliveredTo);
+	return identity.address === mailboxId ? null : identity;
 }
 
 /**

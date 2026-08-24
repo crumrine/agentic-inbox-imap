@@ -18,12 +18,14 @@ import {
 	toClientEmail,
 } from "./lib/email-helpers";
 import {
+	ALIAS_NAME_MAX_CHARS,
 	createAlias,
 	deleteAlias,
 	isAlias,
 	listAliases,
 	normalizeAddress,
 	resolveInboundDelivery,
+	setAliasName,
 } from "./lib/aliases";
 import {
 	createAppPassword,
@@ -60,6 +62,25 @@ const AliasBody = z.object({
 	 * to a different mailbox should take saying so.
 	 */
 	repoint: z.boolean().optional(),
+	/**
+	 * The display name this address sends under. Absent leaves it not
+	 * configured, which is the historical behaviour: the sending client's own
+	 * display name is used. `""` configures it as blank, so the address goes
+	 * out bare. Not trimmed — a name is text the operator typed, and trimming
+	 * it here would make `" "` and `""` indistinguishable when they mean
+	 * different things to `AliasDisplayName`.
+	 */
+	name: z.string().max(ALIAS_NAME_MAX_CHARS).optional(),
+});
+
+/**
+ * The display-name update. `null` clears the name back to "not configured";
+ * `""` configures it as blank. The key is required rather than optional
+ * precisely so those two, and "no opinion", cannot be confused: a PATCH that
+ * forgot to say what it wanted is a 400, not a silent no-op.
+ */
+const AliasNameBody = z.object({
+	name: z.string().max(ALIAS_NAME_MAX_CHARS).nullable(),
 });
 
 const DraftBody = z.object({
@@ -214,7 +235,11 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 	// routing address to inherit and nothing to infer one from: compose sends
 	// as the mailbox itself. Automatic send-as lives in the reply and forward
 	// routes, which do have an original to read `delivered_to` off.
-	const from = applySendAs(body.from, mailboxId.toLowerCase(), from_name);
+	//
+	// The mailbox's own address has no alias record, so it has no configured
+	// display name either: the identity here is the address alone, and
+	// `from_name` keeps working exactly as it did.
+	const from = applySendAs(body.from, { address: mailboxId.toLowerCase() }, from_name);
 
 	let toStr: string, fromEmail: string, fromDomain: string;
 	try {
@@ -435,15 +460,43 @@ app.post("/api/v1/mailboxes/:mailboxId/aliases", async (c: AppContext) => {
 
 	const result = await createAlias(c.env, parsed.data.address, mailboxId, {
 		allowRepoint: parsed.data.repoint === true,
+		...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
 	});
 	if (result.ok) return c.json(result.alias, 201);
 
 	const status =
-		result.reason === "invalid" ? 400 :
+		result.reason === "invalid" || result.reason === "invalid-name" ? 400 :
 		result.reason === "not-allowed" ? 403 :
 		result.reason === "no-such-mailbox" ? 404 :
 		409;
 	return c.json({ error: result.message }, status);
+});
+
+/**
+ * Set, change or clear an alias's display name.
+ *
+ * Separate from POST on purpose. `createAlias` refuses an address that already
+ * exists unless the caller says `repoint`, because overwriting one moves
+ * somebody's inbound mail. Naming an address does not move any mail, so
+ * forcing it through that guard would mean the settings page had to ask for a
+ * re-point in order to do something that is not one — and a UI that routinely
+ * sends `repoint: true` is a UI that will eventually re-point by accident.
+ */
+app.patch("/api/v1/mailboxes/:mailboxId/aliases/:alias", async (c: AppContext) => {
+	const mailboxId = c.req.param("mailboxId")!;
+	const alias = decodeURIComponent(c.req.param("alias")!);
+	const body = await c.req.json().catch(() => null);
+	const parsed = AliasNameBody.safeParse(body);
+	if (!parsed.success) {
+		return c.json(
+			{ error: `"name" must be a string of at most ${ALIAS_NAME_MAX_CHARS} characters, or null` },
+			400,
+		);
+	}
+
+	const result = await setAliasName(c.env, alias, mailboxId, parsed.data.name);
+	if (result.ok) return c.json(result.alias);
+	return c.json({ error: result.message }, result.reason === "invalid-name" ? 400 : 404);
 });
 
 app.delete("/api/v1/mailboxes/:mailboxId/aliases/:alias", async (c: AppContext) => {
