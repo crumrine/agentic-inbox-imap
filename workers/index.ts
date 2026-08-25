@@ -600,6 +600,24 @@ export type InboundDisposition =
  * address for the human either way.
  *
  * Keep them single-line, ASCII, and short. Nothing here may contain CR or LF.
+ *
+ * ## What the sender actually sees, observed
+ *
+ * The docs do not say which SMTP code `setReject` emits, so this does not
+ * prefix one. Verified against a live send from Gmail to an address with no
+ * mailbox: the runtime wraps the reason and answers
+ *
+ *     555 5.7.1 User unknown
+ *
+ * and Gmail reports "Address not found ... the address couldn't be found, or
+ * is unable to receive mail". So the reason string is what the human ends up
+ * reading, second-hand, in a bounce. That is the reason to keep it the
+ * conventional wording rather than something this app invented.
+ *
+ * Note 555 5.7.1 rather than the 550 5.1.1 a mail server would classically
+ * return for an unknown mailbox. Both are permanent, so the sending side
+ * bounces either way, but do not write 550 into docs or tests from memory:
+ * the code is Cloudflare's to choose, not this Worker's.
  */
 export const REJECT_REASONS = {
 	/** No recipient on the message resolves to a mailbox or alias we hold. */
