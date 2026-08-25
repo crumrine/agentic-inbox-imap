@@ -70,7 +70,7 @@ function assertOnlyCRLF(raw: string) {
 
 describe("outbound send paths write raw MIME and record raw_key (DEV-662)", () => {
 	it("POST /emails (compose/send)", async () => {
-		const mailboxId = "outbound-send@brian404.com";
+		const mailboxId = "outbound-send@example.com";
 		await env.BUCKET.put(`mailboxes/${mailboxId}.json`, "{}");
 
 		const res = await jsonRequest(`https://internal/api/v1/mailboxes/${mailboxId}/emails`, {
@@ -85,7 +85,7 @@ describe("outbound send paths write raw MIME and record raw_key (DEV-662)", () =
 	});
 
 	it("POST /emails/:id/reply", async () => {
-		const mailboxId = "outbound-reply@brian404.com";
+		const mailboxId = "outbound-reply@example.com";
 		await env.BUCKET.put(`mailboxes/${mailboxId}.json`, "{}");
 		const stub = mailbox(mailboxId);
 		const original = emailData({ id: "orig-1" });
@@ -106,7 +106,7 @@ describe("outbound send paths write raw MIME and record raw_key (DEV-662)", () =
 	});
 
 	it("POST /emails/:id/forward", async () => {
-		const mailboxId = "outbound-forward@brian404.com";
+		const mailboxId = "outbound-forward@example.com";
 		await env.BUCKET.put(`mailboxes/${mailboxId}.json`, "{}");
 		const stub = mailbox(mailboxId);
 		const original = emailData({ id: "orig-2" });
@@ -127,7 +127,7 @@ describe("outbound send paths write raw MIME and record raw_key (DEV-662)", () =
 	});
 
 	it("toolSendReply (agent/MCP send path)", async () => {
-		const mailboxId = "outbound-tool-reply@brian404.com";
+		const mailboxId = "outbound-tool-reply@example.com";
 		const stub = mailbox(mailboxId);
 		const original = emailData({ id: "orig-3" });
 		await stub.createEmail(Folders.INBOX, original, []);
@@ -147,7 +147,7 @@ describe("outbound send paths write raw MIME and record raw_key (DEV-662)", () =
 	});
 
 	it("toolSendEmail (agent/MCP send path)", async () => {
-		const mailboxId = "outbound-tool-send@brian404.com";
+		const mailboxId = "outbound-tool-send@example.com";
 
 		const result = await toolSendEmail(testEnv(), mailboxId, {
 			to: "recipient@example.com",

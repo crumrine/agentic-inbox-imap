@@ -559,19 +559,85 @@ async function streamToArrayBuffer(stream: ReadableStream, streamSize: number) {
 
 /**
  * `to` is the SMTP envelope recipient — the address the message was actually
- * routed to. It is optional here only because workers/app.ts annotates its
- * `email()` parameter as `{ raw, rawSize }`; the runtime object Cloudflare
- * hands that handler is a ForwardableEmailMessage and does carry it. It is the
- * first delivery candidate because it is the only field that is right when the
- * mailbox's address appears nowhere in the headers, which is what a Bcc is.
+ * routed to. It is optional because tests construct this object by hand; the
+ * runtime object Cloudflare hands the `email()` handler is a
+ * `ForwardableEmailMessage` and always carries it. It is the first delivery
+ * candidate because it is the only field that is right when the mailbox's
+ * address appears nowhere in the headers, which is what a Bcc is.
  */
 type InboundEvent = { raw: ReadableStream; rawSize: number; to?: string };
 
-async function receiveEmail(event: InboundEvent, env: Env, ctx: ExecutionContext) {
+/**
+ * What `receiveEmail` decided to do with a message.
+ *
+ * The decision is returned rather than acted on because acting on it means
+ * calling `ForwardableEmailMessage.setReject`, a Cloudflare-specific side
+ * effect that only the `email()` handler in workers/app.ts is in a position to
+ * perform. Keeping it out of here leaves `receiveEmail` callable from a test
+ * with a plain object, and leaves exactly one place that turns a decision into
+ * an SMTP response.
+ *
+ * Note what is *not* in this union: an internal failure. An R2 outage, a
+ * Durable Object error or a bug still throws, because a permanent SMTP
+ * rejection would destroy mail that is perfectly deliverable once the fault
+ * clears. See the `email()` handler for what throwing gets us.
+ */
+export type InboundDisposition =
+	| { status: "delivered"; mailboxId: string; emailId: string }
+	| { status: "rejected"; reason: string };
+
+/**
+ * The reason strings handed to `setReject`, which puts them into the SMTP
+ * response sent back to the connecting server.
+ *
+ * These are **fixed constants with nothing interpolated into them**. Echoing
+ * the rejected recipient is conventional in SMTP ("<addr>... User unknown"),
+ * but that address arrives from the envelope or the message headers — attacker
+ * controlled, in a message we have already decided not to accept — and putting
+ * it into a protocol response is how you get header injection. There is no
+ * value in the echo that is worth building a sanitiser to earn: the sending
+ * server already knows which recipient it offered, and its bounce names the
+ * address for the human either way.
+ *
+ * Keep them single-line, ASCII, and short. Nothing here may contain CR or LF.
+ */
+export const REJECT_REASONS = {
+	/** No recipient on the message resolves to a mailbox or alias we hold. */
+	unknownRecipient: "User unknown",
+	/** Structurally unusable: no To header, or a zero/negative body size. */
+	malformed: "Invalid message: no usable recipient address",
+	/**
+	 * Over MAX_EMAIL_SIZE. Retrying an oversize message never helps, so this is
+	 * a permanent reject. Mostly a backstop: Cloudflare rejects anything past
+	 * its own inbound size limit during SMTP receipt, before this Worker runs.
+	 */
+	tooLarge: "Message too large",
+} as const;
+
+async function receiveEmail(
+	event: InboundEvent,
+	env: Env,
+	ctx: ExecutionContext,
+): Promise<InboundDisposition> {
+	// Size is checked here rather than left to streamToArrayBuffer's throw so
+	// that it becomes a permanent reject: no number of retries shrinks a
+	// message. streamToArrayBuffer keeps its own guards as a backstop.
+	if (event.rawSize > MAX_EMAIL_SIZE) {
+		console.log(`Rejecting email: ${event.rawSize} bytes exceeds the ${MAX_EMAIL_SIZE} byte limit.`);
+		return { status: "rejected", reason: REJECT_REASONS.tooLarge };
+	}
+	if (event.rawSize <= 0) {
+		console.log(`Rejecting email: invalid declared size ${event.rawSize}.`);
+		return { status: "rejected", reason: REJECT_REASONS.malformed };
+	}
+
 	const rawEmail = await streamToArrayBuffer(event.raw, event.rawSize);
 	const parsedEmail = await new PostalMime().parse(rawEmail);
 
-	if (!parsedEmail.to?.length || !parsedEmail.to[0].address) throw new Error("received email with empty to");
+	if (!parsedEmail.to?.length || !parsedEmail.to[0].address) {
+		console.log("Rejecting email: empty To header.");
+		return { status: "rejected", reason: REJECT_REASONS.malformed };
+	}
 
 	const allowedAddresses = ((env.EMAIL_ADDRESSES ?? []) as string[]).map((a) => a.toLowerCase());
 	const allRecipients = parsedEmail.to.map((t) => t.address?.toLowerCase()).filter(Boolean) as string[];
@@ -584,17 +650,35 @@ async function receiveEmail(event: InboundEvent, env: Env, ctx: ExecutionContext
 		...(event.to ? [normalizeAddress(event.to)] : []),
 		...allRecipients,
 	];
+	// Every candidate is filtered, not just the first: a message naming several
+	// recipients is accepted as long as one of them is ours, and only rejected
+	// when none is.
 	if (allowedAddresses.length > 0) {
 		candidates = candidates.filter((addr) => allowedAddresses.includes(addr));
-		if (candidates.length === 0) { console.log(`Ignoring email: no recipient matches EMAIL_ADDRESSES.`); return; }
+		if (candidates.length === 0) {
+			console.log("Rejecting email: no recipient matches EMAIL_ADDRESSES.");
+			return { status: "rejected", reason: REJECT_REASONS.unknownRecipient };
+		}
 	}
-	if (candidates.length === 0) throw new Error("received email with no valid recipient address");
+	if (candidates.length === 0) {
+		console.log("Rejecting email: no valid recipient address.");
+		return { status: "rejected", reason: REJECT_REASONS.malformed };
+	}
 
 	// A recipient with no mailbox of its own may still be an alias for one.
 	// Before this, any such message was logged and dropped — a mailbox with
 	// `info@` pointed at it received nothing, silently.
+	//
+	// `resolveInboundDelivery` walks every candidate, so a null here means not
+	// one of them resolved. That is the whole precondition for rejecting: the
+	// domain now has a catch-all routing rule, so a typo'd or nonexistent
+	// address reaches this Worker, and accepting-then-discarding it would leave
+	// the sender believing the mail arrived.
 	const delivery = await resolveInboundDelivery(env, candidates);
-	if (!delivery) { console.log(`Ignoring email for ${candidates[0]}: no mailbox or alias matches`); return; }
+	if (!delivery) {
+		console.log("Rejecting email: no mailbox or alias matches any recipient.");
+		return { status: "rejected", reason: REJECT_REASONS.unknownRecipient };
+	}
 	const { mailboxId, deliveredTo } = delivery;
 
 	const messageId = crypto.randomUUID();
@@ -666,6 +750,33 @@ async function receiveEmail(event: InboundEvent, env: Env, ctx: ExecutionContext
 		method: "POST", headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({ mailboxId, emailId: messageId, sender: (parsedEmail.from?.address || "").toLowerCase(), subject: parsedEmail.subject || "", threadId }),
 	})).catch((e) => console.error("Auto-draft trigger failed:", (e as Error).message)));
+
+	return { status: "delivered", mailboxId, emailId: messageId };
+}
+
+/**
+ * The inbound entry point: run `receiveEmail` and turn its decision into an
+ * SMTP response.
+ *
+ * This lives here rather than inline in workers/app.ts so it can be tested.
+ * workers/app.ts imports the React Router server build through a Vite virtual
+ * module that does not exist outside a `react-router build`, so nothing in the
+ * test run can import it; this module is already imported by the inbound tests.
+ *
+ * The parameter is narrowed to the four members it actually uses so a test can
+ * pass a stand-in with a `setReject` spy. A real `ForwardableEmailMessage`
+ * satisfies it.
+ */
+export async function handleInboundEmail(
+	message: Pick<ForwardableEmailMessage, "raw" | "rawSize" | "to" | "setReject">,
+	env: Env,
+	ctx: ExecutionContext,
+): Promise<InboundDisposition> {
+	const result = await receiveEmail(message, env, ctx);
+	if (result.status === "rejected") {
+		message.setReject(result.reason);
+	}
+	return result;
 }
 
 export { app, receiveEmail };

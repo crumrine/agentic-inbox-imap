@@ -35,7 +35,7 @@ function rawEmailBytes(to: string, subject = "Inbound test"): Uint8Array {
 
 describe("receiveEmail: raw MIME storage (DEV-661)", () => {
 	it("stores the raw bytes to R2 byte-for-byte and records raw_key + rfc822_size", async () => {
-		const mailboxId = "inbound-raw@brian404.com";
+		const mailboxId = "inbound-raw@example.com";
 		await env.BUCKET.put(`mailboxes/${mailboxId}.json`, "{}");
 
 		const bytes = rawEmailBytes(mailboxId);
@@ -66,7 +66,7 @@ describe("receiveEmail: raw MIME storage (DEV-661)", () => {
 	});
 
 	it("never loses mail: if the R2 put throws, the email row is still created with raw_key NULL", async () => {
-		const mailboxId = "inbound-r2-outage@brian404.com";
+		const mailboxId = "inbound-r2-outage@example.com";
 		const mailboxKey = `mailboxes/${mailboxId}.json`;
 
 		// A bucket stand-in whose `put` always fails (simulating an R2 outage),
@@ -153,7 +153,7 @@ describe("receiveEmail: precomputed BODYSTRUCTURE (DEV-678)", () => {
 	}
 
 	it("populates body_structure alongside raw_key", async () => {
-		const full = await deliver("bs-inbound@brian404.com", multipartBytes("bs-inbound@brian404.com"));
+		const full = await deliver("bs-inbound@example.com", multipartBytes("bs-inbound@example.com"));
 
 		expect(full.raw_key).not.toBeNull();
 		expect(full.body_structure).not.toBeNull();
@@ -168,7 +168,7 @@ describe("receiveEmail: precomputed BODYSTRUCTURE (DEV-678)", () => {
 	it("leaves body_structure NULL when the raw bytes could not be stored", async () => {
 		// A structure describing bytes nobody will be served is worse than none:
 		// with raw_key NULL the raw endpoint synthesizes a different message.
-		const mailboxId = "bs-r2-outage@brian404.com";
+		const mailboxId = "bs-r2-outage@example.com";
 		await env.BUCKET.put(`mailboxes/${mailboxId}.json`, "{}");
 
 		const original = env.BUCKET.put.bind(env.BUCKET);

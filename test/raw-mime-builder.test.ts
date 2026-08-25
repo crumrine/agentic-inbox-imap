@@ -9,8 +9,8 @@ import { buildRawMime, type BuildRawMimeInput } from "../workers/lib/raw-mime";
 
 function baseInput(overrides: Partial<BuildRawMimeInput> = {}): BuildRawMimeInput {
 	return {
-		messageId: "abc123@brian404.com",
-		from: "sender@brian404.com",
+		messageId: "abc123@example.com",
+		from: "sender@example.com",
 		to: "recipient@example.com",
 		subject: "Test subject",
 		text: "Hello there",
@@ -66,7 +66,7 @@ describe("buildRawMime: round trip via PostalMime", () => {
 		assertOnlyCRLF(raw);
 		const parsed = await PostalMime.parse(raw);
 		expect(parsed.subject).toBe("Test subject");
-		expect(parsed.from?.address).toBe("sender@brian404.com");
+		expect(parsed.from?.address).toBe("sender@example.com");
 		expect(parsed.to?.[0]?.address).toBe("recipient@example.com");
 		expect(parsed.text?.trim()).toBe("Just plain text here.");
 		expect(parsed.html).toBeFalsy();
@@ -153,11 +153,11 @@ describe("buildRawMime: round trip via PostalMime", () => {
 
 	it("non-ASCII display name round-trips correctly", async () => {
 		const name = "Bälle Ünïcode 名前";
-		const raw = buildRawMime(baseInput({ from: { email: "sender@brian404.com", name } }));
+		const raw = buildRawMime(baseInput({ from: { email: "sender@example.com", name } }));
 		assertOnlyCRLF(raw);
 		const parsed = await PostalMime.parse(raw);
 		expect(parsed.from?.name).toBe(name);
-		expect(parsed.from?.address).toBe("sender@brian404.com");
+		expect(parsed.from?.address).toBe("sender@example.com");
 	});
 
 	it("long subject header folds and round-trips intact", async () => {
@@ -176,7 +176,7 @@ describe("buildRawMime: round trip via PostalMime", () => {
 	});
 
 	it("long References chain folds and round-trips intact", async () => {
-		const references = Array.from({ length: 25 }, (_, i) => `msg-${i}-${"x".repeat(10)}@brian404.com`);
+		const references = Array.from({ length: 25 }, (_, i) => `msg-${i}-${"x".repeat(10)}@example.com`);
 		const raw = buildRawMime(baseInput({ inReplyTo: references[references.length - 1], references }));
 		assertOnlyCRLF(raw);
 		const headerBlock = raw.split("\r\n\r\n")[0];
@@ -206,11 +206,11 @@ describe("buildRawMime: round trip via PostalMime", () => {
 	it("Message-ID, cc, and date headers are present and well-formed", async () => {
 		const raw = buildRawMime(baseInput({ cc: ["cc1@example.com", "cc2@example.com"] }));
 		assertOnlyCRLF(raw);
-		expect(raw).toContain("Message-ID: <abc123@brian404.com>");
+		expect(raw).toContain("Message-ID: <abc123@example.com>");
 		expect(raw).toContain("Cc: cc1@example.com, cc2@example.com");
 		expect(raw).toMatch(/Date: \w{3}, \d{2} \w{3} \d{4} \d{2}:\d{2}:\d{2} \+0000/);
 		const parsed = await PostalMime.parse(raw);
-		expect(parsed.messageId?.replace(/^<|>$/g, "")).toBe("abc123@brian404.com");
+		expect(parsed.messageId?.replace(/^<|>$/g, "")).toBe("abc123@example.com");
 		expect(parsed.cc?.map((a) => a.address)).toEqual(["cc1@example.com", "cc2@example.com"]);
 	});
 });
