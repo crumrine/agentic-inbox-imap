@@ -22,6 +22,7 @@ import {
 	ALIAS_NAME_MAX_CHARS,
 	createAlias,
 	deleteAlias,
+	type DeliveryCandidate,
 	isAlias,
 	isPlausibleWildcard,
 	listAliases,
@@ -700,16 +701,24 @@ async function receiveEmail(
 	const bccRecipients = (parsedEmail.bcc || []).map((e) => e.address?.toLowerCase()).filter(Boolean) as string[];
 
 	// Envelope recipient first, then the header To addresses in order. See
-	// `resolveInboundDelivery` for why the envelope has to lead.
-	let candidates = [
-		...(event.to ? [normalizeAddress(event.to)] : []),
-		...allRecipients,
+	// `resolveInboundDelivery` for why the envelope has to lead — and why each
+	// candidate carries where it came from: a domain wildcard may match the
+	// envelope recipient, which Cloudflare routed here, and never a header
+	// `To:`, which the sender wrote. No envelope recipient means no envelope
+	// candidate, so nothing a wildcard can match.
+	let candidates: DeliveryCandidate[] = [
+		...(event.to
+			? [{ address: normalizeAddress(event.to), source: "envelope" } as const]
+			: []),
+		...allRecipients.map(
+			(address): DeliveryCandidate => ({ address, source: "header" }),
+		),
 	];
 	// Every candidate is filtered, not just the first: a message naming several
 	// recipients is accepted as long as one of them is ours, and only rejected
 	// when none is.
 	if (allowedAddresses.length > 0) {
-		candidates = candidates.filter((addr) => allowedAddresses.includes(addr));
+		candidates = candidates.filter((c) => allowedAddresses.includes(c.address));
 		if (candidates.length === 0) {
 			console.log("Rejecting email: no recipient matches EMAIL_ADDRESSES.");
 			return { status: "rejected", reason: REJECT_REASONS.unknownRecipient };

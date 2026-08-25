@@ -22,12 +22,16 @@
  * 2. **An unknown address is still refused.** DEV-700 made this Worker reject
  *    rather than accept-and-discard, and a wildcard is the most plausible way
  *    to regress it. `nobody@` on a covered domain must still bounce.
- * 3. **Only declared domains.** The header `To:` addresses are candidates and
- *    they are written by the sender, so without a `DOMAINS` check a stranger
- *    could get `brian@attacker.example` accepted and parked in `delivered_to`
- *    as a send-as candidate. Both directions are pinned, because a test that
- *    only asserts the rejection would also pass if header candidates were
- *    ignored altogether.
+ * 3. **Only the envelope recipient.** A wildcard may match the address
+ *    Cloudflare actually routed here and nothing else. The header `To:`
+ *    addresses are candidates too and they are written by the *sender*, so a
+ *    wildcard that matched one would let a stranger get any `brian@anything`
+ *    accepted and parked in `delivered_to` as a send-as candidate. Pinned from
+ *    three sides, because a test that only asserted the rejection would also
+ *    pass if header candidates were ignored altogether, and one that only
+ *    asserted the envelope would pass if the rule were not there at all:
+ *    the envelope delivers, the header alone does not, and an exact alias or a
+ *    real mailbox named in that same header still does.
  *
  * ## Outbound: the risk is granting a spoof
  *
@@ -52,6 +56,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { Folders } from "../shared/folders";
 import {
+	type AliasEnv,
 	createAlias,
 	deleteAlias,
 	isPlausibleLocalPart,
@@ -94,19 +99,23 @@ const OUTSIDER = "outsider@somewhere-else.example";
 const WILDCARD = "brian@";
 const COVERED_COM = "brian@example.com";
 const COVERED_NET = "brian@example.net";
-/** Same local part, on a domain this deployment never declared. */
-const UNDECLARED = "brian@attacker.example";
+/**
+ * The same local part on a domain nothing here owns. A sender can put this in
+ * a `To:` header; Cloudflare will never hand it to this Worker as an envelope
+ * recipient, and that difference is the security boundary.
+ */
+const FORGED = "brian@attacker.example";
+
+/** An address routed here that no record covers, for use as a decoy envelope. */
+const UNROUTED = "unrouted@example.com";
 
 /**
- * Two domains, so "covers every domain" is a claim a test can actually
- * falsify. `DOMAINS` is typed as the literal in wrangler.jsonc, hence the
- * cast — the same one the EMAIL_ADDRESSES overrides in test/aliases.test.ts
- * need, and for the same reason.
+ * The ambient env, unmodified. Nothing here configures `DOMAINS`: it is a UI
+ * hint and no longer bounds a wildcard, and the two covered domains above are
+ * declared nowhere — which is the point, since "covers every domain" now has
+ * to be a claim about where a message arrived rather than about config.
  */
-const testEnv = {
-	...(env as unknown as Env),
-	DOMAINS: "example.com,example.net" as unknown as Env["DOMAINS"],
-};
+const testEnv = env as unknown as Env;
 
 let ownerStub: MailboxStub;
 
@@ -200,7 +209,6 @@ const imapApp = new Hono<{ Bindings: ImapApiEnv }>().route(IMAP_API_BASE, imapAp
 function imapEnv(email: FakeEmail): ImapApiEnv {
 	return {
 		BUCKET: env.BUCKET,
-		DOMAINS: testEnv.DOMAINS,
 		EMAIL: email.binding,
 		EMAIL_ADDRESSES: env.EMAIL_ADDRESSES,
 		MAILBOX: env.MAILBOX,
@@ -344,33 +352,109 @@ describe("inbound delivery through a domain wildcard", () => {
 	});
 });
 
-describe("a wildcard covers only the domains this deployment declares", () => {
+describe("a wildcard matches the envelope recipient and nothing else", () => {
 	beforeEach(async () => {
 		expect((await createAlias(testEnv, WILDCARD, OWNER)).ok).toBe(true);
 	});
 
-	// The pair matters. On its own the rejection below would also pass if
-	// header recipients were ignored entirely, which would be a different
-	// (and wrong) implementation.
-	it("accepts a covered address named only in the To header", async () => {
+	it("delivers when the covered address is the envelope recipient", async () => {
+		// Cloudflare routed this copy here, and it only routes domains the
+		// account owns. That is the whole of the wildcard's authority.
 		expect(
-			await deliver(COVERED_NET, "Header candidate", "unrouted@example.com"),
+			await deliver(OUTSIDER, "Envelope candidate", COVERED_NET),
 		).toMatchObject({ status: "delivered", mailboxId: OWNER });
+		expect(await deliveredTo(OWNER)).toEqual([COVERED_NET]);
 	});
 
-	it("refuses the same local part on an undeclared domain", async () => {
-		// The To header is written by the sender. Without the DOMAINS check
-		// this lands in OWNER's inbox and leaves `brian@attacker.example` in
-		// `delivered_to`, one reply away from being a From address.
+	it("refuses a covered address named only in the To header", async () => {
+		// The security case. The To header is written by the sender, so a
+		// wildcard matching it would let a stranger park any address of their
+		// choosing in `delivered_to`, one reply away from being a From address.
+		// This one is even on a domain the deployment really does own — the
+		// rule is about where the address came from, not which domain it is on.
 		expect(
-			await deliver(UNDECLARED, "Forged header", "unrouted@example.com"),
+			await deliver(COVERED_NET, "Header candidate", UNROUTED),
 		).toMatchObject({ status: "rejected" });
 		expect(await inboxSubjects(OWNER)).toEqual([]);
 	});
 
-	it("resolves nothing for an undeclared domain, envelope or not", async () => {
-		expect(await readDeliveryAlias(testEnv, UNDECLARED)).toBeNull();
-		expect(await resolveInboundDelivery(testEnv, [UNDECLARED])).toBeNull();
+	it("refuses a local part the sender pointed at a domain we never see", async () => {
+		expect(await deliver(FORGED, "Forged header", UNROUTED)).toMatchObject({
+			status: "rejected",
+		});
+		expect(await inboxSubjects(OWNER)).toEqual([]);
+	});
+
+	it("matches nothing at all when there is no envelope recipient", async () => {
+		// `event.to` is optional, so this is reachable. No envelope, no
+		// wildcard: the fail-closed direction.
+		expect(await deliver(COVERED_NET, "No envelope")).toMatchObject({
+			status: "rejected",
+		});
+		expect(await inboxSubjects(OWNER)).toEqual([]);
+	});
+
+	// The three below are the other half of the pair. Without them every
+	// rejection above would also pass in an implementation that ignored header
+	// candidates altogether, which would be a different (and wrong) change.
+
+	it("still delivers a real mailbox named only in the To header", async () => {
+		expect(await deliver(OWNER, "Mailbox from header", UNROUTED)).toMatchObject({
+			status: "delivered",
+			mailboxId: OWNER,
+		});
+	});
+
+	it("still delivers an exact alias named only in the To header", async () => {
+		// An exact record is something the operator wrote down about one
+		// address, so a sender naming it asserts nothing new.
+		const exact = "press@example.net";
+		expect((await createAlias(testEnv, exact, EXACT_OWNER)).ok).toBe(true);
+
+		expect(await deliver(exact, "Exact from header", UNROUTED)).toMatchObject({
+			status: "delivered",
+			mailboxId: EXACT_OWNER,
+		});
+		expect(await deliveredTo(EXACT_OWNER)).toEqual([exact]);
+	});
+
+	it("lets a wildcard on the envelope beat an exact alias in the header", async () => {
+		// Order across candidates, which the narrowing must not have inverted:
+		// the envelope is the address this copy was routed to, the header is a
+		// list of everyone.
+		expect((await createAlias(testEnv, COVERED_COM, EXACT_OWNER)).ok).toBe(true);
+
+		expect(await deliver(COVERED_COM, "Envelope leads", COVERED_NET)).toMatchObject({
+			status: "delivered",
+			mailboxId: OWNER,
+		});
+		expect(await inboxSubjects(EXACT_OWNER)).toEqual([]);
+	});
+
+	it("draws the same line one level down, in the resolver itself", async () => {
+		// `readDeliveryAlias` fails closed: a caller that has not said where
+		// the address came from gets exact-only behaviour.
+		expect(await readDeliveryAlias(testEnv, COVERED_NET)).toBeNull();
+		expect(
+			(await readDeliveryAlias(testEnv, COVERED_NET, { allowWildcard: true }))?.via,
+		).toBe("wildcard");
+		// Including for an address on a domain nothing routes here: proving the
+		// domain is ours is the *caller's* job, and `resolveInboundDelivery`
+		// only ever says yes for the envelope recipient.
+		expect(
+			(await readDeliveryAlias(testEnv, FORGED, { allowWildcard: true }))?.via,
+		).toBe("wildcard");
+
+		expect(
+			await resolveInboundDelivery(testEnv, [
+				{ address: COVERED_NET, source: "header" },
+			]),
+		).toBeNull();
+		expect(
+			await resolveInboundDelivery(testEnv, [
+				{ address: COVERED_NET, source: "envelope" },
+			]),
+		).toEqual({ mailboxId: OWNER, deliveredTo: COVERED_NET });
 	});
 });
 
@@ -612,7 +696,7 @@ describe("a wildcard grants nothing without delivery evidence", () => {
 		// `resolveAlias` is what decides whether a From address may be spoofed.
 		// If a wildcard answered here it would mean "brian@ on any domain".
 		expect(await resolveAlias(testEnv, COVERED_NET)).toBeNull();
-		expect(await resolveAlias(testEnv, UNDECLARED)).toBeNull();
+		expect(await resolveAlias(testEnv, FORGED)).toBeNull();
 	});
 
 	it("does not let the mailbox validate a covered address as its sender", async () => {
@@ -694,7 +778,10 @@ describe("wildcard records", () => {
 		const stolen = await createAlias(testEnv, WILDCARD, EXACT_OWNER);
 
 		expect(stolen).toMatchObject({ ok: false, reason: "alias-exists" });
-		expect((await readDeliveryAlias(testEnv, COVERED_NET))?.record.mailbox).toBe(OWNER);
+		expect(
+			(await readDeliveryAlias(testEnv, COVERED_NET, { allowWildcard: true }))?.record
+				.mailbox,
+		).toBe(OWNER);
 	});
 
 	it("does not collide with an exact alias on the same local part", async () => {
@@ -703,15 +790,22 @@ describe("wildcard records", () => {
 		// same record and precedence already says which one answers.
 		expect((await createAlias(testEnv, COVERED_COM, EXACT_OWNER)).ok).toBe(true);
 
+		// The exact record answers even with the wildcard switched off, which
+		// is what "most specific wins" means one level down.
 		expect((await readDeliveryAlias(testEnv, COVERED_COM))?.via).toBe("exact");
-		expect((await readDeliveryAlias(testEnv, COVERED_NET))?.via).toBe("wildcard");
+		expect(
+			(await readDeliveryAlias(testEnv, COVERED_NET, { allowWildcard: true }))?.via,
+		).toBe("wildcard");
 	});
 
 	it("cannot be removed by a mailbox that does not own it", async () => {
 		await createAlias(testEnv, WILDCARD, OWNER);
 
 		expect(await deleteAlias(testEnv, WILDCARD, EXACT_OWNER)).toBe(false);
-		expect((await readDeliveryAlias(testEnv, COVERED_NET))?.record.mailbox).toBe(OWNER);
+		expect(
+			(await readDeliveryAlias(testEnv, COVERED_NET, { allowWildcard: true }))?.record
+				.mailbox,
+		).toBe(OWNER);
 	});
 
 	it("needs a mailbox to point at, like any other alias", async () => {
@@ -721,13 +815,20 @@ describe("wildcard records", () => {
 		});
 	});
 
-	it("is refused when the deployment declares no domains to cover", async () => {
-		const noDomains = { ...testEnv, DOMAINS: "" as unknown as Env["DOMAINS"] };
+	it("is created by a deployment that declares no domains at all", async () => {
+		// `DOMAINS` used to gate this, and the deployed value is a placeholder
+		// left behind by a public-repo sanitisation — which would have made
+		// every wildcard silently refuse. Nothing reads it now, so the binding
+		// is not even in `AliasEnv`.
+		const unconfigured: AliasEnv = {
+			BUCKET: env.BUCKET,
+			EMAIL_ADDRESSES: env.EMAIL_ADDRESSES,
+		};
 
-		expect(await createAlias(noDomains, WILDCARD, OWNER)).toMatchObject({
-			ok: false,
-			reason: "not-allowed",
-		});
+		expect((await createAlias(unconfigured, WILDCARD, OWNER)).ok).toBe(true);
+		expect((await listAliases(unconfigured, OWNER)).map((a) => a.address)).toEqual([
+			WILDCARD,
+		]);
 	});
 
 	it("honours a non-empty EMAIL_ADDRESSES through the addresses it would cover", async () => {

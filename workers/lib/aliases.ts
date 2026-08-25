@@ -84,15 +84,33 @@
  * message that does not match a mailbox outright, and it must not get slower
  * as the registry grows.
  *
- * A wildcard only matches an address whose domain is in `DOMAINS`. Cloudflare
- * already refuses to route a domain the account does not own, so on the
- * envelope recipient this is belt-and-braces — but the header `To:` addresses
- * are also candidates, and those are written by the sender. Without the
- * `DOMAINS` check a stranger could address `To: brian@attacker.example`, have
- * the message accepted by the wildcard, and leave `brian@attacker.example`
- * sitting in `delivered_to` as a send-as candidate. `DOMAINS` is the list of
- * domains the operator declared, so it is the right boundary, and an empty
- * `DOMAINS` matches nothing rather than everything.
+ * ### A wildcard matches the envelope recipient and nothing else
+ *
+ * "Every domain this deployment handles" needs a boundary, or `brian@` means
+ * `brian@` anywhere in the world. The boundary is **provenance, not
+ * configuration**: a wildcard may only match the SMTP envelope recipient.
+ *
+ * The envelope recipient is the address Cloudflare actually routed to this
+ * Worker, and Email Routing only delivers domains the account owns — so
+ * delivery itself is the proof that the domain is ours. The header `To:`
+ * addresses are candidates too, and they are written by the *sender*: without
+ * this rule a stranger addresses `To: brian@attacker.example`, the wildcard
+ * accepts it, and `brian@attacker.example` sits in `delivered_to` one reply
+ * away from being a From address this deployment does not own.
+ *
+ * It is the same reasoning that makes `delivered_to` sound evidence for
+ * send-as, applied one step earlier. No envelope recipient at all — `event.to`
+ * is optional — means no wildcard match, which is the fail-closed direction.
+ *
+ * Exact aliases and real mailboxes are unaffected and still match any
+ * candidate, header `To:` included: those are explicit records for addresses
+ * the deployment already holds, so a sender naming one is not asserting
+ * anything the operator has not already written down.
+ *
+ * This replaced an earlier gate on the `DOMAINS` env var. `DOMAINS` is a
+ * hand-maintained list feeding a UI hint, and a list that has to be kept in
+ * sync with reality is a standing footgun — a stale or placeholder value
+ * silently turns every wildcard off. Provenance needs no configuration.
  *
  * ## What this module deliberately does not do
  *
@@ -109,10 +127,11 @@
  * message being answered was **actually delivered to `brian@X`**, which is
  * what `delivered_to` records. That column is written in one place, from the
  * resolution above, and the message physically arriving proves Cloudflare
- * routes that domain here. `readDeliveryAlias` is therefore named for its
- * precondition: call it only with an address a message really arrived at.
- * Compose has no such address and falls back to the mailbox's own, which is
- * correct and safe.
+ * routes that domain here. `readDeliveryAlias` makes that precondition an
+ * argument rather than a naming convention: its wildcard half is off unless
+ * the caller passes `allowWildcard`, and the only two callers that may are the
+ * ones holding a delivered address. Compose has no such address and falls back
+ * to the mailbox's own, which is correct and safe.
  */
 
 import type { Env } from "../types";
@@ -122,12 +141,12 @@ import type { Env } from "../types";
  * resolution has no business reaching the AI binding, the mailbox Durable
  * Object, or the send-email binding.
  *
- * `DOMAINS` is here for domain-wildcard aliases only: it is the list of
- * domains a bare `brian@` is allowed to cover. Nothing else in this module
- * consults it, and in particular an exact alias is still never inferred from
- * a domain.
+ * `DOMAINS` is deliberately **not** here. It is a UI hint, and nothing about
+ * which addresses this deployment holds is decided from it: a wildcard is
+ * bounded by where a message came from (see the module comment), and an exact
+ * alias is never inferred from a domain at all.
  */
-export type AliasEnv = Pick<Env, "BUCKET" | "DOMAINS" | "EMAIL_ADDRESSES">;
+export type AliasEnv = Pick<Env, "BUCKET" | "EMAIL_ADDRESSES">;
 
 /**
  * A display name configured on an alias, in three states that are all real and
@@ -326,35 +345,16 @@ export function isPlausibleAliasKey(key: string): boolean {
  * `brian@a.example` → `brian@`.
  */
 export function wildcardKeyFor(address: string): string | null {
-	const at = address.lastIndexOf("@");
-	if (at <= 0) return null;
-	const localPart = address.slice(0, at);
+	const localPart = localPartOf(address);
+	if (localPart === null) return null;
 	return isPlausibleLocalPart(localPart) ? `${localPart}@` : null;
 }
 
-/** The domains this deployment declares it handles, normalised. */
-export function deploymentDomains(env: AliasEnv): string[] {
-	return String(env.DOMAINS ?? "")
-		.split(",")
-		.map((d) => d.trim().toLowerCase())
-		.filter(Boolean);
-}
-
-/**
- * Whether an address sits on a domain this deployment declared.
- *
- * Only wildcards consult this. An empty or missing `DOMAINS` answers false for
- * everything: a deployment that has not said which domains it handles has not
- * authorised a wildcard to cover any of them, and failing closed there is the
- * difference between "the feature is off" and "the feature covers the
- * internet".
- */
-export function isDeploymentDomain(env: AliasEnv, address: string): boolean {
+/** The local part of an address, or null when there is not one. */
+function localPartOf(address: string): string | null {
 	const at = address.lastIndexOf("@");
-	if (at < 0) return false;
-	const domain = address.slice(at + 1);
-	if (!domain) return false;
-	return deploymentDomains(env).includes(domain);
+	if (at <= 0) return null;
+	return address.slice(0, at) || null;
 }
 
 /** True when a non-empty EMAIL_ADDRESSES allows this address (or is empty). */
@@ -376,14 +376,16 @@ export function isAllowedAddress(env: AliasEnv, address: string): boolean {
  * single message — accepting one would create a record that silently does
  * nothing, which is precisely what the exact-address check exists to prevent.
  *
- * With `DOMAINS` empty nothing is covered at all, matching `isDeploymentDomain`.
+ * The question is asked of the *local parts* on the list rather than of a
+ * configured domain list, because there is no domain list any more: which
+ * domains a wildcard covers is settled at delivery time by where the message
+ * came from, not in advance by configuration. An empty `EMAIL_ADDRESSES`
+ * allows every wildcard, exactly as it allows every address.
  */
 export function isAllowedWildcard(env: AliasEnv, localPart: string): boolean {
-	const domains = deploymentDomains(env);
-	if (domains.length === 0) return false;
 	const allowed = ((env.EMAIL_ADDRESSES ?? []) as string[]).map(normalizeAddress);
 	if (allowed.length === 0) return true;
-	return domains.some((domain) => allowed.includes(`${localPart}@${domain}`));
+	return allowed.some((address) => localPartOf(address) === localPart);
 }
 
 // ── Reads ───────────────────────────────────────────────────────────
@@ -544,24 +546,36 @@ export interface DeliveryAliasMatch {
 
 /**
  * The alias record covering an address a message was **actually delivered
- * to** — the exact record if there is one, otherwise the domain wildcard.
+ * to** — the exact record if there is one, and then the domain wildcard, but
+ * only when the caller can vouch that the address was delivered *to*.
  *
- * ## Only ever call this with a delivered address
+ * ## `allowWildcard` is the whole safety property, and it defaults to off
  *
- * The name is the contract. Two callers satisfy it and there are no others:
- * `resolveInboundDelivery`, which has the SMTP envelope in hand, and
- * `resolveSendAs`, which has the `delivered_to` column that
- * `resolveInboundDelivery` wrote. Both are addresses a message physically
- * arrived at, and arriving is what proves the account owns the domain. Handed
- * an address from anywhere else — a `From:` header, a compose form — this
- * would answer "yes, that is yours" for `brian@` on any domain at all. That is
- * why `resolveAlias` exists separately and stays exact-only.
+ * An exact record is a statement the operator wrote down about one address, so
+ * it may be read for any address anyone names. A wildcard is not: it says
+ * `brian@` on *some* set of domains, and the set is "the domains mail actually
+ * arrives here for". Nothing about the address itself can establish that, so
+ * the caller has to, and `allowWildcard` is where it says so.
+ *
+ * Two callers pass it and there are no others:
+ *
+ * - `resolveInboundDelivery`, for the SMTP **envelope** recipient only — the
+ *   address Cloudflare routed to this Worker, which it does only for domains
+ *   the account owns. Never for a header `To:` address, which the sender wrote.
+ * - `resolveSendAs`, for the `delivered_to` column `resolveInboundDelivery`
+ *   wrote, which is that same proven address carried forward.
+ *
+ * Defaulting to off means a caller that has not thought about provenance gets
+ * exact-only behaviour, which is the safe half. Handed a `From:` header or a
+ * compose form with `allowWildcard`, this would answer "yes, that is yours"
+ * for `brian@` on any domain at all — which is why `resolveAlias` exists
+ * separately and stays exact-only whatever anyone passes.
  *
  * ## Cost
  *
  * One keyed read for the exact address; a second only when that misses and the
- * domain is one this deployment declared. No listing at either step, so the
- * inbound path does not get slower as the registry grows.
+ * caller allowed the wildcard. No listing at either step, so the inbound path
+ * does not get slower as the registry grows.
  *
  * An exact record that exists but points at a deleted mailbox is still the
  * answer — `via: "exact"`, and the caller decides. Falling through to the
@@ -572,6 +586,7 @@ export interface DeliveryAliasMatch {
 export async function readDeliveryAlias(
 	env: AliasEnv,
 	address: string,
+	options: { allowWildcard?: boolean } = {},
 ): Promise<DeliveryAliasMatch | null> {
 	const normalized = normalizeAddress(address);
 	if (!isPlausibleAddress(normalized)) return null;
@@ -579,7 +594,7 @@ export async function readDeliveryAlias(
 	const exact = await readAlias(env, normalized);
 	if (exact) return { record: exact, via: "exact" };
 
-	if (!isDeploymentDomain(env, normalized)) return null;
+	if (!options.allowWildcard) return null;
 	const key = wildcardKeyFor(normalized);
 	if (!key) return null;
 
@@ -625,8 +640,10 @@ export async function hasMailbox(env: AliasEnv, address: string): Promise<boolea
  *
  * - **Allowlist.** `EMAIL_ADDRESSES` holds whole addresses, so the question
  *   becomes whether any address the wildcard covers is on it —
- *   `isAllowedWildcard`. It also requires a non-empty `DOMAINS`, since a
- *   wildcard covering no domains could never receive anything.
+ *   `isAllowedWildcard`. There is no second check against a configured domain
+ *   list: which domains a wildcard covers is decided at delivery time by where
+ *   the message came from, so there is nothing to check against here and an
+ *   unconfigured deployment is not a reason to refuse the record.
  * - **Mailbox collision.** Skipped, not relaxed. `mailboxes/brian@.json`
  *   cannot exist, because a mailbox id is an address. The real question — what
  *   if a mailbox exists at `brian@` on some domain? — is answered by
@@ -845,6 +862,26 @@ export async function deleteAlias(
 // ── Inbound delivery resolution ─────────────────────────────────────
 
 /**
+ * Where a delivery candidate came from, which is what decides whether a domain
+ * wildcard may match it.
+ *
+ * - `"envelope"` — the SMTP envelope recipient, the address Cloudflare routed
+ *   this copy of the message to. Email Routing only delivers domains the
+ *   account owns, so this address arriving *is* the proof that its domain is
+ *   ours. A wildcard may match it.
+ * - `"header"` — an address off the message's own `To:`, written by whoever
+ *   sent it. It proves nothing, so it may only match records that already
+ *   exist: a real mailbox, or an exact alias.
+ */
+export type DeliveryCandidateSource = "envelope" | "header";
+
+/** One address an inbound message might belong to, and where it came from. */
+export interface DeliveryCandidate {
+	address: string;
+	source: DeliveryCandidateSource;
+}
+
+/**
  * Which mailbox an inbound message belongs to, and which of its addresses
  * actually routed it.
  *
@@ -859,7 +896,8 @@ export async function deleteAlias(
  *
  * Candidates are tried in order and the first hit wins: envelope recipient
  * first (it is the address the message was actually routed to), then the
- * header recipients in order.
+ * header recipients in order. A message naming several recipients is accepted
+ * as long as one of them resolves.
  *
  * Within one candidate, most specific wins: a mailbox at the address, then an
  * exact alias at it, then a domain wildcard on its local part. The first two
@@ -873,14 +911,24 @@ export async function deleteAlias(
  * order within one: a wildcard hit on the envelope recipient beats an exact
  * alias on a header `To:` address, because the envelope is the address this
  * copy of the message was routed to and the header is a list of everyone.
+ *
+ * ## Why the candidates carry their provenance
+ *
+ * Only the envelope candidate may match a wildcard, so this function has to be
+ * able to tell the two apart — a flat list of strings cannot, and a positional
+ * convention ("the first one is the envelope") is one refactor away from being
+ * silently wrong. `source` travels with the address instead, which also means
+ * a caller with no envelope recipient at all simply does not produce an
+ * envelope candidate and no wildcard can match: fail-closed by construction
+ * rather than by a check somebody has to remember to write.
  */
 export async function resolveInboundDelivery(
 	env: AliasEnv,
-	candidates: readonly string[],
+	candidates: readonly DeliveryCandidate[],
 ): Promise<{ mailboxId: string; deliveredTo: string } | null> {
 	const seen = new Set<string>();
-	for (const raw of candidates) {
-		const address = normalizeAddress(raw ?? "");
+	for (const candidate of candidates) {
+		const address = normalizeAddress(candidate.address ?? "");
 		if (!address || seen.has(address)) continue;
 		seen.add(address);
 		if (!isPlausibleAddress(address)) continue;
@@ -888,7 +936,13 @@ export async function resolveInboundDelivery(
 		if (await env.BUCKET.head(mailboxKey(address))) {
 			return { mailboxId: address, deliveredTo: address };
 		}
-		const match = await readDeliveryAlias(env, address);
+		// The wildcard is offered the envelope recipient and nothing else. An
+		// exact alias and a mailbox are looked up for every candidate: those
+		// are records the operator wrote, so a sender naming one asserts
+		// nothing new.
+		const match = await readDeliveryAlias(env, address, {
+			allowWildcard: candidate.source === "envelope",
+		});
 		const aliased = match?.record.mailbox ?? null;
 		// An alias whose mailbox has since been deleted is not a delivery
 		// target; fall through and let a later candidate (or the drop) decide.

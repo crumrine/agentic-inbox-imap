@@ -45,6 +45,7 @@ import {
 	aliasKey,
 	createAlias,
 	deleteAlias,
+	type DeliveryCandidate,
 	isAlias,
 	listAliases,
 	resolveAlias,
@@ -340,6 +341,22 @@ describe("receiveEmail: delivery through the alias registry", () => {
 
 // ── resolveInboundDelivery, directly ────────────────────────────────
 
+/**
+ * The candidate list `receiveEmail` builds: the SMTP envelope recipient, then
+ * the header `To:` addresses in order. Every address here is an exact alias or
+ * a real mailbox, so the provenance changes nothing — see
+ * test/alias-wildcard.test.ts, where it is the whole subject.
+ */
+function candidates(
+	envelopeTo: string | null,
+	...headerTo: string[]
+): DeliveryCandidate[] {
+	return [
+		...(envelopeTo ? [{ address: envelopeTo, source: "envelope" } as const] : []),
+		...headerTo.map((address): DeliveryCandidate => ({ address, source: "header" })),
+	];
+}
+
 describe("resolveInboundDelivery", () => {
 	it("reports which address routed the message, not just the mailbox", async () => {
 		const box = await makeMailbox("delivered-to");
@@ -349,11 +366,11 @@ describe("resolveInboundDelivery", () => {
 		// This is the value the `delivered_to` column will hold. It has to be
 		// the alias the message arrived at, not the mailbox it landed in —
 		// otherwise automatic send-as has nothing to key on.
-		expect(await resolveInboundDelivery(testEnv, [alias])).toEqual({
+		expect(await resolveInboundDelivery(testEnv, candidates(alias))).toEqual({
 			mailboxId: box,
 			deliveredTo: alias,
 		});
-		expect(await resolveInboundDelivery(testEnv, [box])).toEqual({
+		expect(await resolveInboundDelivery(testEnv, candidates(box))).toEqual({
 			mailboxId: box,
 			deliveredTo: box,
 		});
@@ -368,7 +385,7 @@ describe("resolveInboundDelivery", () => {
 
 		// Both belong to the same mailbox, so `recipient` (every To joined)
 		// cannot say which one routed it. The envelope can, and leads.
-		expect(await resolveInboundDelivery(testEnv, [second, first])).toEqual({
+		expect(await resolveInboundDelivery(testEnv, candidates(second, first))).toEqual({
 			mailboxId: box,
 			deliveredTo: second,
 		});
@@ -376,7 +393,7 @@ describe("resolveInboundDelivery", () => {
 
 	it("returns null when nothing matches", async () => {
 		expect(
-			await resolveInboundDelivery(testEnv, ["nope@example.com", "also-nope"]),
+			await resolveInboundDelivery(testEnv, candidates("nope@example.com", "also-nope")),
 		).toBeNull();
 	});
 
@@ -386,7 +403,7 @@ describe("resolveInboundDelivery", () => {
 		await createAlias(testEnv, alias, box);
 		await env.BUCKET.delete(`mailboxes/${box}.json`);
 
-		expect(await resolveInboundDelivery(testEnv, [alias])).toBeNull();
+		expect(await resolveInboundDelivery(testEnv, candidates(alias))).toBeNull();
 	});
 });
 

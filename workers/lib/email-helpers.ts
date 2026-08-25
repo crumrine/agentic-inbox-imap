@@ -216,7 +216,10 @@ export interface SendAsIdentity {
  * envelope, and a message physically arriving at `brian@b.example` is what
  * proves Cloudflare routes `b.example` here — which proves the account owns
  * it. That is the delivery evidence a `brian@` wildcard needs, and it is why
- * `readDeliveryAlias` may be consulted here and `resolveAlias` may not.
+ * this is one of the two places allowed to pass `allowWildcard` to
+ * `readDeliveryAlias`, and why `resolveAlias` may not be consulted at all.
+ * `resolveInboundDelivery` is the other, on the envelope recipient itself;
+ * everything here is that same address read back out of the column it wrote.
  *
  * Everything without such evidence lands on the mailbox's own address by the
  * guard on the first line: compose passes nothing, and so does a reply to a
@@ -239,7 +242,7 @@ export async function resolveSendAs(
 	const candidate = normalizeAddress(deliveredTo ?? "");
 	if (!candidate || candidate === mailbox) return { address: mailbox };
 
-	const match = await readDeliveryAlias(env, candidate);
+	const match = await readDeliveryAlias(env, candidate, { allowWildcard: true });
 	if (!match || match.record.mailbox !== mailbox) return { address: mailbox };
 	if (match.via === "wildcard" && (await hasMailbox(env, candidate))) {
 		return { address: mailbox };

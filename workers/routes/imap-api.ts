@@ -81,15 +81,13 @@ export const IMAP_API_BASE = "/api/imap/v1";
  * folder/message endpoints landed; keeping the `Pick` narrow means a route
  * here cannot reach the `AI` binding by accident.
  */
-// `EMAIL_ADDRESSES` and `DOMAINS` are here because submission consults the
-// alias registry (`validateSenderWithAliases`, `resolveSendAs`), whose
-// `AliasEnv` includes both — `DOMAINS` bounds which domains a wildcard alias
-// covers, so leaving it out would silently turn wildcard send-as off on this
-// path alone.
+// `EMAIL_ADDRESSES` is here because submission consults the alias registry
+// (`validateSenderWithAliases`, `resolveSendAs`), whose `AliasEnv` includes
+// it. `DOMAINS` is not: nothing on this path reads it, and which domains a
+// wildcard alias covers is settled by where a message arrived, not by config.
 export type ImapApiEnv = Pick<
 	Env,
 	| "BUCKET"
-	| "DOMAINS"
 	| "EMAIL"
 	| "EMAIL_ADDRESSES"
 	| "IMAP_AUTH_RATE_LIMIT"
