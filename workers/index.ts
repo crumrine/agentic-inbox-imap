@@ -18,10 +18,12 @@ import {
 	toClientEmail,
 } from "./lib/email-helpers";
 import {
+	ALIAS_LOCAL_PART_MAX_CHARS,
 	ALIAS_NAME_MAX_CHARS,
 	createAlias,
 	deleteAlias,
 	isAlias,
+	isPlausibleWildcard,
 	listAliases,
 	normalizeAddress,
 	resolveInboundDelivery,
@@ -54,8 +56,32 @@ const AppPasswordBody = z.object({
 	label: z.string().trim().min(1).max(128),
 });
 
+/**
+ * An alias address: a real one, or a domain wildcard.
+ *
+ * A union rather than a loosened email check, so the exact-address branch keeps
+ * the full `z.string().email()` it always had. The wildcard branch is a bare
+ * local part with a trailing `@` and nothing after it — `brian@` — which is a
+ * string `.email()` refuses and `isPlausibleAddress` refuses, which is exactly
+ * what makes the two branches disjoint and the R2 key unambiguous.
+ *
+ * Note what is still a 400: `not-an-address`, with no `@` at all. The trailing
+ * `@` has to be typed. A bare token is far more often a typo than a request to
+ * catch every domain at once, and a typo that quietly became a catch-all would
+ * be the worst failure this feature could have.
+ */
+const AliasAddress = z.union([
+	z.string().trim().email().max(254),
+	z
+		.string()
+		.trim()
+		// One `@`, so a local part plus its sign.
+		.max(ALIAS_LOCAL_PART_MAX_CHARS + 1)
+		.refine((value) => isPlausibleWildcard(normalizeAddress(value))),
+]);
+
 const AliasBody = z.object({
-	address: z.string().trim().email().max(254),
+	address: AliasAddress,
 	/**
 	 * Re-point an alias that already exists. Absent or false, an existing
 	 * alias is refused rather than silently overwritten — moving inbound mail
@@ -439,6 +465,14 @@ app.delete("/api/v1/mailboxes/:mailboxId/app-passwords/:id", async (c: AppContex
  * it may send out as. The registry and the rules live in workers/lib/aliases.ts;
  * these three routes are only the HTTP shape over it.
  *
+ * An alias is either a full address or a domain wildcard, `brian@`. The
+ * wildcard spelling is the same string end to end — what the settings page
+ * sends, what the record stores, what `:alias` carries back on PATCH and
+ * DELETE — so nothing here has to know which kind it is holding. Only
+ * `AliasAddress` above, which decides whether it is well-formed, and the
+ * `mailbox-conflict` / `not-allowed` branches inside `createAlias`, which mean
+ * different things for the two.
+ *
  * They sit behind `requireMailbox` (so an unknown mailbox is a 404 before any
  * alias code runs) and, like everything else under `/api/v1`, behind the
  * Cloudflare Access boundary. There is no second auth mechanism here on
@@ -455,7 +489,10 @@ app.post("/api/v1/mailboxes/:mailboxId/aliases", async (c: AppContext) => {
 	const body = await c.req.json().catch(() => null);
 	const parsed = AliasBody.safeParse(body);
 	if (!parsed.success) {
-		return c.json({ error: "A valid email address is required" }, 400);
+		return c.json(
+			{ error: "A valid email address, or a wildcard like brian@, is required" },
+			400,
+		);
 	}
 
 	const result = await createAlias(c.env, parsed.data.address, mailboxId, {

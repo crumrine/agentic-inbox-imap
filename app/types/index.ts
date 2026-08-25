@@ -54,6 +54,13 @@ export interface CreatedAppPassword {
  * Mirrors `AliasRecord` in workers/lib/aliases.ts.
  */
 export interface Alias {
+	/**
+	 * The alias itself: either a full address (`info@example.com`) or a domain
+	 * wildcard, which is a local part with a trailing `@` and nothing after it
+	 * (`brian@`) and covers that local part on every domain the deployment
+	 * handles. `address.endsWith("@")` is the whole test, and it is safe
+	 * because a real address always has a dotted domain after its `@`.
+	 */
 	address: string;
 	mailbox: string;
 	createdAt: string;

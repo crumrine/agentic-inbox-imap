@@ -55,7 +55,12 @@ export async function handleReplyEmail(c: AppContext) {
 	let toStr: string, fromEmail: string, fromDomain: string;
 	try {
 		({ toStr, fromEmail, fromDomain } = await validateSenderWithAliases(
-			c.env, to, from, mailboxId,
+			// `sendAs.address` goes in as already-proven. It is either the
+			// mailbox's own address or one `resolveSendAs` re-resolved from the
+			// original's `delivered_to`, and for a domain-wildcard alias that
+			// delivery evidence is the *whole* permission — the exact-only
+			// lookup inside would refuse it, correctly, having no way to see it.
+			c.env, to, from, mailboxId, [sendAs.address],
 		));
 	} catch (e) {
 		if (e instanceof SenderValidationError) return c.json({ error: e.message }, 400);
@@ -159,7 +164,12 @@ export async function handleForwardEmail(c: AppContext) {
 	let toStr: string, fromEmail: string, fromDomain: string;
 	try {
 		({ toStr, fromEmail, fromDomain } = await validateSenderWithAliases(
-			c.env, to, from, mailboxId,
+			// `sendAs.address` goes in as already-proven. It is either the
+			// mailbox's own address or one `resolveSendAs` re-resolved from the
+			// original's `delivered_to`, and for a domain-wildcard alias that
+			// delivery evidence is the *whole* permission — the exact-only
+			// lookup inside would refuse it, correctly, having no way to see it.
+			c.env, to, from, mailboxId, [sendAs.address],
 		));
 	} catch (e) {
 		if (e instanceof SenderValidationError) return c.json({ error: e.message }, 400);

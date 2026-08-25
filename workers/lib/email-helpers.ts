@@ -10,7 +10,13 @@
  */
 import type { MailboxDO } from "../durableObject";
 import type { EmailFull } from "./schemas";
-import { type AliasEnv, normalizeAddress, readAlias, resolveAlias } from "./aliases";
+import {
+	type AliasEnv,
+	hasMailbox,
+	normalizeAddress,
+	readDeliveryAlias,
+	resolveAlias,
+} from "./aliases";
 import { Folders } from "../../shared/folders";
 import type { Env } from "../types";
 import { formatQuotedDate } from "../../shared/dates";
@@ -99,18 +105,35 @@ export function validateSender(
  * gate send as any address the deployment owns, which is precisely the spoof
  * the equality check was there to stop. Send is not a hot path, so the read is
  * affordable — and it is skipped entirely when From already equals the mailbox.
+ *
+ * ## `proven`, and why a wildcard needs it
+ *
+ * `resolveAlias` is exact-only, so a **domain-wildcard** alias (`brian@`) is
+ * invisible here, on purpose: resolving one from a From address alone would
+ * mean "this mailbox may send as brian@ on any domain in the world", which is
+ * the spoof this function exists to refuse. A wildcard's permission comes from
+ * somewhere else entirely — a message having *arrived* at that address — and
+ * only one function establishes it, `resolveSendAs`. `proven` is where its
+ * answer comes back in.
+ *
+ * So `proven` is not "addresses the caller would like allowed". It is the
+ * output of `resolveSendAs`, which can only ever return the mailbox's own
+ * address or one re-resolved from a stored `delivered_to`. Anything else
+ * passed here would be the caller granting itself a spoof, which is why the
+ * two call sites are the reply and forward routes and nothing else.
  */
 export async function validateSenderWithAliases(
 	env: AliasEnv,
 	to: string | string[],
 	from: string | { email: string; name: string },
 	mailboxId: string,
+	proven: readonly string[] = [],
 ): Promise<{ toStr: string; fromEmail: string; fromDomain: string }> {
 	const fromEmail = normalizeAddress(typeof from === "string" ? from : from.email);
 	const mailbox = normalizeAddress(mailboxId);
 
-	const allowedSenders: string[] = [];
-	if (fromEmail !== mailbox) {
+	const allowedSenders: string[] = proven.map(normalizeAddress);
+	if (fromEmail !== mailbox && !allowedSenders.includes(fromEmail)) {
 		const owner = await resolveAlias(env, fromEmail);
 		if (owner === mailbox) allowedSenders.push(fromEmail);
 	}
@@ -185,6 +208,27 @@ export interface SendAsIdentity {
  * is now a projection of it. The name is only ever taken from a record that
  * has just been confirmed to point at *this* mailbox, so a re-pointed alias
  * cannot lend its name to a mailbox that no longer owns it.
+ *
+ * ## This is the only place a domain wildcard can authorise a send
+ *
+ * `deliveredTo` is not an address the caller chose. It is the column
+ * `resolveInboundDelivery` wrote when the message arrived, from the SMTP
+ * envelope, and a message physically arriving at `brian@b.example` is what
+ * proves Cloudflare routes `b.example` here — which proves the account owns
+ * it. That is the delivery evidence a `brian@` wildcard needs, and it is why
+ * `readDeliveryAlias` may be consulted here and `resolveAlias` may not.
+ *
+ * Everything without such evidence lands on the mailbox's own address by the
+ * guard on the first line: compose passes nothing, and so does a reply to a
+ * row whose `delivered_to` is NULL (every row written before migration 11, and
+ * every outbound row). That fallback is the safe answer, not a degraded one.
+ *
+ * The extra `hasMailbox` check applies the same precedence outbound that
+ * `resolveInboundDelivery` applies inbound: a wildcard never speaks for an
+ * address that has since become somebody's real mailbox. It costs one keyed
+ * read, only on the wildcard branch of a send — which is not a hot path — and
+ * it closes the window where a mailbox created after the message arrived
+ * would otherwise still be spoofable by the wildcard's owner.
  */
 export async function resolveSendAs(
 	env: AliasEnv,
@@ -195,10 +239,14 @@ export async function resolveSendAs(
 	const candidate = normalizeAddress(deliveredTo ?? "");
 	if (!candidate || candidate === mailbox) return { address: mailbox };
 
-	const record = await readAlias(env, candidate);
-	if (!record || record.mailbox !== mailbox) return { address: mailbox };
+	const match = await readDeliveryAlias(env, candidate);
+	if (!match || match.record.mailbox !== mailbox) return { address: mailbox };
+	if (match.via === "wildcard" && (await hasMailbox(env, candidate))) {
+		return { address: mailbox };
+	}
 
-	return { address: candidate, ...(record.name !== undefined ? { name: record.name } : {}) };
+	const { name } = match.record;
+	return { address: candidate, ...(name !== undefined ? { name } : {}) };
 }
 
 /**

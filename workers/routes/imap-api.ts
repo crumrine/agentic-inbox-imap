@@ -81,11 +81,19 @@ export const IMAP_API_BASE = "/api/imap/v1";
  * folder/message endpoints landed; keeping the `Pick` narrow means a route
  * here cannot reach the `AI` binding by accident.
  */
-// `EMAIL_ADDRESSES` is here because submission consults the alias registry
-// (`validateSenderWithAliases`), whose `AliasEnv` includes it.
+// `EMAIL_ADDRESSES` and `DOMAINS` are here because submission consults the
+// alias registry (`validateSenderWithAliases`, `resolveSendAs`), whose
+// `AliasEnv` includes both — `DOMAINS` bounds which domains a wildcard alias
+// covers, so leaving it out would silently turn wildcard send-as off on this
+// path alone.
 export type ImapApiEnv = Pick<
 	Env,
-	"BUCKET" | "EMAIL" | "EMAIL_ADDRESSES" | "IMAP_AUTH_RATE_LIMIT" | "MAILBOX"
+	| "BUCKET"
+	| "DOMAINS"
+	| "EMAIL"
+	| "EMAIL_ADDRESSES"
+	| "IMAP_AUTH_RATE_LIMIT"
+	| "MAILBOX"
 >;
 
 /**
@@ -1623,6 +1631,15 @@ function parseEnvelope(
  *    block comment on `resolveReplyFrom` for why that matters. The same read
  *    also yields the alias's configured display name, which the rewrite puts
  *    on the header alongside the address.
+ *
+ * A domain-wildcard alias (`brian@`) reaches this path through condition 2 and
+ * nothing else, and that is the intended shape rather than a gap. `checkSender`
+ * above runs before any of this, on the address the *client* chose, and it
+ * consults the exact registry only — so a client that names a wildcard-covered
+ * address itself is refused, while a client using its default and answering a
+ * message that really arrived at `brian@b.example` is rewritten to it. The
+ * asymmetry is the point: condition 2 is delivery evidence, and a From header
+ * a client typed is not.
  */
 async function resolveSubmissionSendAs(
 	env: ImapApiEnv,

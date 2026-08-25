@@ -133,6 +133,7 @@ function testEnv(email: FakeEmail): ImapApiEnv {
 	return {
 		BUCKET: env.BUCKET,
 		EMAIL: email.binding,
+		DOMAINS: env.DOMAINS,
 		EMAIL_ADDRESSES: env.EMAIL_ADDRESSES,
 		MAILBOX: env.MAILBOX,
 		IMAP_AUTH_RATE_LIMIT: env.IMAP_AUTH_RATE_LIMIT,

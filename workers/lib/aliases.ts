@@ -51,13 +51,68 @@
  * `isValidAliasName`, and the one encoder is `formatFromMailbox` in
  * workers/lib/raw-mime.ts, which every send path goes through.
  *
+ * ## Domain-wildcard aliases
+ *
+ * An alias may also be a bare local part with no domain — spelled `brian@` —
+ * which covers `brian@` on **every domain this deployment handles**, with no
+ * per-domain record. That is what a catch-all pointed at this Worker asks
+ * for: "everything brian@ is mine", whichever domain it arrived on.
+ *
+ * ### The key shape, and why it cannot collide
+ *
+ * A wildcard is stored at `aliases/{localPart}@.json` — the same key space as
+ * every other alias, with no prefix, no marker field and no migration. It
+ * cannot collide with an exact-address key because **a real address never ends
+ * in `@`**: `isPlausibleAddress` requires at least one non-`@` character and a
+ * dot after the `@`, so `local@domain.tld` and `local@` are disjoint sets of
+ * strings, and every key written before this feature existed is in the first
+ * set. `listAliases` therefore keeps reading one prefix and gets both kinds
+ * back, already distinguishable by their own spelling.
+ *
+ * The trailing `@` is also the canonical spelling everywhere above this
+ * module — the API takes it, the record carries it, the settings page shows
+ * it. A bare token with no `@` at all is *not* accepted as a wildcard, on
+ * purpose: `not-an-address` is overwhelmingly a typo, and reading it as
+ * "every domain" would turn a typo into a catch-all.
+ *
+ * ### Resolution: most specific wins, and inbound stays O(1)
+ *
+ * A mailbox at the address beats an exact alias at it, which beats a wildcard
+ * on its local part. `readDeliveryAlias` is the whole of the second and third:
+ * one keyed read of the exact address, and — only if that misses — one keyed
+ * read of the wildcard. No listing, ever. The inbound path runs on every
+ * message that does not match a mailbox outright, and it must not get slower
+ * as the registry grows.
+ *
+ * A wildcard only matches an address whose domain is in `DOMAINS`. Cloudflare
+ * already refuses to route a domain the account does not own, so on the
+ * envelope recipient this is belt-and-braces — but the header `To:` addresses
+ * are also candidates, and those are written by the sender. Without the
+ * `DOMAINS` check a stranger could address `To: brian@attacker.example`, have
+ * the message accepted by the wildcard, and leave `brian@attacker.example`
+ * sitting in `delivered_to` as a send-as candidate. `DOMAINS` is the list of
+ * domains the operator declared, so it is the right boundary, and an empty
+ * `DOMAINS` matches nothing rather than everything.
+ *
  * ## What this module deliberately does not do
  *
- * It never infers an alias from a pattern or a domain. `resolveAlias` reads a
- * record or returns null. That matters most on the outbound side, where
- * `validateSender` uses it to decide whether an address may be spoofed as: a
- * domain check there would let any address on a configured domain send as the
- * mailbox, which is the exact hole the registry exists to close.
+ * It never infers an alias from a pattern or a domain *on the outbound side*.
+ * `resolveAlias` reads an exact record or returns null, and a wildcard is
+ * invisible to it. That matters most where `validateSender` uses it to decide
+ * whether an address may be spoofed as: a domain check there would let any
+ * address on a configured domain send as the mailbox, which is the exact hole
+ * the registry exists to close — and a wildcard resolved from an address alone
+ * would say "may send as brian@anything", which is the same hole wearing a
+ * different hat (see DEV-699: alias creation does not validate domains).
+ *
+ * A wildcard grants send-as for `brian@X` on exactly one condition: the
+ * message being answered was **actually delivered to `brian@X`**, which is
+ * what `delivered_to` records. That column is written in one place, from the
+ * resolution above, and the message physically arriving proves Cloudflare
+ * routes that domain here. `readDeliveryAlias` is therefore named for its
+ * precondition: call it only with an address a message really arrived at.
+ * Compose has no such address and falls back to the mailbox's own, which is
+ * correct and safe.
  */
 
 import type { Env } from "../types";
@@ -66,8 +121,13 @@ import type { Env } from "../types";
  * The bindings this module touches. Narrower than `Env` on purpose — alias
  * resolution has no business reaching the AI binding, the mailbox Durable
  * Object, or the send-email binding.
+ *
+ * `DOMAINS` is here for domain-wildcard aliases only: it is the list of
+ * domains a bare `brian@` is allowed to cover. Nothing else in this module
+ * consults it, and in particular an exact alias is still never inferred from
+ * a domain.
  */
-export type AliasEnv = Pick<Env, "BUCKET" | "EMAIL_ADDRESSES">;
+export type AliasEnv = Pick<Env, "BUCKET" | "DOMAINS" | "EMAIL_ADDRESSES">;
 
 /**
  * A display name configured on an alias, in three states that are all real and
@@ -90,7 +150,12 @@ export type AliasDisplayName = string | undefined;
 
 /** An alias as it is persisted, and as the API hands it back. */
 export interface AliasRecord {
-	/** The alias address itself. Normalised. */
+	/**
+	 * The alias address itself, normalised. Either a full address
+	 * (`info@example.com`) or a domain wildcard, spelled as a local part with
+	 * a trailing `@` and nothing after it (`brian@`). `isWildcardAlias` is the
+	 * one-character test that tells them apart.
+	 */
 	address: string;
 	/** The mailbox id (also an email address) this alias delivers into. */
 	mailbox: string;
@@ -185,6 +250,113 @@ export function isPlausibleAddress(address: string): boolean {
 	return /^[^\s@/\\]+@[^\s@/\\]+\.[^\s@/\\]+$/.test(address);
 }
 
+/**
+ * Longest local part accepted. RFC 5321 §4.5.3.1.1 caps one at 64 octets, and
+ * a wildcard has no reason to want more than a real address may have.
+ */
+export const ALIAS_LOCAL_PART_MAX_CHARS = 64;
+
+/**
+ * Whether a bare local part may be used as a wildcard alias.
+ *
+ * `isPlausibleAddress` cannot answer this: it requires an `@` and a dotted
+ * domain, which a local part has neither of. So this is its own predicate, and
+ * it is an **allowlist** rather than a list of banned characters. The value
+ * becomes part of an R2 key, and "reject the characters I thought of" is how a
+ * key-namespace escape gets shipped; "accept only what a local part actually
+ * needs" cannot be got past by a character nobody thought of.
+ *
+ * What the allowlist excludes, and why each one matters here:
+ *
+ * - `@` — would make the key ambiguous with an exact address, which is the
+ *   one property the whole key scheme rests on.
+ * - `/` and `\` — path separators. `aliases/../mailboxes/x` is the attack.
+ * - whitespace and C0 controls — never part of an unquoted local part, and a
+ *   CR or LF travels on into places (headers, logs) that treat it as a break.
+ * - a leading or trailing dot, and `..` anywhere — RFC 5322's dot-atom forbids
+ *   all three, and `.` / `..` are traversal in every storage system that has
+ *   ever had a path. Excluded twice on purpose: the anchored pattern below
+ *   rejects the edges, the explicit test rejects the middle.
+ * - the empty string — an empty key is not a name.
+ */
+export function isPlausibleLocalPart(localPart: string): boolean {
+	if (localPart.length === 0 || localPart.length > ALIAS_LOCAL_PART_MAX_CHARS) {
+		return false;
+	}
+	if (localPart.includes("..")) return false;
+	return /^[a-z0-9](?:[a-z0-9._+=-]*[a-z0-9])?$/.test(localPart);
+}
+
+/**
+ * True for the *spelling* of a domain wildcard: something ending in `@`.
+ *
+ * Deliberately not a validity check — `deleteAlias("../@")` is a wildcard by
+ * this test and is refused by `isPlausibleWildcard` a line later. Splitting
+ * the two keeps "which kind of alias is this?" cheap enough to ask in a UI and
+ * in a sort comparator, while validity stays a single gate on the write path.
+ */
+export function isWildcardAlias(key: string): boolean {
+	return key.endsWith("@");
+}
+
+/** The local part a wildcard key covers, or null when the key is not a valid one. */
+export function wildcardLocalPart(key: string): string | null {
+	if (!isWildcardAlias(key)) return null;
+	const localPart = key.slice(0, -1);
+	return isPlausibleLocalPart(localPart) ? localPart : null;
+}
+
+/** True when this is a well-formed domain wildcard, `brian@`. */
+export function isPlausibleWildcard(key: string): boolean {
+	return wildcardLocalPart(key) !== null;
+}
+
+/**
+ * Either kind of alias key: a full address, or a domain wildcard. The two
+ * predicates are mutually exclusive — a string ending in `@` can never satisfy
+ * `isPlausibleAddress`, which requires a dotted domain after it — which is
+ * exactly why one key space holds both.
+ */
+export function isPlausibleAliasKey(key: string): boolean {
+	return isPlausibleAddress(key) || isPlausibleWildcard(key);
+}
+
+/**
+ * The wildcard key that would cover this address, or null when none could.
+ * `brian@a.example` → `brian@`.
+ */
+export function wildcardKeyFor(address: string): string | null {
+	const at = address.lastIndexOf("@");
+	if (at <= 0) return null;
+	const localPart = address.slice(0, at);
+	return isPlausibleLocalPart(localPart) ? `${localPart}@` : null;
+}
+
+/** The domains this deployment declares it handles, normalised. */
+export function deploymentDomains(env: AliasEnv): string[] {
+	return String(env.DOMAINS ?? "")
+		.split(",")
+		.map((d) => d.trim().toLowerCase())
+		.filter(Boolean);
+}
+
+/**
+ * Whether an address sits on a domain this deployment declared.
+ *
+ * Only wildcards consult this. An empty or missing `DOMAINS` answers false for
+ * everything: a deployment that has not said which domains it handles has not
+ * authorised a wildcard to cover any of them, and failing closed there is the
+ * difference between "the feature is off" and "the feature covers the
+ * internet".
+ */
+export function isDeploymentDomain(env: AliasEnv, address: string): boolean {
+	const at = address.lastIndexOf("@");
+	if (at < 0) return false;
+	const domain = address.slice(at + 1);
+	if (!domain) return false;
+	return deploymentDomains(env).includes(domain);
+}
+
 /** True when a non-empty EMAIL_ADDRESSES allows this address (or is empty). */
 export function isAllowedAddress(env: AliasEnv, address: string): boolean {
 	const allowed = ((env.EMAIL_ADDRESSES ?? []) as string[]).map(normalizeAddress);
@@ -192,11 +364,41 @@ export function isAllowedAddress(env: AliasEnv, address: string): boolean {
 	return allowed.includes(normalizeAddress(address));
 }
 
+/**
+ * Whether a wildcard could ever receive anything, which is what makes it worth
+ * storing.
+ *
+ * The same reasoning as `isAllowedAddress`, one level up. `EMAIL_ADDRESSES`
+ * lists whole addresses, so a bare local part is never *on* it; the question a
+ * wildcard has to answer instead is whether any address it would cover is.
+ * `receiveEmail` filters recipients against that list before any alias lookup
+ * runs, so a wildcard with no covered address on it could never deliver a
+ * single message — accepting one would create a record that silently does
+ * nothing, which is precisely what the exact-address check exists to prevent.
+ *
+ * With `DOMAINS` empty nothing is covered at all, matching `isDeploymentDomain`.
+ */
+export function isAllowedWildcard(env: AliasEnv, localPart: string): boolean {
+	const domains = deploymentDomains(env);
+	if (domains.length === 0) return false;
+	const allowed = ((env.EMAIL_ADDRESSES ?? []) as string[]).map(normalizeAddress);
+	if (allowed.length === 0) return true;
+	return domains.some((domain) => allowed.includes(`${localPart}@${domain}`));
+}
+
 // ── Reads ───────────────────────────────────────────────────────────
 
 /**
- * Resolve an address to the mailbox it aliases, or null when it is not an
- * alias. One keyed R2 read; no listing, no pattern matching.
+ * Resolve an address to the mailbox it **exactly** aliases, or null. One keyed
+ * R2 read; no listing, no pattern matching, and no wildcard.
+ *
+ * The missing wildcard is the point, not an omission. The caller that matters
+ * is `validateSenderWithAliases`, which asks this to decide whether a mailbox
+ * may put an arbitrary address in `From:`. If a `brian@` wildcard answered
+ * here, that question would come back yes for `brian@` on any domain in the
+ * world — no delivery, no evidence, just a string the sender chose. Delivery
+ * paths want `readDeliveryAlias` below, which is gated on an address a message
+ * actually arrived at.
  */
 export async function resolveAlias(
 	env: AliasEnv,
@@ -218,7 +420,18 @@ export async function resolveAlias(
 	}
 }
 
-/** True when an alias record exists at this address, whatever it points at. */
+/**
+ * True when an *exact* alias record exists at this address, whatever it points
+ * at.
+ *
+ * Exact-only, and the one caller — `POST /api/v1/mailboxes`, refusing a
+ * mailbox that would shadow an alias — is why. A wildcard is not shadowed by a
+ * mailbox: `resolveInboundDelivery` gives the mailbox the address because it is
+ * the more specific record, which is the documented precedence rather than a
+ * theft. Refusing mailbox creation because some wildcard covers the local part
+ * would block the mailbox the operator most likely wants (`brian@` everywhere,
+ * plus a real `brian@` mailbox on the main domain).
+ */
 export async function isAlias(env: AliasEnv, address: string): Promise<boolean> {
 	const normalized = normalizeAddress(address);
 	if (!isPlausibleAddress(normalized)) return false;
@@ -296,6 +509,11 @@ export async function readAlias(
 	address: string,
 ): Promise<AliasRecord | null> {
 	const normalized = normalizeAddress(address);
+	// Takes either kind of key. The guard is new: every caller already
+	// validated, but this is the function that turns a string into an R2 key,
+	// so it is the right place for the check that the string cannot leave the
+	// `aliases/` namespace.
+	if (!isPlausibleAliasKey(normalized)) return null;
 	const object = await env.BUCKET.get(aliasKey(normalized));
 	if (!object) return null;
 	try {
@@ -315,6 +533,65 @@ export async function readAlias(
 	} catch {
 		return null;
 	}
+}
+
+/** Which record answered a delivery lookup. */
+export interface DeliveryAliasMatch {
+	record: AliasRecord;
+	/** `"exact"` for a record at the address itself, `"wildcard"` for `local@`. */
+	via: "exact" | "wildcard";
+}
+
+/**
+ * The alias record covering an address a message was **actually delivered
+ * to** — the exact record if there is one, otherwise the domain wildcard.
+ *
+ * ## Only ever call this with a delivered address
+ *
+ * The name is the contract. Two callers satisfy it and there are no others:
+ * `resolveInboundDelivery`, which has the SMTP envelope in hand, and
+ * `resolveSendAs`, which has the `delivered_to` column that
+ * `resolveInboundDelivery` wrote. Both are addresses a message physically
+ * arrived at, and arriving is what proves the account owns the domain. Handed
+ * an address from anywhere else — a `From:` header, a compose form — this
+ * would answer "yes, that is yours" for `brian@` on any domain at all. That is
+ * why `resolveAlias` exists separately and stays exact-only.
+ *
+ * ## Cost
+ *
+ * One keyed read for the exact address; a second only when that misses and the
+ * domain is one this deployment declared. No listing at either step, so the
+ * inbound path does not get slower as the registry grows.
+ *
+ * An exact record that exists but points at a deleted mailbox is still the
+ * answer — `via: "exact"`, and the caller decides. Falling through to the
+ * wildcard there would let a wildcard quietly inherit an address whose own
+ * record says it belongs somewhere else, which is the opposite of "most
+ * specific wins".
+ */
+export async function readDeliveryAlias(
+	env: AliasEnv,
+	address: string,
+): Promise<DeliveryAliasMatch | null> {
+	const normalized = normalizeAddress(address);
+	if (!isPlausibleAddress(normalized)) return null;
+
+	const exact = await readAlias(env, normalized);
+	if (exact) return { record: exact, via: "exact" };
+
+	if (!isDeploymentDomain(env, normalized)) return null;
+	const key = wildcardKeyFor(normalized);
+	if (!key) return null;
+
+	const wildcard = await readAlias(env, key);
+	return wildcard ? { record: wildcard, via: "wildcard" } : null;
+}
+
+/** True when a mailbox exists at this address. */
+export async function hasMailbox(env: AliasEnv, address: string): Promise<boolean> {
+	const normalized = normalizeAddress(address);
+	if (!isPlausibleAddress(normalized)) return false;
+	return (await env.BUCKET.head(mailboxKey(normalized))) !== null;
 }
 
 // ── Writes ──────────────────────────────────────────────────────────
@@ -339,6 +616,33 @@ export async function readAlias(
  * an alias that already exists is `setAliasName`'s job, not this one — the
  * `alias-exists` guard above is about moving somebody's mail, and naming an
  * address is not that operation.
+ *
+ * ## Wildcards
+ *
+ * `address` may also be a domain wildcard, `brian@`. Three of the checks
+ * change shape and the reason is the same each time — a wildcard is not an
+ * address, so a question about *the* address has no single answer:
+ *
+ * - **Allowlist.** `EMAIL_ADDRESSES` holds whole addresses, so the question
+ *   becomes whether any address the wildcard covers is on it —
+ *   `isAllowedWildcard`. It also requires a non-empty `DOMAINS`, since a
+ *   wildcard covering no domains could never receive anything.
+ * - **Mailbox collision.** Skipped, not relaxed. `mailboxes/brian@.json`
+ *   cannot exist, because a mailbox id is an address. The real question — what
+ *   if a mailbox exists at `brian@` on some domain? — is answered by
+ *   precedence at resolution time: the mailbox wins, on that domain, and the
+ *   wildcard still covers the others. Refusing here would block the most
+ *   ordinary setup there is, a `brian@` wildcard alongside a real `brian@`
+ *   mailbox on the main domain.
+ * - **Own address.** Same: `brian@` never equals a mailbox id, and a mailbox
+ *   creating the wildcard that covers its own local part is the normal case
+ *   rather than the mistake the equality check was written for.
+ *
+ * An exact alias and a wildcard on the same local part are **not** a
+ * collision — the exact one simply wins for its address — so neither refuses
+ * the other. Two wildcards on the same local part are, and are refused by the
+ * ordinary `alias-exists` path below, which is keyed on the record and does
+ * not care which kind it is.
  */
 export async function createAlias(
 	env: AliasEnv,
@@ -348,31 +652,43 @@ export async function createAlias(
 ): Promise<AliasCreateResult> {
 	const alias = normalizeAddress(address);
 	const mailbox = normalizeAddress(mailboxId);
+	const wildcard = isWildcardAlias(alias);
 
-	if (!isPlausibleAddress(alias)) {
-		return { ok: false, reason: "invalid", message: "Not a valid email address" };
+	if (wildcard ? !isPlausibleWildcard(alias) : !isPlausibleAddress(alias)) {
+		return {
+			ok: false,
+			reason: "invalid",
+			message: wildcard
+				? "Not a valid wildcard: expected a local part and an @, like brian@"
+				: "Not a valid email address",
+		};
 	}
 	if (options.name !== undefined && !isValidAliasName(options.name)) {
 		return { ok: false, reason: "invalid-name", message: INVALID_NAME_MESSAGE };
 	}
-	if (alias === mailbox) {
+	if (!wildcard && alias === mailbox) {
 		return {
 			ok: false,
 			reason: "mailbox-conflict",
 			message: "An alias cannot be the mailbox's own address",
 		};
 	}
-	if (!isAllowedAddress(env, alias)) {
+	const permitted = wildcard
+		? isAllowedWildcard(env, wildcardLocalPart(alias) ?? "")
+		: isAllowedAddress(env, alias);
+	if (!permitted) {
 		return {
 			ok: false,
 			reason: "not-allowed",
-			message: "Aliases are restricted to configured EMAIL_ADDRESSES",
+			message: wildcard
+				? "A wildcard needs at least one configured domain it could receive on"
+				: "Aliases are restricted to configured EMAIL_ADDRESSES",
 		};
 	}
 	if (!(await env.BUCKET.head(mailboxKey(mailbox)))) {
 		return { ok: false, reason: "no-such-mailbox", message: "Mailbox not found" };
 	}
-	if (await env.BUCKET.head(mailboxKey(alias))) {
+	if (!wildcard && (await env.BUCKET.head(mailboxKey(alias)))) {
 		return {
 			ok: false,
 			reason: "mailbox-conflict",
@@ -447,7 +763,9 @@ export async function setAliasName(
 	if (name !== null && !isValidAliasName(name)) {
 		return { ok: false, reason: "invalid-name", message: INVALID_NAME_MESSAGE };
 	}
-	if (!isPlausibleAddress(alias)) {
+	// Either kind of key: a display name is a property of an alias, and a
+	// wildcard is an alias. `AliasDisplayName`'s three states apply unchanged.
+	if (!isPlausibleAliasKey(alias)) {
 		return { ok: false, reason: "no-such-alias", message: "Alias not found" };
 	}
 
@@ -515,7 +833,7 @@ export async function deleteAlias(
 	mailboxId: string,
 ): Promise<boolean> {
 	const alias = normalizeAddress(address);
-	if (!isPlausibleAddress(alias)) return false;
+	if (!isPlausibleAliasKey(alias)) return false;
 
 	const existing = await readAlias(env, alias);
 	if (!existing || existing.mailbox !== normalizeAddress(mailboxId)) return false;
@@ -541,9 +859,20 @@ export async function deleteAlias(
  *
  * Candidates are tried in order and the first hit wins: envelope recipient
  * first (it is the address the message was actually routed to), then the
- * header recipients in order. A mailbox at the address beats an alias at it,
- * which cannot normally happen — `createAlias` refuses that collision in both
- * directions — but is well-defined if a record is written by hand.
+ * header recipients in order.
+ *
+ * Within one candidate, most specific wins: a mailbox at the address, then an
+ * exact alias at it, then a domain wildcard on its local part. The first two
+ * cannot normally collide — `createAlias` refuses that in both directions —
+ * but the ordering is well-defined if a record is written by hand. The third
+ * is expected to be shadowed and is the whole reason it goes last: a `brian@`
+ * wildcard must never take mail away from a real `brian@a.example` mailbox, or
+ * from an exact `brian@a.example` alias pointing somewhere else.
+ *
+ * Order across candidates is unchanged, and deliberately not merged with the
+ * order within one: a wildcard hit on the envelope recipient beats an exact
+ * alias on a header `To:` address, because the envelope is the address this
+ * copy of the message was routed to and the header is a list of everyone.
  */
 export async function resolveInboundDelivery(
 	env: AliasEnv,
@@ -559,10 +888,17 @@ export async function resolveInboundDelivery(
 		if (await env.BUCKET.head(mailboxKey(address))) {
 			return { mailboxId: address, deliveredTo: address };
 		}
-		const aliased = await resolveAlias(env, address);
+		const match = await readDeliveryAlias(env, address);
+		const aliased = match?.record.mailbox ?? null;
 		// An alias whose mailbox has since been deleted is not a delivery
 		// target; fall through and let a later candidate (or the drop) decide.
+		// True of a wildcard exactly as it is of an exact alias.
 		if (aliased && (await env.BUCKET.head(mailboxKey(aliased)))) {
+			// `deliveredTo` is the address, never the wildcard key. A wildcard
+			// is a rule about which mailbox owns an address, not an address
+			// itself, and everything downstream — the reply From, the
+			// `Delivered-To:` a client sees, the send-as re-resolution — needs
+			// something that can actually be sent mail.
 			return { mailboxId: aliased, deliveredTo: address };
 		}
 	}

@@ -20,6 +20,15 @@
  * empty text box would make it impossible to say "send a bare address" as
  * distinct from "leave it to the mail client", so the dialog offers the two as
  * separate, named actions and every row states which state it is in.
+ *
+ * ## A wildcard has to read as a wildcard, not as a broken address
+ *
+ * `brian@` is a real, deliberate setting — every domain this deployment
+ * handles, no per-domain record — and on screen it is one character away from
+ * an address someone failed to finish typing. So it never appears on its own:
+ * the row labels it "all domains", the dialogs say which domains it affects,
+ * and the removal warning says the thing that is actually at stake, which is
+ * that mail stops arriving on every domain at once rather than on one.
  */
 
 import {
@@ -54,6 +63,23 @@ function formatCreated(iso: string): string {
 		month: "short",
 		day: "numeric",
 	});
+}
+
+/**
+ * Whether this alias is a domain wildcard.
+ *
+ * A trailing `@` is the whole test, and it cannot be confused with a real
+ * address: one always has a dotted domain after its `@`. Mirrors
+ * `isWildcardAlias` in workers/lib/aliases.ts, which is on the other side of
+ * the API boundary and cannot be imported here.
+ */
+function isWildcard(alias: Alias): boolean {
+	return alias.address.endsWith("@");
+}
+
+/** The alias's scope, for the places that have room to say it in words. */
+function describeScope(alias: Alias): string {
+	return isWildcard(alias) ? "on every domain" : "";
 }
 
 /** How a row describes the alias's display-name state, in words. */
@@ -150,6 +176,15 @@ export default function AliasSettings({ mailboxId }: { mailboxId: string }) {
 				alias, mail to an address with no mailbox of its own is dropped.
 			</p>
 
+			<p className="text-xs text-kumo-subtle mb-4">
+				Leave off the domain — just <span className="font-mono">brian@</span> —
+				and the alias covers that name on every domain this deployment
+				receives mail for, with no per-domain entry. A specific address always
+				wins over a wildcard, so <span className="font-mono">brian@</span> does
+				not take mail away from a mailbox or an alias that names the address in
+				full.
+			</p>
+
 			{isLoading ? (
 				<div className="flex justify-center py-6">
 					<Loader size="sm" />
@@ -173,12 +208,20 @@ export default function AliasSettings({ mailboxId }: { mailboxId: string }) {
 							className="flex items-center justify-between gap-3 px-3 py-2.5"
 						>
 							<div className="min-w-0">
-								<div className="text-sm text-kumo-default font-mono truncate">
-									{alias.address}
+								<div className="flex items-center gap-2 min-w-0">
+									<span className="text-sm text-kumo-default font-mono truncate">
+										{alias.address}
+									</span>
+									{/* Without this the row reads as a half-typed
+									    address. The badge is what makes `brian@`
+									    legible as a setting. */}
+									{isWildcard(alias) && (
+										<Badge variant="secondary">all domains</Badge>
+									)}
 								</div>
 								<div className="text-xs text-kumo-subtle truncate">
-									delivers here · {describeName(alias)} · added{" "}
-									{formatCreated(alias.createdAt)}
+									delivers here{isWildcard(alias) ? " " + describeScope(alias) : ""} ·{" "}
+									{describeName(alias)} · added {formatCreated(alias.createdAt)}
 								</div>
 							</div>
 							<div className="flex items-center gap-1 shrink-0">
@@ -206,10 +249,13 @@ export default function AliasSettings({ mailboxId }: { mailboxId: string }) {
 
 			<form onSubmit={handleCreate} className="flex items-end gap-2">
 				<div className="flex-1">
+					{/* Not type="email": the browser's own validation refuses
+					    `brian@`, which is a wildcard rather than an unfinished
+					    address. The server validates both shapes. */}
 					<Input
 						label="New alias"
-						type="email"
-						placeholder="e.g. info@example.com"
+						type="text"
+						placeholder="e.g. info@example.com or brian@"
 						value={address}
 						onChange={(e) => setAddress(e.target.value)}
 					/>
@@ -246,7 +292,7 @@ export default function AliasSettings({ mailboxId }: { mailboxId: string }) {
 				The address has to be one this deployment receives mail for, and it
 				cannot already be a mailbox or an alias of another mailbox. To move an
 				alias between mailboxes, remove it from the first one first. A display
-				name can be added or changed at any time.
+				name can be added or changed at any time, wildcards included.
 			</p>
 
 			<Dialog.Root
@@ -262,6 +308,9 @@ export default function AliasSettings({ mailboxId }: { mailboxId: string }) {
 					<Dialog.Description className="text-xs text-kumo-subtle mb-4">
 						What recipients see beside the address on mail sent from it. Set one
 						to keep a personal name off a shared address.
+						{pendingName && isWildcard(pendingName)
+							? " This one applies on every domain the wildcard covers."
+							: ""}
 					</Dialog.Description>
 
 					<Input
@@ -344,7 +393,11 @@ export default function AliasSettings({ mailboxId }: { mailboxId: string }) {
 					<Banner
 						variant="alert"
 						icon={<WarningIcon size={16} weight="fill" />}
-						title="New mail to this address will be dropped"
+						title={
+							pendingDelete && isWildcard(pendingDelete)
+								? "New mail to this name will be dropped on every domain"
+								: "New mail to this address will be dropped"
+						}
 						description="It stops delivering here and stops being an address this mailbox can send as. Senders are not told; the message is simply not accepted."
 						className="mb-4"
 					/>
