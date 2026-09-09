@@ -814,6 +814,20 @@ export class MailboxDO extends DurableObject<Env> {
 		return allocated.uid_next - 1;
 	}
 
+	/**
+	 * Synchronous creation core shared by every way an email row can be born.
+	 *
+	 * `createEmail` owns the creation rule, but APPEND and COPY run inside
+	 * `transactionSync`, where they cannot await the public RPC method.  Keeping
+	 * the allocation immediately beside the supplied INSERT gives those callers
+	 * the same rule without creating another allocation site.
+	 */
+	#createEmailRow(folderId: string, insert: (uid: number) => void): number {
+		const uid = this.#allocateUid(folderId);
+		insert(uid);
+		return uid;
+	}
+
 	async moveEmail(id: string, folderId: string) {
 		const folder = this.db
 			.select({ id: schema.folders.id })
@@ -1124,39 +1138,36 @@ export class MailboxDO extends DurableObject<Env> {
 		const folderId = folderRow.id;
 		const isSent = folderId === Folders.SENT;
 
-		// Allocate the UID immediately before the INSERT, with no await in
-		// between, so the allocation and the row that owns it cannot be
-		// separated by another request.
-		const uid = this.#allocateUid(folderId);
-
 		// Sent emails are always read — the sender obviously knows what they wrote.
 		// This prevents sent replies from inflating thread_unread_count.
-		this.db
-			.insert(schema.emails)
-			.values({
-				id: email.id,
-				folder_id: folderId,
-				subject: email.subject,
-				sender: email.sender,
-				recipient: email.recipient,
-				cc: email.cc ?? null,
-				bcc: email.bcc ?? null,
-				date: email.date,
-				read: isSent ? 1 : (email.read ? 1 : 0),
-				starred: email.starred ? 1 : 0,
-				body: email.body,
-				in_reply_to: email.in_reply_to ?? null,
-				email_references: email.email_references ?? null,
-				thread_id: email.thread_id ?? null,
-				message_id: email.message_id ?? null,
-				raw_headers: email.raw_headers ?? null,
-				raw_key: email.raw_key ?? null,
-				rfc822_size: email.rfc822_size ?? null,
-				body_structure: email.body_structure ?? null,
-				delivered_to: email.delivered_to ?? null,
-				uid,
-			})
-			.run();
+		this.#createEmailRow(folderId, (uid) => {
+			this.db
+				.insert(schema.emails)
+				.values({
+					id: email.id,
+					folder_id: folderId,
+					subject: email.subject,
+					sender: email.sender,
+					recipient: email.recipient,
+					cc: email.cc ?? null,
+					bcc: email.bcc ?? null,
+					date: email.date,
+					read: isSent ? 1 : (email.read ? 1 : 0),
+					starred: email.starred ? 1 : 0,
+					body: email.body,
+					in_reply_to: email.in_reply_to ?? null,
+					email_references: email.email_references ?? null,
+					thread_id: email.thread_id ?? null,
+					message_id: email.message_id ?? null,
+					raw_headers: email.raw_headers ?? null,
+					raw_key: email.raw_key ?? null,
+					rfc822_size: email.rfc822_size ?? null,
+					body_structure: email.body_structure ?? null,
+					delivered_to: email.delivered_to ?? null,
+					uid,
+				})
+				.run();
+		});
 
 		if (attachments.length > 0) {
 			this.db.insert(schema.attachments).values(attachments).run();
@@ -1838,12 +1849,7 @@ export class MailboxDO extends DurableObject<Env> {
 				}
 			}
 
-			// Allocated immediately before the INSERT with no await between,
-			// exactly as createEmail does, so nothing can separate the
-			// allocation from the row that claims it.
-			const uid = this.#allocateUid(folderId);
-
-			this.ctx.storage.sql.exec(
+			const uid = this.#createEmailRow(folderId, (allocatedUid) => this.ctx.storage.sql.exec(
 				`INSERT INTO emails (
 				     id, folder_id, subject, sender, recipient, cc, bcc, date,
 				     read, starred, body, in_reply_to, email_references, thread_id,
@@ -1871,14 +1877,14 @@ export class MailboxDO extends DurableObject<Env> {
 				message.threadId,
 				message.messageId,
 				message.rawHeaders,
-				uid,
+				allocatedUid,
 				state.answered,
 				state.deleted,
 				state.keywords.length > 0 ? JSON.stringify(state.keywords) : null,
 				message.rfc822Size,
 				message.rawKey,
 				message.bodyStructure ?? null,
-			);
+			));
 
 			return { status: "ok", uid, uidValidity, deduplicated: false };
 		});
@@ -2024,8 +2030,7 @@ export class MailboxDO extends DurableObject<Env> {
 	 * is copied verbatim so both rows address the same R2 object.
 	 */
 	#copyEmailRow(sourceId: string, destinationFolderId: string): number {
-		const uid = this.#allocateUid(destinationFolderId);
-		this.ctx.storage.sql.exec(
+		return this.#createEmailRow(destinationFolderId, (uid) => this.ctx.storage.sql.exec(
 			`INSERT INTO emails (
 			     id, folder_id, subject, sender, recipient, cc, bcc, date,
 			     read, starred, body, in_reply_to, email_references, thread_id,
@@ -2042,8 +2047,7 @@ export class MailboxDO extends DurableObject<Env> {
 			destinationFolderId,
 			uid,
 			sourceId,
-		);
-		return uid;
+		));
 	}
 
 	/** Resolve a folder by id (canonical) or, tolerantly, by display name. */
