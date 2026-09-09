@@ -282,6 +282,91 @@ export const mailboxMigrations: Migration[] = [
 		name: "11_add_delivered_to",
 		sql: `
             ALTER TABLE emails ADD COLUMN delivered_to TEXT;
+		`,
+	},
+	{
+		// Migration 9 had to add uid_validity nullable: SQLite ADD COLUMN
+		// cannot use its timestamp backfill as a non-constant default. It did
+		// backfill every row, so this forward rebuild makes that established
+		// invariant a database constraint for both existing and new mailboxes.
+		//
+		// Rebuild the related tables together rather than dropping `folders`
+		// under `emails`: that preserves rows and foreign keys without turning
+		// foreign-key enforcement off. applyMigrations() wraps this batch in
+		// storage.transactionSync(), not SQL BEGIN TRANSACTION.
+		name: "12_require_folder_uid_validity",
+		sql: `
+            CREATE TABLE folders_rebuilt (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                is_deletable INTEGER NOT NULL DEFAULT 1,
+                uid_validity INTEGER NOT NULL,
+                uid_next INTEGER NOT NULL DEFAULT 1
+            );
+
+            CREATE TABLE emails_rebuilt (
+                id TEXT PRIMARY KEY,
+                folder_id TEXT NOT NULL,
+                subject TEXT,
+                sender TEXT,
+                recipient TEXT,
+                date TEXT,
+                read INTEGER DEFAULT 0,
+                starred INTEGER DEFAULT 0,
+                body TEXT,
+                in_reply_to TEXT,
+                email_references TEXT,
+                thread_id TEXT,
+                message_id TEXT,
+                raw_headers TEXT,
+                cc TEXT,
+                bcc TEXT,
+                uid INTEGER,
+                answered INTEGER DEFAULT 0,
+                deleted INTEGER DEFAULT 0,
+                flags TEXT,
+                rfc822_size INTEGER,
+                raw_key TEXT,
+                body_structure TEXT,
+                delivered_to TEXT,
+                FOREIGN KEY(folder_id) REFERENCES folders_rebuilt(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE attachments_rebuilt (
+                id TEXT PRIMARY KEY,
+                email_id TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                mimetype TEXT NOT NULL,
+                size INTEGER NOT NULL,
+                content_id TEXT,
+                disposition TEXT,
+                FOREIGN KEY(email_id) REFERENCES emails_rebuilt(id) ON DELETE CASCADE
+            );
+
+            INSERT INTO folders_rebuilt (id, name, is_deletable, uid_validity, uid_next)
+                SELECT id, name, is_deletable, uid_validity, uid_next FROM folders;
+            INSERT INTO emails_rebuilt
+                SELECT id, folder_id, subject, sender, recipient, date, read, starred,
+                       body, in_reply_to, email_references, thread_id, message_id,
+                       raw_headers, cc, bcc, uid, answered, deleted, flags, rfc822_size,
+                       raw_key, body_structure, delivered_to FROM emails;
+            INSERT INTO attachments_rebuilt
+                SELECT id, email_id, filename, mimetype, size, content_id, disposition
+                  FROM attachments;
+
+            DROP TABLE attachments;
+            DROP TABLE emails;
+            DROP TABLE folders;
+            ALTER TABLE folders_rebuilt RENAME TO folders;
+            ALTER TABLE emails_rebuilt RENAME TO emails;
+            ALTER TABLE attachments_rebuilt RENAME TO attachments;
+
+            CREATE INDEX idx_emails_thread_id ON emails(thread_id);
+            CREATE INDEX idx_emails_in_reply_to ON emails(in_reply_to);
+            CREATE INDEX idx_emails_folder_id ON emails(folder_id);
+            CREATE INDEX idx_emails_date ON emails(date);
+            CREATE INDEX idx_emails_folder_date ON emails(folder_id, date DESC);
+            CREATE UNIQUE INDEX idx_emails_folder_uid ON emails(folder_id, uid);
         `,
 	},
 ];
