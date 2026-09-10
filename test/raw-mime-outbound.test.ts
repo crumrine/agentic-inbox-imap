@@ -3,6 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
+import PostalMime from "postal-mime";
 import { describe, expect, it } from "vitest";
 
 import { Folders } from "../shared/folders";
@@ -39,7 +40,15 @@ async function jsonRequest(url: string, body: unknown): Promise<Response> {
 	return res;
 }
 
-async function expectRawStored(mailboxId: string, emailId: string) {
+interface RawMimeExpectation {
+	from: string;
+	to: string;
+	subject: string;
+	html: string;
+	inReplyTo?: string;
+}
+
+async function expectRawStored(mailboxId: string, emailId: string, expected: RawMimeExpectation) {
 	const stub = mailbox(mailboxId);
 	const full = (await stub.getEmail(emailId)) as {
 		raw_key: string | null;
@@ -51,9 +60,23 @@ async function expectRawStored(mailboxId: string, emailId: string) {
 
 	const stored = await env.BUCKET.get(expectedKey);
 	expect(stored).not.toBeNull();
-	const text = await (stored as R2ObjectBody).text();
-	expect(text).toContain("MIME-Version: 1.0");
-	assertOnlyCRLF(text);
+	const bytes = new Uint8Array(await (stored as R2ObjectBody).arrayBuffer());
+	expect(full.rfc822_size).toBe(bytes.byteLength);
+	const raw = new TextDecoder().decode(bytes);
+	expect(raw).toContain("MIME-Version: 1.0");
+	assertOnlyCRLF(raw);
+
+	// Parse the exact R2 object rather than merely proving that a MIME-shaped
+	// string exists. This keeps each structured-send caller tied to the fields
+	// that actually made it into its readable Sent copy.
+	const parsed = await PostalMime.parse(raw);
+	expect(parsed.from?.address).toBe(expected.from);
+	expect(parsed.to?.map((address) => address.address)).toEqual([expected.to]);
+	expect(parsed.subject).toBe(expected.subject);
+	expect(parsed.html).toContain(expected.html);
+	if (expected.inReplyTo) {
+		expect(parsed.inReplyTo?.replace(/^<|>$/g, "")).toBe(expected.inReplyTo);
+	}
 }
 
 /** RFC 5322 mandates CRLF line endings. Scan for any bare LF or bare CR. */
@@ -81,7 +104,9 @@ describe("outbound send paths write raw MIME and record raw_key (DEV-662)", () =
 		});
 		expect(res.status).toBe(202);
 		const body = (await res.json()) as { id: string };
-		await expectRawStored(mailboxId, body.id);
+		await expectRawStored(mailboxId, body.id, {
+			from: mailboxId, to: "recipient@example.com", subject: "Hello from compose", html: "Hi there",
+		});
 	});
 
 	it("POST /emails/:id/reply", async () => {
@@ -102,7 +127,10 @@ describe("outbound send paths write raw MIME and record raw_key (DEV-662)", () =
 		);
 		expect(res.status).toBe(202);
 		const body = (await res.json()) as { id: string };
-		await expectRawStored(mailboxId, body.id);
+		await expectRawStored(mailboxId, body.id, {
+			from: mailboxId, to: original.sender, subject: `Re: ${original.subject}`,
+			html: "Replying now", inReplyTo: original.id,
+		});
 	});
 
 	it("POST /emails/:id/forward", async () => {
@@ -123,7 +151,10 @@ describe("outbound send paths write raw MIME and record raw_key (DEV-662)", () =
 		);
 		expect(res.status).toBe(202);
 		const body = (await res.json()) as { id: string };
-		await expectRawStored(mailboxId, body.id);
+		await expectRawStored(mailboxId, body.id, {
+			from: mailboxId, to: "someone-else@example.com", subject: `Fwd: ${original.subject}`,
+			html: "Forwarding this along",
+		});
 	});
 
 	it("toolSendReply (agent/MCP send path)", async () => {
@@ -143,7 +174,10 @@ describe("outbound send paths write raw MIME and record raw_key (DEV-662)", () =
 		});
 		expect(result).toMatchObject({ status: "sent" });
 		const { messageId } = result as { messageId: string };
-		await expectRawStored(mailboxId, messageId);
+		await expectRawStored(mailboxId, messageId, {
+			from: mailboxId, to: original.sender, subject: `Re: ${original.subject}`,
+			html: "Hi", inReplyTo: original.id,
+		});
 	});
 
 	it("toolSendEmail (agent/MCP send path)", async () => {
@@ -157,6 +191,8 @@ describe("outbound send paths write raw MIME and record raw_key (DEV-662)", () =
 		});
 		expect(result).toMatchObject({ status: "sent" });
 		const { messageId } = result as { messageId: string };
-		await expectRawStored(mailboxId, messageId);
+		await expectRawStored(mailboxId, messageId, {
+			from: mailboxId, to: "recipient@example.com", subject: "New email from the agent", html: "Hi",
+		});
 	});
 });
