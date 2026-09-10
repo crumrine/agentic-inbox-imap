@@ -9,7 +9,7 @@ import {
 	applyMigrations,
 	mailboxMigrations,
 } from "../workers/durableObject/migrations";
-import { mailbox, query, restart } from "./helpers";
+import { exec, mailbox, query, restart } from "./helpers";
 
 const MIGRATION_NAME = "9_imap_uid_flags";
 
@@ -33,6 +33,9 @@ describe("migration 9_imap_uid_flags", () => {
 		const folderColMap = new Map(folderCols.map((c) => [c.name, c]));
 		expect(folderColMap.has("uid_validity")).toBe(true);
 		expect(folderColMap.has("uid_next")).toBe(true);
+		// UIDVALIDITY is an identity value; no row may omit it after the
+		// forward constraint migration has run.
+		expect(folderColMap.get("uid_validity")?.notnull).toBe(1);
 		// uid_next must be NOT NULL DEFAULT 1 -- allowed because 1 is a constant.
 		expect(folderColMap.get("uid_next")?.notnull).toBe(1);
 		expect(folderColMap.get("uid_next")?.dflt_value).toBe("1");
@@ -77,6 +80,14 @@ describe("migration 9_imap_uid_flags", () => {
 			expect(typeof folder.uid_validity).toBe("number");
 			expect(folder.uid_validity).toBeGreaterThan(1_600_000_000);
 		}
+
+		await expect(
+			exec(
+				stub,
+				`INSERT INTO folders (id, name, is_deletable, uid_validity, uid_next)
+				 VALUES ('missing-validity', 'Missing validity', 1, NULL, 1)`,
+			),
+		).rejects.toThrow();
 	});
 
 	it("runs exactly once, even across Durable Object restarts", async () => {
@@ -185,5 +196,45 @@ describe("migration 9_imap_uid_flags", () => {
 			spam: 1,
 			trash: 1,
 		});
+	});
+
+	it("upgrades a migration-11 mailbox without losing rows or foreign keys", async () => {
+		const stub = mailbox("m12-preserves-mailbox");
+		const result = await runInDurableObject(stub, async (_instance, state) => {
+			await state.storage.deleteAll();
+			const sql = state.storage.sql;
+			applyMigrations(sql, mailboxMigrations.slice(0, 11), state.storage);
+
+			sql.exec(
+				`INSERT INTO emails (id, folder_id, subject, uid, raw_key, rfc822_size)
+				 VALUES ('legacy-email', 'inbox', 'Preserve me', 7, 'raw/legacy-email', 42)`,
+			);
+			sql.exec(
+				`UPDATE folders SET uid_next = 8 WHERE id = 'inbox'`,
+			);
+			sql.exec(
+				`INSERT INTO attachments (id, email_id, filename, mimetype, size)
+				 VALUES ('legacy-attachment', 'legacy-email', 'note.txt', 'text/plain', 42)`,
+			);
+
+			applyMigrations(sql, mailboxMigrations, state.storage);
+			return {
+				folders: [...sql.exec(`SELECT id, uid_validity, uid_next FROM folders WHERE id = 'inbox'`)],
+				emails: [...sql.exec(`SELECT id, folder_id, uid, raw_key, rfc822_size FROM emails`)],
+				attachments: [...sql.exec(`SELECT id, email_id FROM attachments`)],
+				foreignKeyErrors: [...sql.exec(`PRAGMA foreign_key_check`)],
+				uidValidity: [...sql.exec(`SELECT "notnull" FROM pragma_table_info('folders') WHERE name = 'uid_validity'`)],
+			};
+		});
+
+		expect(result.folders).toHaveLength(1);
+		expect(result.folders[0]).toMatchObject({ id: "inbox", uid_next: 8 });
+		expect(typeof (result.folders[0] as { uid_validity: unknown }).uid_validity).toBe("number");
+		expect(result.emails).toEqual([
+			{ id: "legacy-email", folder_id: "inbox", uid: 7, raw_key: "raw/legacy-email", rfc822_size: 42 },
+		]);
+		expect(result.attachments).toEqual([{ id: "legacy-attachment", email_id: "legacy-email" }]);
+		expect(result.foreignKeyErrors).toEqual([]);
+		expect((result.uidValidity[0] as { notnull: number }).notnull).toBe(1);
 	});
 });

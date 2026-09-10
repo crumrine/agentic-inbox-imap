@@ -10,11 +10,10 @@ export const folders = sqliteTable("folders", {
 	is_deletable: integer("is_deletable").notNull().default(1),
 	/**
 	 * IMAP UIDVALIDITY. Set once when the folder is created and never
-	 * changed. Unix seconds. Nullable only because SQLite's ALTER TABLE
-	 * ADD COLUMN cannot default to a non-constant expression; migration
-	 * 9 backfills every pre-existing folder.
+	 * changed. Unix seconds. Migration 9 backfilled every pre-existing
+	 * folder, and migration 12 makes the established invariant NOT NULL.
 	 */
-	uid_validity: integer("uid_validity"),
+	uid_validity: integer("uid_validity").notNull(),
 	/** Next UID to hand out in this folder. Monotonic; never decreases. */
 	uid_next: integer("uid_next").notNull().default(1),
 });
