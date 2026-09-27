@@ -331,6 +331,16 @@ func (c *Client) Folders(ctx context.Context, mailbox string) ([]Folder, error) 
 	return folders, nil
 }
 
+// FolderStatus calls GET /api/imap/v1/{mailbox}/{folder}/status.
+func (c *Client) FolderStatus(ctx context.Context, mailbox, folder string) (*Folder, error) {
+	var status Folder
+	path := mailboxPath(mailbox) + "/" + url.PathEscape(folder) + "/status"
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, nil, "", &status); err != nil {
+		return nil, err
+	}
+	return &status, nil
+}
+
 // MessagesOptions configures the Messages listing call. The zero value
 // requests the full listing.
 type MessagesOptions struct {

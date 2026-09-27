@@ -71,7 +71,7 @@ const (
 	// DefaultPollInterval is the minimum wall time between two refreshes of
 	// the selected folder. Poll runs after every authenticated command, so
 	// without a floor a client streaming a few hundred FETCHes during an
-	// initial sync would issue a folders call for each one.
+	// initial sync would issue a status call for each one.
 	DefaultPollInterval = 5 * time.Second
 
 	// DefaultMessagePageSize is the page size requested from the Worker's
@@ -997,9 +997,18 @@ func (s *Session) Status(mailbox string, options *imap.StatusOptions) (*imap.Sta
 	ctx, cancel := s.context()
 	defer cancel()
 
-	folder, err := s.lookupFolder(ctx, name, mailbox)
+	folder, err := s.backend.FolderStatus(ctx, name, mailbox)
 	if err != nil {
-		return nil, err
+		return nil, mapBackendError(err, "Mailbox does not exist")
+	}
+	if !mailboxNameEqual(folderIMAPName(folder), mailbox) {
+		// The endpoint tolerates case and prioritizes IDs over display names.
+		// Resolve rare name/ID collisions using the original IMAP name rules.
+		// Normal STATUS requests need only the single-folder endpoint.
+		folder, err = s.lookupFolder(ctx, name, mailbox)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return s.statusFor(ctx, name, folder, options)
 }
@@ -1038,7 +1047,7 @@ func (s *Session) statusFor(ctx context.Context, mailbox string, folder *backend
 		data.DeletedStorage = &n
 	}
 	if options.Size {
-		// SIZE is the only STATUS item the folders payload cannot answer,
+		// SIZE is the only STATUS item the folder counters cannot answer,
 		// so it costs a full metadata listing. It has to be the *whole*
 		// folder: STATUS SIZE is reported as an exact byte count, and
 		// summing one capped page would present a fraction of the real
@@ -1158,29 +1167,21 @@ func (s *Session) beginPoll() (mailbox string, sel *selection, ok bool) {
 // whether the refresh completed; on any backend trouble it returns false
 // and leaves the existing snapshot untouched.
 func (s *Session) refresh(ctx context.Context, mailbox string, sel *selection) (*selection, bool) {
-	folders, err := s.backend.Folders(ctx, mailbox)
+	folder, err := s.backend.FolderStatus(ctx, mailbox, sel.folderKey)
 	if err != nil {
-		s.logger.Warn("imap: refreshing folder list during poll failed, serving the existing snapshot",
-			"mailbox", mailbox, "folder", sel.folderKey, "err", err)
+		var apiErr *backend.APIError
+		if errors.As(err, &apiErr) && apiErr.Kind == backend.ErrKindNotFound {
+			// A 404 definitively invalidates every UID in this selection.
+			s.poisonSelection(sel, errMailboxGone)
+		} else {
+			s.logger.Warn("imap: refreshing folder status during poll failed, serving the existing snapshot",
+				"mailbox", mailbox, "folder", sel.folderKey, "err", err)
+		}
 		return nil, false
 	}
-
-	var folder *backend.Folder
-	for i := range folders {
-		if folderKey(&folders[i]) == sel.folderKey {
-			folder = &folders[i]
-			break
-		}
-	}
-	if folder == nil {
-		// The folder was deleted underneath us. A successful Folders call
-		// that does not list it is a definite statement, not a blip: a
-		// blip is a transport error, which was handled above by keeping
-		// the snapshot. So every UID in the snapshot now refers to a
-		// folder that is not there, and serving them would answer FETCH
-		// with silence rather than an error.
-		s.logger.Warn("imap: selected folder is gone from the backend, poisoning the selection",
-			"mailbox", mailbox, "folder", sel.folderKey)
+	if folderKey(folder) != sel.folderKey {
+		// Tolerant backend name resolution must not replace a deleted folder
+		// with a different folder whose display name happens to match its ID.
 		s.poisonSelection(sel, errMailboxGone)
 		return nil, false
 	}

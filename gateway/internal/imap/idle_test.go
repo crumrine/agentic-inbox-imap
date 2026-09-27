@@ -212,8 +212,8 @@ func TestIdleEmitsNothingWhenNothingChanged(t *testing.T) {
 	}
 	// And the cheap path held: no metadata listing for an unchanged folder.
 	_, folders, messages, _ := be.counters()
-	if folders < 2 {
-		t.Errorf("Folders calls = %d, want the idle loop to have polled at least twice", folders)
+	if folders != 1 || be.statusCount() < 2 {
+		t.Errorf("Folders calls = %d, want 1; status calls = %d, want at least 2", folders, be.statusCount())
 	}
 	if messages != 2 {
 		t.Errorf("Messages calls = %d, want only the 2 from SELECT's paging", messages)
@@ -233,7 +233,7 @@ func TestIdleSurvivesBackendFailure(t *testing.T) {
 	stop, done := runIdle(t, s, w)
 
 	be.mu.Lock()
-	be.foldersErr = &backend.APIError{Kind: backend.ErrKindServer, StatusCode: 503}
+	be.statusErr = &backend.APIError{Kind: backend.ErrKindServer, StatusCode: 503}
 	be.mu.Unlock()
 
 	time.Sleep(120 * time.Millisecond) // several failing ticks
@@ -247,7 +247,7 @@ func TestIdleSurvivesBackendFailure(t *testing.T) {
 
 	// Recovery: once the backend comes back, updates resume.
 	be.mu.Lock()
-	be.foldersErr = nil
+	be.statusErr = nil
 	be.mu.Unlock()
 	be.deliver(t, "inbox", newMessage("after recovery", "y@example.com", time.Now()), rawMsg5)
 
@@ -307,7 +307,7 @@ func TestIdleWithoutSelectionIsQuiet(t *testing.T) {
 	if got := w.snapshot(); len(got) != 0 {
 		t.Errorf("EXISTS responses = %v, want none without a selection", got)
 	}
-	if _, folders, messages, _ := be.counters(); folders != 0 || messages != 0 {
+	if _, folders, messages, _ := be.counters(); folders != 0 || messages != 0 || be.statusCount() != 0 {
 		t.Errorf("backend was called without a selection: folders %d, messages %d", folders, messages)
 	}
 }
