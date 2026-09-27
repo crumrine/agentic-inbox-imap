@@ -24,6 +24,8 @@ type Backend interface {
 	Authenticate(ctx context.Context, mailbox, password string) (*backend.AuthResult, error)
 	// Folders lists every folder in a mailbox with its IMAP counters.
 	Folders(ctx context.Context, mailbox string) ([]backend.Folder, error)
+	// FolderStatus reads counters for one folder.
+	FolderStatus(ctx context.Context, mailbox, folder string) (*backend.Folder, error)
 	// Messages lists message metadata for a folder. The metadata payload
 	// deliberately does not include BODYSTRUCTURE or raw bytes.
 	Messages(ctx context.Context, mailbox, folder string, opts backend.MessagesOptions) (*backend.MessagesPage, error)

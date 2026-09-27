@@ -285,9 +285,9 @@ func TestStatusMapsFolderPayload(t *testing.T) {
 		t.Errorf("UIDNext = %d, UIDValidity = %d", data.UIDNext, data.UIDValidity)
 	}
 
-	// The folders payload answers all of that; no message listing needed.
-	if _, _, messages, _ := be.counters(); messages != 0 {
-		t.Errorf("Messages calls = %d, want 0 for a counts-only STATUS", messages)
+	// Single-folder status answers all of that without listing folders or messages.
+	if _, folders, messages, _ := be.counters(); folders != 0 || messages != 0 || be.statusCount() != 1 {
+		t.Errorf("folders=%d messages=%d status=%d, want 0/0/1", folders, messages, be.statusCount())
 	}
 }
 

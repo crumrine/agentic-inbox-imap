@@ -139,6 +139,7 @@ type fakeBackend struct {
 	setFlagsErr error
 	authErr     error
 	foldersErr  error
+	statusErr   error
 	messagesErr error
 	rawErr      error
 
@@ -155,6 +156,7 @@ type fakeBackend struct {
 	// Counters.
 	authCalls     int
 	foldersCalls  int
+	statusCalls   int
 	messagesCalls int
 	rawCalls      int
 	rawByUID      map[uint32]int
@@ -269,6 +271,32 @@ func (f *fakeBackend) Folders(ctx context.Context, mailbox string) ([]backend.Fo
 		return nil, err
 	}
 	return out, nil
+}
+
+func (f *fakeBackend) statusCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.statusCalls
+}
+
+func (f *fakeBackend) FolderStatus(ctx context.Context, mailbox, name string) (*backend.Folder, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.statusCalls++
+	if f.statusErr != nil {
+		return nil, f.statusErr
+	}
+	for _, folder := range f.folders {
+		if folder.ID == name {
+			return &folder, nil
+		}
+	}
+	for _, folder := range f.folders {
+		if strings.EqualFold(folder.ID, name) || strings.EqualFold(folder.Name, name) {
+			return &folder, nil
+		}
+	}
+	return nil, &backend.APIError{Kind: backend.ErrKindNotFound, StatusCode: 404}
 }
 
 func (f *fakeBackend) Messages(ctx context.Context, mailbox, folder string, opts backend.MessagesOptions) (*backend.MessagesPage, error) {

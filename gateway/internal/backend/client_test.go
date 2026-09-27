@@ -1186,3 +1186,52 @@ func TestSearch_HonoursRequestTimeout(t *testing.T) {
 		t.Fatalf("err = %#v, want context.DeadlineExceeded", err)
 	}
 }
+
+func TestFolderStatus(t *testing.T) {
+	mailbox, name := "user/one@example.com", "Projects/2026 #1%"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requireAccessHeaders(t, r)
+		want := "/api/imap/v1/" + url.PathEscape(mailbox) + "/" + url.PathEscape(name) + "/status"
+		if r.Method != http.MethodGet || r.URL.EscapedPath() != want || r.URL.RawQuery != "" {
+			t.Errorf("request = %s %s, want GET %s", r.Method, r.URL, want)
+		}
+		w.Write([]byte(`{"id":"custom","name":"Projects/2026 #1%","uidValidity":123,"uidNext":42,"exists":30,"unseen":3,"recent":0}`))
+	}))
+	defer srv.Close()
+	f, err := newTestClient(t, srv).FolderStatus(context.Background(), mailbox, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.ID != "custom" || f.Name != name || f.UIDValidity != 123 || f.UIDNext != 42 || f.Exists != 30 || f.Unseen != 3 || f.Recent != 0 {
+		t.Fatalf("status = %+v", f)
+	}
+}
+
+func TestFolderStatusErrors(t *testing.T) {
+	for _, tc := range []struct {
+		status int
+		want   error
+	}{
+		{404, ErrNotFound}, {503, ErrServer},
+	} {
+		t.Run(fmt.Sprint(tc.status), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+			}))
+			defer srv.Close()
+			f, err := newTestClient(t, srv).FolderStatus(context.Background(), "user@example.com", "inbox")
+			if f != nil || !errors.Is(err, tc.want) {
+				t.Fatalf("status = %+v, err = %v", f, err)
+			}
+		})
+	}
+	t.Run("transport", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+		c := newTestClient(t, srv)
+		srv.Close()
+		f, err := c.FolderStatus(context.Background(), "user@example.com", "inbox")
+		if f != nil || err == nil || errors.Is(err, ErrNotFound) {
+			t.Fatalf("status = %+v, err = %v", f, err)
+		}
+	})
+}
