@@ -9,5 +9,7 @@
     "typescript": "5.9.3",
     "vitest-pool/wrangler": "4.124.0",
     "vitest-pool/workerd": "1.20260815.1"
-  }
+  },
+  "npm": "11.12.1",
+  "selectedWorkerdBinary": "workerd 2026-08-15"
 }

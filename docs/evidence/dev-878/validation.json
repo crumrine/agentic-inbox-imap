@@ -1,0 +1,113 @@
+{
+  "runtimeAndTestSourceCommit": "1eb607f3f34cf415a8a4a2ffeb232b01ab26f63c",
+  "inboxBase": "d01da09e26adf76ef8fe60e2a5f76226426a167b",
+  "scorerHead": "bb02819e4662e1d680805435dd886e3dc4728906",
+  "scorerReviewRun": "6577b085-a39e-4746-ba77-3a8775ba2307",
+  "scorerDeliveryRun": "348a9510-d765-474f-9607-4b473e97bd13",
+  "environment": {
+    "PATHPrefix": "/home/brian/r9-jobs/home/.nvm/versions/node/v24.15.0/bin",
+    "XDG_CONFIG_HOME": "/tmp/dev-878-xdg",
+    "WRANGLER_SEND_METRICS": "false",
+    "INBOX_LOCAL_ONLY": "1 for typecheck"
+  },
+  "checks": [
+    {
+      "command": "npm ci --ignore-scripts --cache /tmp/dev-878-npm-cache --no-audit --no-fund",
+      "exit": 0
+    },
+    {
+      "command": "npm run typecheck",
+      "exit": 0,
+      "log": "typecheck.log"
+    },
+    {
+      "command": "npm exec vitest run test/inbound-reject.test.ts",
+      "exit": 0,
+      "tests": 11
+    },
+    {
+      "command": "npm exec vitest run test/imap-append.test.ts test/shadow-scoring.test.ts -- --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000",
+      "exit": 0,
+      "files": 2,
+      "tests": 55,
+      "wallSeconds": 158.44,
+      "log": "focused.log"
+    },
+    {
+      "command": "npm test -- --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000",
+      "exit": 0,
+      "files": 30,
+      "tests": 550,
+      "wallSeconds": 499.1,
+      "log": "full-serial.log"
+    },
+    {
+      "command": "node scripts/check-scoring-contract.mjs",
+      "exit": 0,
+      "cases": [
+        "ordinary",
+        "preference none",
+        "preference allow",
+        "preference block"
+      ],
+      "evidence": "contract.json"
+    },
+    {
+      "command": "node scripts/scoring-mutations.mjs --workerd",
+      "exit": 0,
+      "caughtMutants": 6,
+      "evidence": "mutations.json"
+    },
+    {
+      "command": "git diff --check",
+      "exit": 0
+    }
+  ],
+  "unsuccessfulRuns": [
+    {
+      "command": "npm test -- --maxWorkers=1",
+      "exit": 130,
+      "outcome": "interrupted after three existing APPEND failures and cleanup aborts",
+      "log": "full-default-interrupted.log"
+    },
+    {
+      "command": "npm test -- --maxWorkers=2 --testTimeout=30000 --hookTimeout=30000",
+      "exit": 130,
+      "outcome": "interrupted after five existing APPEND failures and cleanup aborts",
+      "log": "full-parallel-interrupted.log"
+    }
+  ],
+  "logSha256": {
+    "typecheck.log": "5152f471e151246c69289906429f285d3a4acc75a5f7f3a526d6a24959c32d46",
+    "focused.log": "845d07e8bbadab1386bf8258f799cdcf572099e9731ae1dff7f54b41f6010ca5",
+    "full-serial.log": "12f3cae5160c40c3bf1d30168ee3c935ce4c05f330d2c719e3b887fb51a0960a",
+    "full-default-interrupted.log": "fd7aba2fc19e7811cdc01b0bb186d037cc8a658195cc931f00459de4c9637c5f",
+    "full-parallel-interrupted.log": "c8b05e72ff8a9d6859ae3e0aac818ce3c111ba680e2aa7c2443ce92338d625da"
+  },
+  "limits": {
+    "rawScoringInspectionBytes": 131072,
+    "plainTextBytes": 32768,
+    "subjectBytes": 2048,
+    "addressBytes": 512,
+    "consideredHeaders": 100,
+    "headerValueBytes": 2048,
+    "headerConservativeTotalBytes": 8192,
+    "responseBytes": 4096,
+    "responseDepth": 6,
+    "manualBodyBytes": 2048,
+    "manualBodyDepth": 4,
+    "waitMilliseconds": 1000
+  },
+  "delivery": {
+    "pushed": false,
+    "pr": null,
+    "merged": false,
+    "deployed": false,
+    "blockingCheck": "Current external Cloudflare Workers Builds branch/deploy settings unavailable; cannot verify source-only push."
+  },
+  "pendingLiveChecks": [
+    "Cloudflare intake/header availability and per-message provenance",
+    "hosted CPU/billing",
+    "real mailbox classification efficacy"
+  ]
+}

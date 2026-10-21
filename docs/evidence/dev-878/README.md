@@ -22,7 +22,7 @@ disable remote bindings. Do not use `npm run deploy` or the real email binding.
 npm ci --ignore-scripts --no-audit --no-fund
 INBOX_LOCAL_ONLY=1 npm run typecheck
 npm exec vitest run test/shadow-scoring.test.ts
-npm test -- --maxWorkers=1
+npm test -- --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000
 node scripts/check-scoring-contract.mjs ../mail-scoring
 node scripts/scoring-mutations.mjs --workerd
 git diff --check
@@ -47,9 +47,24 @@ Writable XDG configuration removes the initial Wrangler log EROFS warning.
 Jev's bounded-startup advice is recorded in [jev-startup.json](jev-startup.json);
 it returned insufficient evidence, not an authorization or test result.
 
+The first full single-worker run with default deadlines was interrupted after
+three existing APPEND cases failed with cleanup aborts (8.6-13.2 seconds). The
+bounded retry kept assertions unchanged and set test/hook deadlines to 30
+seconds. `imap-append` plus `shadow-scoring` then passed all 55 tests (35 existing,
+20 new), 158.44s wall. That supports a runner/deadline interaction but is not a
+production parser performance guarantee. A complete two-worker retry reproduced five APPEND failures with cleanup
+aborts and was stopped. The final complete retry uses one worker and the same
+30-second harness deadlines; its final result is recorded in `validation.json`.
+Jev advice is in `jev-suite.json` and `jev-suite-parallel.json`; neither advice
+record establishes a root cause. Do not call either interrupted run a pass.
+
 No Go files changed. No gateway check result is claimed by this local stage.
-Final command results and source identity are stored in the same-ticket Trellis
-implementation result; the source commit contains this evidence.
+Final command results and source identity are in [validation.json](validation.json).
+The serial full run passed 550 tests across 30 files in 499.10s. Typecheck and
+all six mutation checks passed. Full logs, including the two interrupted runs,
+are retained here with digests. Runtime/test sources are unchanged from
+`1eb607f3f34cf415a8a4a2ffeb232b01ab26f63c`; the final evidence commit and recovery
+bundle identity are recorded in the same-ticket Trellis implementation result.
 
 ## Push/PR blocker
 

@@ -35,6 +35,16 @@ try{
  assert.ok(assessment.result.limitsHit.includes('auth_unknown'));
  assert.equal(assessment.result.heuristicScore,0);
  const fixture={rpcVersion:'1',ok:true,result:assessment.result};
- writeFileSync('docs/evidence/dev-878/contract.json',JSON.stringify({dependency:pin,hashes,fixture,passed:true},null,2)+'\n');
+ const preferenceResults={};
+ for(const preference of ['none','allow','block']){
+  const value=await modules.caller.assessArrival({MAIL_SCORING_MODE:'shadow',MAIL_SCORER:{scoreV1:async(...args)=>modules.scorer.scoreRpc(...args)}},parsed,true,'bounce@example.test',preference);
+  assert.equal(value.status,'partial');assert.ok(value.result);
+  const ids=value.result.reasons.map(r=>r.id);
+  assert.equal(ids.includes('sender_allowed'),preference==='allow');
+  assert.equal(ids.includes('sender_blocked'),preference==='block');
+  assert.equal(ids.includes('auth_failed'),false);
+  preferenceResults[preference]=value.result;
+ }
+ writeFileSync('docs/evidence/dev-878/contract.json',JSON.stringify({dependency:pin,hashes,fixture,preferenceResults,passed:true},null,2)+'\n');
  console.log('Pinned scorer/caller compatibility passed');
 }finally{rmSync(temp,{recursive:true,force:true});}
