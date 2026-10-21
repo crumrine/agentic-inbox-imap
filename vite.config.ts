@@ -10,7 +10,7 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
   plugins: [
-    cloudflare({ viteEnvironment: { name: "ssr" } }),
+    cloudflare({ viteEnvironment: { name: "ssr" }, remoteBindings: process.env.INBOX_LOCAL_ONLY !== "1" }),
     tailwindcss(),
     reactRouter(),
     tsconfigPaths(),

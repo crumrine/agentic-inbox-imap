@@ -1,0 +1,82 @@
+
+ RUN  v4.1.11 /home/brian/r9-jobs/home/.cache/symphony/runs/run-p1vlci1m/dev-878-mutation-56KGXY
+
+uncaught exception; source = Uncaught (in promise); stack = Error: FOREIGN KEY constraint failed: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_FOREIGNKEY)
+    at SQLiteDOPreparedQuery.run (/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-878/inbox/node_modules/src/durable-sqlite/session.ts:117:39)
+    at QueryPromise.run (/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-878/inbox/node_modules/src/sqlite-core/query-builders/insert.ts:398:26)
+    at /home/brian/r9-jobs/home/.cache/symphony/runs/run-p1vlci1m/dev-878-mutation-56KGXY/workers/durableObject/index.ts:1221:190
+    at MailboxDO.setSpamDisposition (/home/brian/r9-jobs/home/.cache/symphony/runs/run-p1vlci1m/dev-878-mutation-56KGXY/workers/durableObject/index.ts:1213:33)
+    at home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-878/inbox/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:365:47
+ ❯ test/shadow-scoring.test.ts (20 tests | 1 failed | 19 skipped) 4291ms
+     × authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs 3299ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 19 skipped (20)
+     Errors  1 error
+   Start at  22:32:08
+   Duration  82.41s (transform 26.00s, setup 26.69s, import 39.91s, tests 4.29s, environment 0ms)
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+stderr | test/shadow-scoring.test.ts > actual app email and authenticated REST in local workerd > authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs
+Error: FOREIGN KEY constraint failed: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_FOREIGNKEY)
+    at /home/brian/r9-jobs/home/.cache/symphony/runs/run-p1vlci1m/dev-878-mutation-56KGXY/workers/index.ts:207:20
+    at dispatch (/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-878/inbox/node_modules/hono/dist/compose.js:22:17)
+    at /home/brian/r9-jobs/home/.cache/symphony/runs/run-p1vlci1m/dev-878-mutation-56KGXY/workers/lib/mailbox.ts:41:2
+    at dispatch (/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-878/inbox/node_modules/hono/dist/compose.js:22:17)
+    at cors2 (/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-878/inbox/node_modules/hono/dist/middleware/cors/index.js:79:5)
+    at dispatch (/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-878/inbox/node_modules/hono/dist/compose.js:22:17)
+    at dispatch (/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-878/inbox/node_modules/hono/dist/compose.js:22:17)
+    at /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-878/inbox/node_modules/hono/dist/hono-base.js:301:25
+    at request (/home/brian/r9-jobs/home/.cache/symphony/runs/run-p1vlci1m/dev-878-mutation-56KGXY/test/shadow-scoring.test.ts:76:13)
+    at /home/brian/r9-jobs/home/.cache/symphony/runs/run-p1vlci1m/dev-878-mutation-56KGXY/test/shadow-scoring.test.ts:185:13 {
+  remote: true
+}
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/shadow-scoring.test.ts > actual app email and authenticated REST in local workerd > authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs
+AssertionError: expected 500 to be 404 // Object.is equality
+
+- Expected
++ Received
+
+- 404
++ 500
+
+ ❯ test/shadow-scoring.test.ts:185:98
+    183|     expect(await query(mailbox(BOX),'SELECT * FROM sender_preferences'…
+    184|     await env.BUCKET.put('mailboxes/other@example.com.json','{}');
+    185|     expect((await request(b.e,'/api/v1/mailboxes/other@example.com/spa…
+       |                                                                                                  ^
+    186|     expect((await request(b.e,`${base}/spam-feedback`,{...body,emailId…
+    187|     expect((await request(b.e,`${base}/spam-feedback`,{...body,emailId…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: FOREIGN KEY constraint failed: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_FOREIGNKEY)
+ ❯ SQLiteDOPreparedQuery.run ../../../../../symphony-workspaces/siteforge/DEV-878/inbox/node_modules/src/durable-sqlite/session.ts:117:39
+ ❯ QueryPromise.run ../../../../../symphony-workspaces/siteforge/DEV-878/inbox/node_modules/src/sqlite-core/query-builders/insert.ts:398:26
+ ❯ workers/durableObject/index.ts:1221:190
+    1219|             if ((old?.revision ?? 0) !== expectedRevision) return {ok:…
+    1220|             const revision = expectedRevision + 1;
+    1221|             this.db.insert(schema.spamDispositions).values({email_id:e…
+       |                                                                                                                                                                                              ^
+    1222|             return {ok:true, revision};
+    1223|         });
+ ❯ MailboxDO.setSpamDisposition workers/durableObject/index.ts:1213:33
+ ❯ home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-878/inbox/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:365:47
+
+This error originated in "test/shadow-scoring.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯

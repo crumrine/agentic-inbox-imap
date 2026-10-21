@@ -369,4 +369,25 @@ export const mailboxMigrations: Migration[] = [
             CREATE UNIQUE INDEX idx_emails_folder_uid ON emails(folder_id, uid);
         `,
 	},
+	{
+        name: "13_shadow_assessments_feedback",
+        sql: `
+            CREATE TABLE spam_assessments (
+                email_id TEXT NOT NULL REFERENCES emails(id) ON DELETE CASCADE,
+                version INTEGER NOT NULL CHECK(version > 0),
+                assessment TEXT NOT NULL CHECK(length(assessment) <= 6144),
+                PRIMARY KEY(email_id, version)
+            );
+            CREATE TABLE spam_dispositions (
+                email_id TEXT PRIMARY KEY REFERENCES emails(id) ON DELETE CASCADE,
+                disposition TEXT NOT NULL CHECK(disposition IN ('spam', 'not_spam')),
+                revision INTEGER NOT NULL CHECK(revision > 0)
+            );
+            CREATE TABLE sender_preferences (
+                sender TEXT PRIMARY KEY CHECK(length(sender) <= 254),
+                preference TEXT NOT NULL CHECK(preference IN ('allow', 'block', 'none')),
+                revision INTEGER NOT NULL CHECK(revision > 0)
+            );
+        `,
+    },
 ];

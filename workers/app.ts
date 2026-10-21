@@ -42,7 +42,7 @@ function getAccessUrls(teamDomain: string) {
 }
 
 // Main app that wraps the API and adds React Router fallback
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<{ Bindings: Env; Variables: { manualFeedbackHuman?: string } }>();
 
 // Cloudflare Access JWT validation middleware (production only)
 app.use("*", async (c, next) => {
@@ -69,10 +69,15 @@ app.use("*", async (c, next) => {
 	try {
 		const { issuer, certsUrl } = getAccessUrls(TEAM_DOMAIN);
 		const JWKS = createRemoteJWKSet(certsUrl);
-		await jwtVerify(token, JWKS, {
+		const { payload } = await jwtVerify(token, JWKS, {
 			issuer,
 			audience: POLICY_AUD,
 		});
+        // Service tokens remain valid for existing APIs, but cannot authorize
+        // persistent user feedback. Never read this identity from request JSON.
+        if (typeof payload.email === "string" && !payload.common_name) {
+            c.set("manualFeedbackHuman", payload.email);
+        }
 	} catch {
 		return c.text("Invalid or expired Access token", 403);
 	}

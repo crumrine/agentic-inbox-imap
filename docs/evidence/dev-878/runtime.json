@@ -1,0 +1,13 @@
+{
+  "node": "v24.15.0",
+  "packages": {
+    "wrangler": "4.74.0",
+    "workerd": "1.20260312.1",
+    "@cloudflare/vitest-pool-workers": "0.22.0",
+    "postal-mime": "2.7.3",
+    "vitest": "4.1.11",
+    "typescript": "5.9.3",
+    "vitest-pool/wrangler": "4.124.0",
+    "vitest-pool/workerd": "1.20260815.1"
+  }
+}
