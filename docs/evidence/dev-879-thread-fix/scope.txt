@@ -1,0 +1,7 @@
+DEV-879 implementation revision 2, run d81b636f-1dcf-4d09-be31-3eb825e0214c.
+Fix independently reproduced retained-thread cache finding from review 638b7886-6c85-4b15-98cc-1e1aa062b9d3 against 661cdd848194254ad94ca1b732f3e13508bdb658.
+Inbox origin https://github.com/crumrine/agentic-inbox-imap.git, branch codex/dev-879-spam-isolation, stacked PR8 base codex/dev-878-shadow-scoring at 7cc31772b0ca17ec28ea4d78367e41e0a24e5ce5.
+Scorer origin https://github.com/crumrine/mail-scoring.git, unchanged at bb02819e4662e1d680805435dd886e3dc4728906.
+Owner DEV-878 event5416 authorizes source publication with production/nonproduction Workers Builds disabled; no changes to that configuration or provider retry.
+No gateway/scorer/backend/config/dependency changes in this correction. No live mail/provider/model requests, deployments, merge or publication.
+Only EmailPanel consumes useThreadReplies (repository search); normal/Spam scoped query keys and backend shared reader predicates remain unchanged.

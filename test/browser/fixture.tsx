@@ -6,7 +6,9 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter,Routes,Route,Outlet } from 'react-router';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {TooltipProvider,Toasty} from '@cloudflare/kumo';
-const client=new QueryClient({defaultOptions:{queries:{staleTime:30000,retry:false,refetchOnWindowFocus:false}}});
+// Match the production query provider, including two retries for server errors.
+import { ApiError } from '../../app/services/api';
+const client=new QueryClient({defaultOptions:{queries:{staleTime:30000,retry:(failureCount,error)=>!(error instanceof ApiError && error.status>=400 && error.status<500) && failureCount<2,refetchOnWindowFocus:false}}});
 function Providers(){return <QueryClientProvider client={client}><TooltipProvider><Toasty><Outlet/></Toasty></TooltipProvider></QueryClientProvider>;}
 import Mailbox from '../../app/routes/mailbox';
 import EmailList from '../../app/routes/email-list';

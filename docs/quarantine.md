@@ -76,6 +76,11 @@ refreshes rows and counts together, and clamps a page after result-count shrink.
 Cached search rows/counts are hidden during revalidation or errors; errors show a
 retry control. Polling remains foreground-only and a response can take up to the
 existing 30-second request timeout. Neither cache invalidation nor polling rescores.
+Thread panels also discard cached children while a scoped read is pending,
+retrying or failed. The conversation and its actions stay hidden until validation
+succeeds, so stale children cannot supply participants, counts or reply targets.
+Unavailable conversations offer retry/back controls; open source/image dialogs
+are cleared when validation is lost. A successful retry restores current messages.
 
 ## Inert review and limits
 
@@ -97,7 +102,7 @@ paid AI was introduced.
 
 ## Verification and remaining observations
 
-See `evidence/dev-879-fixes/README.md` for review corrections and
+See `evidence/dev-879-thread-fix/README.md` and `evidence/dev-879-fixes/README.md` for review corrections and
 `evidence/dev-879/README.md` for exact source/commands, failures, runtime and
 mutation/browser evidence. The browser harness runs the actual SPA routes,
 components, query keys and API client against synthetic responses; separate local

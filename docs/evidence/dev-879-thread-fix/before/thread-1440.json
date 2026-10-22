@@ -1,0 +1,13 @@
+{
+  "width": 1440,
+  "threadCalls": 4,
+  "rejectedCalls": 3,
+  "selectedCalls": 2,
+  "beforeSelected": 1,
+  "visibleParticipant": 1,
+  "visibleSnippet": 1,
+  "visibleThreadCount": 1,
+  "visibleReply": 1,
+  "network": [],
+  "errors": []
+}

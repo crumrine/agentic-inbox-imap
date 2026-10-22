@@ -1,0 +1,1 @@
+Managed local Vite/Chromium regression command exited 143 without browser output or results. No passing run claimed. Product source and assertions unchanged.

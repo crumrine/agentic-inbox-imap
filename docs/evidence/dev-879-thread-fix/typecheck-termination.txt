@@ -1,0 +1,1 @@
+Local typecheck exited143 after Wrangler types generated, no TypeScript diagnostics. Preview startup overlapped the end of the run. This is not a typecheck pass.
