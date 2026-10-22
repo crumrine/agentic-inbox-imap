@@ -66,7 +66,23 @@ are retained here with digests. Runtime/test sources are unchanged from
 `1eb607f3f34cf415a8a4a2ffeb232b01ab26f63c`; the final evidence commit and recovery
 bundle identity are recorded in the same-ticket Trellis implementation result.
 
-## Push/PR blocker
+## Historical push/PR blocker (resolved)
+
+The observations below describe the initial blocked run, not the current gate.
+Trellis DEV-878 event 5416 records an owner-requested dashboard change on
+2026-10-21 America/Los_Angeles: `Disable builds=true` was saved and verified
+after reloading. Automatic main and non-production branch builds, deployments
+and version uploads are paused. The running Worker and traffic were unchanged.
+That note explicitly authorizes this runner to rely on the observation and
+publish the existing source branch/PR without local access to the screenshot.
+This runner did not independently inspect the dashboard. Account identifiers
+and the private screenshot are intentionally not copied into this public repo.
+Leave builds disabled until a separately authorized release. No deployment,
+merge, live routing or scoring activation is authorized by this resolution.
+
+The resumed implementation's checks are in `resume-validation.json`. CI now
+sets `INBOX_LOCAL_ONLY=1` and disables Wrangler metrics; its test command uses
+the validated serial 30-second deadlines without changing assertions.
 
 [GitHub check evidence](external-build-check.json) confirms that an existing
 external **Workers Builds: agentic-inbox** integration ran on a non-main branch
@@ -84,12 +100,12 @@ cannot establish this project's actual settings. A Pages skip-commit convention
 is not documented proof of a Workers Builds exclusion. No push was attempted
 as a way of discovering whether it deploys.
 
-Missing external input: verified current Workers Builds settings excluding
+The originally missing external input was verified Workers Builds settings excluding
 `codex/dev-878-shadow-scoring` from deployment/provider mutation, or an owner
 configuration change that disables that automation for this source-only branch.
-This is needed before push/PR, not a release gate after reviewed-PR delivery.
-The stage cannot claim implementation success without its required pushed PR.
-Resume the same branch/ticket after resolving this input; do not duplicate work.
+Event 5416 resolves this input before push/PR. The initial stage did not claim
+implementation success without a pushed PR. The resumed stage preserves the
+same branch/ticket and records the final exact PR head in Trellis.
 
 Real Cloudflare intake/header provenance and hosted measurements remain pending
 owner-authorized work. Those are documented limitations, not the push blocker.

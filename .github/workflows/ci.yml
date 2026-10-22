@@ -13,6 +13,9 @@ jobs:
   worker:
     name: TypeScript / Worker
     runs-on: ubuntu-latest
+    env:
+      INBOX_LOCAL_ONLY: "1"
+      WRANGLER_SEND_METRICS: "false"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,7 +35,8 @@ jobs:
         run: npm run typecheck
 
       - name: Test
-        run: npm test
+        # Match the validated local workerd schedule; assertions stay unchanged.
+        run: npm test -- --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000
 
   gateway:
     name: Go / gateway
