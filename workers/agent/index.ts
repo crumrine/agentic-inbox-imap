@@ -287,9 +287,13 @@ export class EmailAgent extends AIChatAgent<any> {
         // Bound the new history scan; prior tool/model output is invalid after a quarantine change.
         const recentMessages = this.messages.slice(-200);
         const latestUser = [...recentMessages].reverse().find(m => m.role === 'user');
-        const start = previous?.epoch === epoch ? previous.start : latestUser?.id;
-        const index = recentMessages.findIndex(m => m.id === start);
-        const context = index < 0 ? (latestUser ? [latestUser] : []) : recentMessages.slice(index);
+        let start = previous?.epoch === epoch ? previous.start : latestUser?.id;
+        let index = recentMessages.findIndex(m => m.id === start);
+        if (index < 0) {
+            start = latestUser?.id;
+            index = recentMessages.findIndex(m => m.id === start);
+        }
+        const context = index < 0 ? [] : recentMessages.slice(index);
         if (start) await this.ctx.storage.put('quarantine-context', {epoch, start});
         const result = streamText({
 			model: workersai("@cf/moonshotai/kimi-k2.5"),

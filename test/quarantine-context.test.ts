@@ -47,6 +47,14 @@ describe('actual agent and MCP registered callbacks with inert model/transport',
   await expect(captured.calls.at(-1).prepareStep()).rejects.toThrow('quarantine changed');
   await EmailAgent.prototype.onChatMessage.call(fake as any,()=>{});
   expect(captured.calls.at(-1).messages).toEqual([fake.messages.at(-1)]);
+  for(let i=0;i<205;i++)fake.messages.push({id:`old-${i}`,role:'assistant',parts:[{type:'text',text:'expired context'}]});
+  fake.messages.push({id:'fresh',role:'user',parts:[{type:'text',text:'fresh request'}]});
+  await EmailAgent.prototype.onChatMessage.call(fake as any,()=>{});
+  expect(captured.calls.at(-1).messages).toEqual([fake.messages.at(-1)]);
+  fake.messages.push({id:'response',role:'assistant',parts:[{type:'text',text:'current response'}]});
+  fake.messages.push({id:'followup',role:'user',parts:[{type:'text',text:'followup'}]});
+  await EmailAgent.prototype.onChatMessage.call(fake as any,()=>{});
+  expect(captured.calls.at(-1).messages.map((m:any)=>m.id)).toEqual(['fresh','response','followup']);
  });
  it('MCP real registry callbacks default normal and provide explicit Spam review',async()=>{
   await fixture();const registry=new Map<string,{schema:any,call:Function}>();
