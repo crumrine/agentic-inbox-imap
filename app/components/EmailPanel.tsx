@@ -4,7 +4,10 @@
 
 import { useKumoToastManager } from "@cloudflare/kumo";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router";
+import { parseSearchQuery } from "~/lib/search-parser";
+import { mailScope } from "shared/mail-scope";
+import SpamControls from "~/components/SpamControls";
+import { useSearchParams, useParams } from "react-router";
 import { Folders } from "shared/folders";
 import EmailPanelDialogs from "~/components/email-panel/EmailPanelDialogs";
 import EmailPanelHeader from "~/components/email-panel/EmailPanelHeader";
@@ -31,8 +34,10 @@ function EmailPanelSkeleton() {
 
 export default function EmailPanel({ emailId }: { emailId: string }) {
 	const { mailboxId, folder } = useParams<{ mailboxId: string; folder: string }>();
-	const { data: email } = useEmail(mailboxId, emailId) as { data?: Email };
-	const { data: threadRepliesRaw } = useThreadReplies(mailboxId, email?.thread_id) as {
+	const [searchParams] = useSearchParams();
+    const scope = mailScope(folder || parseSearchQuery(searchParams.get("q") || "").folder);
+	const { data: email, isError: emailUnavailable } = useEmail(mailboxId, emailId, scope) as { data?: Email; isError:boolean };
+	const { data: threadRepliesRaw } = useThreadReplies(mailboxId, email?.thread_id, scope) as {
 		data?: Email[];
 	};
 	const updateEmail = useUpdateEmail();
@@ -85,9 +90,10 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 
 	const moveToFolders = useMemo(() => { const cur = folder || email?.folder_id; return folders.filter((f) => f.id !== cur); }, [folders, folder, email?.folder_id]);
 
+	if (emailUnavailable) return <div className="p-4">Message unavailable in this view. <button onClick={closePanel}>Back to list</button></div>;
 	if (!email) return <EmailPanelSkeleton />;
 
-	const toggleStar = () => { if (mailboxId) updateEmail.mutate({ mailboxId, id: email.id, data: { starred: !email.starred } }); };
+	const toggleStar = () => { if (mailboxId) updateEmail.mutate({ mailboxId, id: email.id, scope, data: { starred: !email.starred } }); };
 	const handleMove = (folderId: string) => { if (mailboxId) { moveEmailMut.mutate({ mailboxId, id: email.id, folderId }); closePanel(); } };
 	const handleDelete = () => { if (mailboxId) { if (!window.confirm("Are you sure you want to delete this email?")) return; deleteEmailMut.mutate({ mailboxId, id: email.id }); closePanel(); } };
 
@@ -143,7 +149,7 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 
 	return (
 		<div className="flex flex-col h-full">
-			<EmailPanelToolbar
+			{scope !== "spam" && <EmailPanelToolbar
 				email={email}
 				mailboxId={mailboxId}
 				isDraftFolder={isDraftFolder}
@@ -167,7 +173,7 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 					if (mailboxId) {
 						updateEmail.mutate({
 							mailboxId,
-							id: email.id,
+							id: email.id, scope,
 							data: { read: !email.read },
 						});
 					}
@@ -175,7 +181,9 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 				onMove={handleMove}
 				onViewSource={() => setSourceViewEmail(email)}
 				onDelete={handleDelete}
-			/>
+			/>}
+            {scope === "spam" && <button className="p-3 text-left" onClick={closePanel}>Back to Spam</button>}
+            {mailboxId && <SpamControls mailboxId={mailboxId} email={email} onMoved={closePanel} />}
 
 			<EmailPanelHeader
 				subject={email.subject}

@@ -129,11 +129,12 @@ export class EmailMCP extends McpAgent<Env> {
 			{
 				mailboxId: z.string().describe("The mailbox email address"),
 				emailId: z.string().describe("The email ID to retrieve"),
+                scope: z.enum(["normal", "spam"]).default("normal").describe("Explicit Spam-only review; never reuse this untrusted content for normal drafting."),
 			},
-			async ({ mailboxId, emailId }) => {
+			async ({ mailboxId, emailId, scope }) => {
 				const denied = await verifyMailbox(mailboxId);
 				if (denied) return denied;
-				const result = await toolGetEmail(env, mailboxId, emailId);
+				const result = await toolGetEmail(env, mailboxId, emailId, scope);
 				if ("error" in result) {
 					return {
 						content: [{ type: "text" as const, text: "Email not found" }],
@@ -153,11 +154,12 @@ export class EmailMCP extends McpAgent<Env> {
 				threadId: z
 					.string()
 					.describe("The thread_id to retrieve all messages for"),
+                scope: z.enum(["normal", "spam"]).default("normal").describe("Explicit Spam-only review; untrusted and isolated from normal context."),
 			},
-			async ({ mailboxId, threadId }) => {
+			async ({ mailboxId, threadId, scope }) => {
 				const denied = await verifyMailbox(mailboxId);
 				if (denied) return denied;
-				const result = await toolGetThread(env, mailboxId, threadId);
+				const result = await toolGetThread(env, mailboxId, threadId, scope);
 				return mcpText(result);
 			},
 		);
@@ -391,11 +393,12 @@ export class EmailMCP extends McpAgent<Env> {
 				mailboxId: z.string().describe("The mailbox email address"),
 				emailId: z.string().describe("The email ID"),
 				read: z.boolean().describe("true to mark as read, false for unread"),
+                scope: z.enum(["normal", "spam"]).default("normal").describe("Explicit Spam-only review scope"),
 			},
-			async ({ mailboxId, emailId, read }) => {
+			async ({ mailboxId, emailId, read, scope }) => {
 				const denied = await verifyMailbox(mailboxId);
 				if (denied) return denied;
-				const result = await toolMarkEmailRead(env, mailboxId, emailId, read);
+				const result = await toolMarkEmailRead(env, mailboxId, emailId, read, scope);
 				return mcpText(result);
 			},
 		);

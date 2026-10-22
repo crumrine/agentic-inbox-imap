@@ -390,4 +390,18 @@ export const mailboxMigrations: Migration[] = [
             );
         `,
     },
+    {
+        name: "14_quarantine_context_epoch",
+        sql: `
+            CREATE TABLE quarantine_context (id INTEGER PRIMARY KEY CHECK(id = 1), epoch INTEGER NOT NULL);
+            INSERT INTO quarantine_context VALUES (1, 0);
+            CREATE TRIGGER quarantine_insert AFTER INSERT ON emails WHEN NEW.folder_id = 'spam'
+              BEGIN UPDATE quarantine_context SET epoch = epoch + 1 WHERE id = 1; END;
+            CREATE TRIGGER quarantine_move AFTER UPDATE OF folder_id ON emails
+              WHEN (OLD.folder_id = 'spam' OR NEW.folder_id = 'spam') AND OLD.folder_id IS NOT NEW.folder_id
+              BEGIN UPDATE quarantine_context SET epoch = epoch + 1 WHERE id = 1; END;
+            CREATE TRIGGER quarantine_delete AFTER DELETE ON emails WHEN OLD.folder_id = 'spam'
+              BEGIN UPDATE quarantine_context SET epoch = epoch + 1 WHERE id = 1; END;
+        `,
+    },
 ];

@@ -10,6 +10,7 @@ import { type Assessment, unavailable } from "../lib/mail-scoring/intake";
 import { decodeResponse } from "../lib/mail-scoring/protocol";
 import { feedbackSchema, preferenceSchema, type Feedback, type Preference, type MutationResult } from "../lib/mail-scoring/feedback";
 import * as schema from "../db/schema";
+import { type MailScope } from "../../shared/mail-scope";
 import { Folders } from "../../shared/folders";
 import type { Env } from "../types";
 import { applyMigrations, mailboxMigrations } from "./migrations";
@@ -108,6 +109,7 @@ function retryAfterSeconds(oldest: string | null, windowSeconds: number): number
 }
 
 interface SearchFilterOptions {
+    normalOnly?: boolean;
 	query: string;
 	folder?: string;
 	from?: string;
@@ -121,6 +123,7 @@ interface SearchFilterOptions {
 }
 
 interface GetEmailsOptions {
+    normalOnly?: boolean;
 	folder?: string;
 	thread_id?: string;
 	page?: number;
@@ -219,7 +222,7 @@ export class MailboxDO extends DurableObject<Env> {
 
 		const offset = (page - 1) * limit;
 
-		const conditions: SQL[] = [];
+		const conditions: SQL[] = folder && !options.normalOnly ? [] : [sql`COALESCE(${schema.emails.folder_id}, '') != 'spam'`];
 		if (folder) {
 			conditions.push(
 				sql`${schema.emails.folder_id} = (SELECT id FROM folders WHERE name = ${folder} OR id = ${folder} LIMIT 1)`,
@@ -268,7 +271,7 @@ export class MailboxDO extends DurableObject<Env> {
 	 */
 	async countEmails(options: { folder?: string; thread_id?: string } = {}) {
 		const { folder, thread_id } = options;
-		const conditions: string[] = [];
+		const conditions: string[] = folder ? [] : ["COALESCE(folder_id, '') != 'spam'"];
 		const params: (string | number)[] = [];
 
 		if (folder) {
@@ -403,6 +406,8 @@ export class MailboxDO extends DurableObject<Env> {
 				FROM emails e
 				LEFT JOIN thread_to_conversation tc
 					ON COALESCE(e.thread_id, e.id) = tc.raw_thread_id
+                WHERE (COALESCE(e.folder_id, '') = 'spam') =
+                  ((SELECT id FROM folders WHERE name = ?1 OR id = ?1 LIMIT 1) = 'spam')
 			),
 			conversation_stats AS (
 				SELECT
@@ -523,14 +528,14 @@ export class MailboxDO extends DurableObject<Env> {
 
 	// ── Single email operations (Drizzle) ──────────────────────────
 
-	async getEmail(id: string) {
+	async getEmail(id: string, scope: MailScope = "normal") {
 		const email = this.db
 			.select()
 			.from(schema.emails)
-			.where(eq(schema.emails.id, id))
+			.where(and(eq(schema.emails.id, id), sql`(COALESCE(${schema.emails.folder_id}, '') = 'spam') = ${scope === "spam" ? 1 : 0}`))
 			.get();
 
-		if (!email) return null;
+		if (!email || (email.folder_id === Folders.SPAM) !== (scope === "spam")) return null;
 
 		const emailAttachments = this.db
 			.select()
@@ -551,11 +556,11 @@ export class MailboxDO extends DurableObject<Env> {
 	 * two queries (one for emails, one for attachments) instead of
 	 * N+1 individual getEmail calls.
 	 */
-	async getThreadEmails(threadId: string) {
+	async getThreadEmails(threadId: string, scope: MailScope = "normal") {
 		const emailRows = [
 			...this.ctx.storage.sql.exec(
-				`SELECT * FROM emails WHERE thread_id = ?1 ORDER BY date ASC`,
-				threadId,
+				`SELECT * FROM emails WHERE thread_id = ?1 AND (COALESCE(folder_id, '') = 'spam') = ?2 ORDER BY date ASC`,
+				threadId, scope === "spam" ? 1 : 0,
 			),
 		] as any[];
 
@@ -591,6 +596,7 @@ export class MailboxDO extends DurableObject<Env> {
 	async updateEmail(
 		id: string,
 		{ read, starred }: { read?: boolean; starred?: boolean },
+        scope: MailScope = "normal",
 	) {
 		const data: { read?: number; starred?: number } = {};
 		if (read !== undefined) {
@@ -601,22 +607,22 @@ export class MailboxDO extends DurableObject<Env> {
 		}
 
 		if (Object.keys(data).length === 0) {
-			return this.getEmail(id);
+			return this.getEmail(id, scope);
 		}
 
 		this.db
 			.update(schema.emails)
 			.set(data)
-			.where(eq(schema.emails.id, id))
+			.where(and(eq(schema.emails.id, id), sql`(COALESCE(${schema.emails.folder_id}, '') = 'spam') = ${scope === "spam" ? 1 : 0}`))
 			.run();
 
-		return this.getEmail(id);
+		return this.getEmail(id, scope);
 	}
 
-	async markThreadRead(threadId: string) {
+	async markThreadRead(threadId: string, scope: MailScope = "normal") {
 		this.ctx.storage.sql.exec(
-			`UPDATE emails SET read = 1 WHERE thread_id = ? AND read = 0`,
-			threadId,
+			`UPDATE emails SET read = 1 WHERE thread_id = ?1 AND read = 0 AND (COALESCE(folder_id, '') = 'spam') = ?2`,
+			threadId, scope === "spam" ? 1 : 0,
 		);
 		return { threadId, markedRead: true };
 	}
@@ -892,7 +898,7 @@ export class MailboxDO extends DurableObject<Env> {
 	): { conditions: string[]; params: (string | number)[] } {
 		const { query, folder, from, to, subject, date_start, date_end, is_read, is_starred, has_attachment } = options;
 		const prefix = tableAlias ? `${tableAlias}.` : "";
-		const conditions: string[] = [];
+		const conditions: string[] = folder && !options.normalOnly ? [] : [`COALESCE(${prefix}folder_id, '') != 'spam'`];
 		const params: (string | number)[] = [];
 		let paramIdx = 0;
 
@@ -983,7 +989,7 @@ export class MailboxDO extends DurableObject<Env> {
 			        GROUP_CONCAT(DISTINCT LOWER(sender)) as senders,
 			        GROUP_CONCAT(DISTINCT LOWER(recipient)) as recipients
 			 FROM emails
-			 WHERE thread_id IS NOT NULL
+			 WHERE COALESCE(folder_id, '') != 'spam' AND thread_id IS NOT NULL
 			   AND thread_id != id
 			   AND date >= datetime('now', '-7 days')
 			 GROUP BY thread_id
@@ -1197,6 +1203,10 @@ export class MailboxDO extends DurableObject<Env> {
         }
 	}
 
+    async getQuarantineEpoch(): Promise<number> {
+        return [...this.ctx.storage.sql.exec('SELECT epoch FROM quarantine_context WHERE id = 1')][0].epoch as number;
+    }
+
     async getSpamState(emailId: string) {
         if (!feedbackSchema.shape.emailId.safeParse(emailId).success) return null;
         if (!this.db.select({id:schema.emails.id}).from(schema.emails).where(eq(schema.emails.id, emailId)).get()) return null;
@@ -1211,13 +1221,17 @@ export class MailboxDO extends DurableObject<Env> {
         if (!parsed.success) return {ok:false, error:'invalid'};
         const {emailId, disposition, expectedRevision} = parsed.data;
         return this.ctx.storage.transactionSync(() => {
-            if (!this.db.select({id:schema.emails.id}).from(schema.emails).where(eq(schema.emails.id,emailId)).get()) return {ok:false, error:'not_found'};
+            const email = this.db.select({folder:schema.emails.folder_id}).from(schema.emails).where(eq(schema.emails.id,emailId)).get();
+            if (!email) return {ok:false, error:'not_found'};
+            const destination = disposition === 'spam' ? Folders.SPAM : Folders.INBOX;
             const old = this.db.select().from(schema.spamDispositions).where(eq(schema.spamDispositions.email_id,emailId)).get();
             // Same action retried at its original revision is idempotent, but
             // a stale action cannot override a newer conflicting decision.
-            if (old?.disposition === disposition && (expectedRevision === old.revision || expectedRevision === old.revision - 1)) return {ok:true, revision:old.revision};
+            if (old?.disposition === disposition && expectedRevision === old.revision - 1) return {ok:true, revision:old.revision};
+            if (old?.disposition === disposition && expectedRevision === old.revision && (disposition === 'spam' ? email.folder === Folders.SPAM : email.folder !== Folders.SPAM)) return {ok:true, revision:old.revision};
             if ((old?.revision ?? 0) !== expectedRevision) return {ok:false, error:'conflict'};
             const revision = expectedRevision + 1;
+            if ((disposition === 'spam' && email.folder !== Folders.SPAM) || (disposition === 'not_spam' && email.folder === Folders.SPAM)) this.#moveEmailRow(emailId, destination);
             this.db.insert(schema.spamDispositions).values({email_id:emailId,disposition,revision}).onConflictDoUpdate({target:schema.spamDispositions.email_id,set:{disposition,revision}}).run();
             return {ok:true, revision};
         });

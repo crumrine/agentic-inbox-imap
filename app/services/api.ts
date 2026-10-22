@@ -2,6 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
+import type { MailScope } from "shared/mail-scope";
 import type {
 	Alias,
 	AppPassword,
@@ -109,6 +110,11 @@ interface EmailListResponse {
 // ---------- API client ----------
 
 const api = {
+    spamState: (mailboxId: string, id: string) => get<unknown>(`/api/v1/mailboxes/${mailboxId}/emails/${id}/spam`),
+    senderPreference: (mailboxId: string, sender: string) => get<{preference:string;revision:number}>(`/api/v1/mailboxes/${mailboxId}/sender-preference`, {params:{sender}}),
+    manualAction: (mailboxId: string, action: 'spam-feedback' | 'sender-preference', body: unknown) => request(`/api/v1/mailboxes/${mailboxId}/${action}`, {
+        method:'POST', headers:{'x-inbox-manual-action':'1'}, body:JSON.stringify(body),
+    }),
 	// Config
 	getConfig: () =>
 		get<{ domains: string[]; emailAddresses: string[] }>("/api/v1/config"),
@@ -129,18 +135,18 @@ const api = {
 		get<EmailListResponse | Email[]>(`/api/v1/mailboxes/${mailboxId}/emails`, { params, signal: opts?.signal }),
 	sendEmail: (mailboxId: string, email: unknown) =>
 		post<void>(`/api/v1/mailboxes/${mailboxId}/emails`, email),
-	getEmail: (mailboxId: string, id: string, opts?: { signal?: AbortSignal }) =>
-		get<Email>(`/api/v1/mailboxes/${mailboxId}/emails/${id}`, { signal: opts?.signal }),
-	updateEmail: (mailboxId: string, id: string, data: unknown) =>
-		put<Email>(`/api/v1/mailboxes/${mailboxId}/emails/${id}`, data),
+	getEmail: (mailboxId: string, id: string, opts?: { signal?: AbortSignal; scope?: MailScope }) =>
+		get<Email>(`/api/v1/mailboxes/${mailboxId}/emails/${id}`, { signal: opts?.signal, params:{scope:opts?.scope ?? "normal"} }),
+	updateEmail: (mailboxId: string, id: string, data: unknown, scope: MailScope = "normal") =>
+		put<Email>(`/api/v1/mailboxes/${mailboxId}/emails/${id}?scope=${scope}`, data),
 	deleteEmail: (mailboxId: string, id: string) =>
 		del<void>(`/api/v1/mailboxes/${mailboxId}/emails/${id}`),
 	moveEmail: (mailboxId: string, id: string, folderId: string) =>
 		post<void>(`/api/v1/mailboxes/${mailboxId}/emails/${id}/move`, { folderId }),
-	getThread: (mailboxId: string, threadId: string, opts?: { signal?: AbortSignal }) =>
-		get<Email[]>(`/api/v1/mailboxes/${mailboxId}/threads/${threadId}`, { signal: opts?.signal }),
-	markThreadRead: (mailboxId: string, threadId: string) =>
-		post<void>(`/api/v1/mailboxes/${mailboxId}/threads/${threadId}/read`),
+	getThread: (mailboxId: string, threadId: string, opts?: { signal?: AbortSignal; scope?: MailScope }) =>
+		get<Email[]>(`/api/v1/mailboxes/${mailboxId}/threads/${threadId}`, { signal: opts?.signal, params:{scope:opts?.scope ?? "normal"} }),
+	markThreadRead: (mailboxId: string, threadId: string, scope: MailScope = "normal") =>
+		post<void>(`/api/v1/mailboxes/${mailboxId}/threads/${threadId}/read?scope=${scope}`),
 	getAttachment: (mailboxId: string, emailId: string, attachmentId: string) =>
 		get<Blob>(`/api/v1/mailboxes/${mailboxId}/emails/${emailId}/attachments/${attachmentId}`, { responseType: "blob" }),
 	saveDraft: (

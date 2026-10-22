@@ -104,3 +104,7 @@ export const senderPreferences = sqliteTable("sender_preferences", {
 }, table => [check("sender_bound", sql`length(${table.sender}) <= 254`),
     check("preference_value", sql`${table.preference} IN ('allow', 'block', 'none')`),
     check("preference_revision", sql`${table.revision} > 0`)]);
+
+export const quarantineContext = sqliteTable("quarantine_context", {
+    id: integer("id").primaryKey(), epoch: integer("epoch").notNull(),
+}, table => [check("context_singleton", sql`${table.id} = 1`)]);

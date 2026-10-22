@@ -1,3 +1,4 @@
+import { suspiciousText } from "shared/mail-scope";
 // Copyright (c) 2026 Cloudflare, Inc.
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
@@ -72,6 +73,10 @@ const FOLDER_EMPTY_STATES: Record<
 		description:
 			"Move emails here to keep your inbox clean without deleting them.",
 	},
+	[Folders.SPAM]: {
+        icon: <TrayIcon size={48} weight="thin" />, title:"No spam",
+        description:"Messages moved to Spam stay recoverable here. Automatic quarantine is disabled.",
+    },
 	[Folders.TRASH]: {
 		icon: <TrashIcon size={48} weight="thin" className="text-kumo-subtle" />,
 		title: "Trash is empty",
@@ -244,12 +249,12 @@ export default function EmailListRoute() {
 			if (email.thread_id && email.thread_count && email.thread_count > 1) {
 				markThreadRead.mutate({
 					mailboxId,
-					threadId: email.thread_id,
+					threadId: email.thread_id, scope: email.folder_id === "spam" ? "spam" : "normal",
 				});
 			} else {
 				updateEmail.mutate({
 					mailboxId,
-					id: email.id,
+					id: email.id, scope: email.folder_id === "spam" ? "spam" : "normal",
 					data: { read: true },
 				});
 			}
@@ -315,7 +320,7 @@ export default function EmailListRoute() {
 						<div>
 							{emails.map((email) => {
 								const isSelected = selectedEmailId === email.id;
-								const snippet = getSnippetText(email.snippet);
+								const snippet = email.folder_id === "spam" ? suspiciousText(email.snippet,100) : getSnippetText(email.snippet);
 								return (
 									<div
 										key={email.id}

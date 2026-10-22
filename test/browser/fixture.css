@@ -1,0 +1,4 @@
+/* Copyright (c) 2026 Brian Crumrine; SPDX-License-Identifier: Apache-2.0 */
+@import "../../app/index.css";
+/* Vite's fixture root differs from the production root. Scan the same app. */
+@source "../../app";

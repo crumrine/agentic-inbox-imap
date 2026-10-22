@@ -5,6 +5,7 @@
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import PostalMime from "postal-mime";
+import { mailScope } from "../shared/mail-scope";
 import { toolMarkSpam, toolSetSenderPreference } from "./lib/tools";
 import { authorizeManualFeedback, feedbackSchema, preferenceSchema } from "./lib/mail-scoring/feedback";
 import { assessArrival, inspectableRaw } from "./lib/mail-scoring/intake";
@@ -391,7 +392,7 @@ app.post("/api/v1/mailboxes/:mailboxId/drafts", async (c: AppContext) => {
 });
 
 app.get("/api/v1/mailboxes/:mailboxId/emails/:id", async (c: AppContext) => {
-	const email = await c.var.mailboxStub.getEmail(c.req.param("id")!);
+	const email = await c.var.mailboxStub.getEmail(c.req.param("id")!, mailScope(c.req.query("scope")));
 	if (!email) return c.json({ error: "Email not found" }, 404);
 	return new Response(JSON.stringify(toClientEmail(email)), {
 		headers: { "Content-Type": "application/json" },
@@ -402,7 +403,7 @@ app.put("/api/v1/mailboxes/:mailboxId/emails/:id", async (c: AppContext) => {
 	const { read, starred } = (await c.req.json()) as { read?: boolean; starred?: boolean };
 	// updateEmail echoes the row back through getEmail, so it needs the same
 	// narrowing as the read below it.
-	const email = await c.var.mailboxStub.updateEmail(c.req.param("id")!, { read, starred });
+	const email = await c.var.mailboxStub.updateEmail(c.req.param("id")!, { read, starred }, mailScope(c.req.query("scope")));
 	return email ? c.json(toClientEmail(email)) : c.json({ error: "Email not found" }, 404);
 });
 
@@ -436,13 +437,13 @@ app.post("/api/v1/mailboxes/:mailboxId/emails/:id/move", async (c: AppContext) =
 
 app.get("/api/v1/mailboxes/:mailboxId/threads/:threadId", async (c: AppContext) => {
 	const emails = (await (c.var.mailboxStub as any).getThreadEmails(
-		c.req.param("threadId")!,
+		c.req.param("threadId")!, mailScope(c.req.query("scope")),
 	)) as object[];
 	return c.json(emails.map(toClientEmail));
 });
 
 app.post("/api/v1/mailboxes/:mailboxId/threads/:threadId/read", async (c: AppContext) => {
-	await c.var.mailboxStub.markThreadRead(c.req.param("threadId")!);
+	await c.var.mailboxStub.markThreadRead(c.req.param("threadId")!, mailScope(c.req.query("scope")));
 	return c.json({ status: "marked_read" });
 });
 
@@ -619,8 +620,9 @@ app.get("/api/v1/mailboxes/:mailboxId/search", async (c: AppContext) => {
 app.get("/api/v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId", async (c: AppContext) => {
 	const emailId = c.req.param("emailId")!;
 	const attachmentId = c.req.param("attachmentId")!;
+    if (!(await c.var.mailboxStub.getEmail(emailId, mailScope(c.req.query("scope"))))) return c.json({error:"Email not found"},404);
 	const attachment = await c.var.mailboxStub.getAttachment(attachmentId);
-	if (!attachment) return c.json({ error: "Attachment not found" }, 404);
+	if (!attachment || attachment.email_id !== emailId) return c.json({ error: "Attachment not found" }, 404);
 	const obj = await c.env.BUCKET.get(`attachments/${emailId}/${attachmentId}/${attachment.filename}`);
 	if (!obj) return c.json({ error: "Attachment file not found" }, 404);
 	const headers = new Headers();

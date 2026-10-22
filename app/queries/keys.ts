@@ -11,10 +11,10 @@ export const queryKeys = {
 	emails: {
 		list: (mailboxId: string, params: Record<string, string>) =>
 			["emails", mailboxId, params] as const,
-		detail: (mailboxId: string, emailId: string) =>
-			["emails", mailboxId, emailId] as const,
-		thread: (mailboxId: string, threadId: string) =>
-			["emails", mailboxId, "thread", threadId] as const,
+		detail: (mailboxId: string, emailId: string, scope = "normal") =>
+			["emails", mailboxId, emailId, scope] as const,
+		thread: (mailboxId: string, threadId: string, scope = "normal") =>
+			["emails", mailboxId, "thread", threadId, scope] as const,
 	},
 	folders: {
 		list: (mailboxId: string) => ["folders", mailboxId] as const,

@@ -107,7 +107,7 @@ async function getSystemPrompt(env: Env, mailboxId: string): Promise<string> {
 	return DEFAULT_SYSTEM_PROMPT;
 }
 
-function createEmailTools(env: Env, mailboxId: string) {
+export function createEmailTools(env: Env, mailboxId: string) {
 	return {
 		list_emails: defineTool({
 			description:
@@ -127,7 +127,8 @@ function createEmailTools(env: Env, mailboxId: string) {
 					.describe("Page number for pagination"),
 			}),
 			execute: async ({ folder, limit, page }): Promise<unknown> => {
-				return toolListEmails(env, mailboxId, { folder, limit, page });
+				if (folder.toLowerCase() === "spam") return {error:"Review Spam in the dedicated Spam view; it is excluded from agent context."};
+                return toolListEmails(env, mailboxId, { folder, limit, page }, true);
 			},
 		}),
 
@@ -172,7 +173,8 @@ function createEmailTools(env: Env, mailboxId: string) {
 					.describe("Optional folder to restrict search to"),
 			}),
 			execute: async ({ query, folder }): Promise<unknown> => {
-				return toolSearchEmails(env, mailboxId, { query, folder });
+				if (folder?.toLowerCase() === "spam") return {error:"Review Spam in the dedicated Spam view; it is excluded from agent context."};
+                return toolSearchEmails(env, mailboxId, { query, folder }, true);
 			},
 		}),
 
@@ -280,10 +282,23 @@ export class EmailAgent extends AIChatAgent<any> {
 		const tools = createEmailTools(env, mailboxId);
 		const systemPrompt = await getSystemPrompt(env, mailboxId);
 
-		const result = streamText({
+		const epoch = await getMailboxStub(env, mailboxId).getQuarantineEpoch();
+        const previous = await this.ctx.storage.get<{epoch:number; start:string}>('quarantine-context');
+        // Bound the new history scan; prior tool/model output is invalid after a quarantine change.
+        const recentMessages = this.messages.slice(-200);
+        const latestUser = [...recentMessages].reverse().find(m => m.role === 'user');
+        const start = previous?.epoch === epoch ? previous.start : latestUser?.id;
+        const index = recentMessages.findIndex(m => m.id === start);
+        const context = index < 0 ? (latestUser ? [latestUser] : []) : recentMessages.slice(index);
+        if (start) await this.ctx.storage.put('quarantine-context', {epoch, start});
+        const result = streamText({
 			model: workersai("@cf/moonshotai/kimi-k2.5"),
 			system: systemPrompt,
-			messages: await convertToModelMessages(this.messages),
+			messages: await convertToModelMessages(context),
+            prepareStep: async () => {
+                if (await getMailboxStub(env, mailboxId).getQuarantineEpoch() !== epoch) throw new Error("Mailbox quarantine changed; start a new request.");
+                return {};
+            },
 			tools,
 			stopWhen: stepCountIs(5),
 			onFinish,
@@ -346,7 +361,8 @@ export class EmailAgent extends AIChatAgent<any> {
 		let threadContext = "";
 		try {
 			const email = (await stub.getEmail(emailData.emailId)) as EmailFull | null;
-			if (email?.body) {
+			if (!email) return {status:"skipped"};
+            if (email.body) {
 				const isInjection = await isPromptInjection(env.AI, email.body);
 				if (isInjection) {
 					console.warn("Skipping auto-draft due to detected prompt injection:", emailData.emailId);
