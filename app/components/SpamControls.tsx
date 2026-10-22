@@ -30,6 +30,7 @@ export default function SpamControls({mailboxId, email, onMoved}: {mailboxId:str
   const canFeedback = !busy && Number.isInteger(data?.revision);
   const spam = email.folder_id === 'spam';
   return <section aria-label="Spam controls" className="p-4 border-b border-kumo-line space-y-2 text-sm max-h-72 overflow-y-auto shrink-0">
+    <p>Sender: {suspiciousText(email.sender,512)}</p>
     <p>Inspection: {status}. {typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= 100 ? `Heuristic score: ${score} / 100.` : 'No score available.'} Scores are signals, not confidence percentages or proof of safety. Automatic quarantine is disabled.</p>
     <ul>{reasons.map((reason,i)=><li key={i}>{suspiciousText(reason?.reason,160)}</li>)}</ul>
     <p>Manual disposition: {suspiciousText(data?.disposition,32) || 'unknown'}.</p>
