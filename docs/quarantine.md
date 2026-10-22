@@ -68,10 +68,14 @@ scope, and external clients own any retained transcript; normal subsequent serve
 retrieval never includes Spam.
 
 SPA detail and thread cache keys include scope. Mutation handling cancels pending
-reads and resets email/search caches before refetching. Active detail/thread reads
+reads and resets email/search caches before refetching. Active search/detail/thread reads
 refresh every 30 seconds, matching existing list polling; a rejected normal read
 hides cached content. An alternate-client move becomes visible on the next
-refresh, not by a new push channel. Neither cache invalidation nor polling rescores.
+refresh, not by a new push channel. Search revalidates on mount/focus, passes cancellation through the API client,
+refreshes rows and counts together, and clamps a page after result-count shrink.
+Cached search rows/counts are hidden during revalidation or errors; errors show a
+retry control. Polling remains foreground-only and a response can take up to the
+existing 30-second request timeout. Neither cache invalidation nor polling rescores.
 
 ## Inert review and limits
 
@@ -79,7 +83,8 @@ Spam bodies are shown as escaped text, without HTML parsing, inline-image rewrit
 iframes, attachments, links, styles or automatic resource loads. Collapsed previews
 and search snippets also take the bounded text path. The preview maximum is
 16,384 UTF-16 code units (at most 65,536 UTF-8 bytes); subject projection is 2,048,
-other review metadata 512, and displayed reasons at most 32 × 160 characters.
+other displayed review metadata 512 (operational `id` and `thread_id` remain
+lossless, are not rendered as preview text, and are not inspection inputs), and displayed reasons at most 32 × 160 characters.
 These are display bounds, not permission to expand the scorer's inspection limits.
 Scores are finite heuristic values on 0–100, never confidence percentages.
 Legacy rows show unknown/unscored; partial evidence is explicitly displayed.
@@ -92,7 +97,8 @@ paid AI was introduced.
 
 ## Verification and remaining observations
 
-See `evidence/dev-879/README.md` for exact source/commands, failures, runtime and
+See `evidence/dev-879-fixes/README.md` for review corrections and
+`evidence/dev-879/README.md` for exact source/commands, failures, runtime and
 mutation/browser evidence. The browser harness runs the actual SPA routes,
 components, query keys and API client against synthetic responses; separate local
 workerd tests exercise authenticated real app handlers, SQLite/R2 and shared

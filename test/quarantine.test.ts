@@ -203,3 +203,36 @@ describe('quarantine transaction and attachment boundaries',()=>{
     expect(await imap.json()).toMatchObject({messages:[{uid:1,envelope:{from:[{address:'sender@example.com'}]}}],uidNext:2});
   });
 });
+
+
+describe('Spam thread identity round trips', () => {
+  it('preserves long operational IDs without prefix collisions across REST and shared tools', async () => {
+    await registered();
+    const stub = mailbox(BOX);
+    const prefix = 'x'.repeat(512);
+    const threadId = prefix + '/?&é'.repeat(22);
+    for (const [id, folder, thread] of [
+      ['long-a', 'spam', threadId], ['long-b', 'spam', threadId],
+      ['prefix-trap', 'spam', prefix], ['normal-collision', 'inbox', threadId],
+    ]) {
+      await stub.createEmail(folder, {...emailData({id}), thread_id:thread,
+        read:false, subject:'s'.repeat(3000), body:'b'.repeat(20000)}, []);
+    }
+    const detail = await json('/emails/long-a?scope=spam');
+    expect(detail.thread_id).toBe(threadId);
+    expect(detail.subject.length).toBe(2048);
+    expect(detail.body.length).toBe(16384);
+    const path = '/threads/' + encodeURIComponent(detail.thread_id);
+    expect((await json(path + '?scope=spam')).map((e:any) => e.id).sort()).toEqual(['long-a', 'long-b']);
+    expect((await json(path)).map((e:any) => e.id)).toEqual(['normal-collision']);
+    expect((await json('/threads/' + prefix + '?scope=spam')).map((e:any) => e.id)).toEqual(['prefix-trap']);
+    const b = bindings();
+    const toolDetail = await toolGetEmail(b.e, BOX, 'long-a', 'spam') as any;
+    expect(toolDetail.thread_id).toBe(threadId);
+    expect((await toolGetThread(b.e, BOX, toolDetail.thread_id, 'spam')).messages.map(e => e.id).sort()).toEqual(['long-a','long-b']);
+    expect((await request(b.e,base + path + '/read?scope=spam',{})).status).toBe(200);
+    expect((await stub.getEmail('normal-collision'))?.read).toBe(false);
+    expect((await stub.getEmail('prefix-trap','spam'))?.read).toBe(false);
+    expect((await stub.getEmail('long-b','spam'))?.read).toBe(true);
+  });
+});

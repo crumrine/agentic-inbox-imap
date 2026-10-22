@@ -144,9 +144,9 @@ const api = {
 	moveEmail: (mailboxId: string, id: string, folderId: string) =>
 		post<void>(`/api/v1/mailboxes/${mailboxId}/emails/${id}/move`, { folderId }),
 	getThread: (mailboxId: string, threadId: string, opts?: { signal?: AbortSignal; scope?: MailScope }) =>
-		get<Email[]>(`/api/v1/mailboxes/${mailboxId}/threads/${threadId}`, { signal: opts?.signal, params:{scope:opts?.scope ?? "normal"} }),
+		get<Email[]>(`/api/v1/mailboxes/${mailboxId}/threads/${encodeURIComponent(threadId)}`, { signal: opts?.signal, params:{scope:opts?.scope ?? "normal"} }),
 	markThreadRead: (mailboxId: string, threadId: string, scope: MailScope = "normal") =>
-		post<void>(`/api/v1/mailboxes/${mailboxId}/threads/${threadId}/read?scope=${scope}`),
+		post<void>(`/api/v1/mailboxes/${mailboxId}/threads/${encodeURIComponent(threadId)}/read?scope=${scope}`),
 	getAttachment: (mailboxId: string, emailId: string, attachmentId: string) =>
 		get<Blob>(`/api/v1/mailboxes/${mailboxId}/emails/${emailId}/attachments/${attachmentId}`, { responseType: "blob" }),
 	saveDraft: (
@@ -209,8 +209,8 @@ const api = {
 		del<void>(`/api/v1/mailboxes/${mailboxId}/aliases/${encodeURIComponent(address)}`),
 
 	// Search
-	searchEmails: (mailboxId: string, params: Record<string, string>) =>
-		get<EmailListResponse | Email[]>(`/api/v1/mailboxes/${mailboxId}/search`, { params }),
+	searchEmails: (mailboxId: string, params: Record<string, string>, opts?: { signal?: AbortSignal }) =>
+		get<EmailListResponse | Email[]>(`/api/v1/mailboxes/${mailboxId}/search`, { params, signal: opts?.signal }),
 };
 
 export default api;

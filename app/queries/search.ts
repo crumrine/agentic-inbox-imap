@@ -24,7 +24,7 @@ export function useSearchEmails(
 		queryKey: mailboxId && query
 			? queryKeys.search.results(mailboxId, query, page)
 			: ["search", "_disabled"],
-		queryFn: async () => {
+		queryFn: async ({ signal }) => {
 			const parsed = parseSearchQuery(query);
 			const params: Record<string, string> = {
 				page: String(page),
@@ -43,7 +43,7 @@ export function useSearchEmails(
 				params.is_starred = String(parsed.is_starred);
 			if (parsed.has_attachment) params.has_attachment = "true";
 
-			const data = await api.searchEmails(mailboxId!, params) as
+			const data = await api.searchEmails(mailboxId!, params, { signal }) as
 				| SearchResponse
 				| Email[];
 			if (data && typeof data === "object" && "emails" in data) {
@@ -56,5 +56,11 @@ export function useSearchEmails(
 			return { results: arr, totalCount: arr.length };
 		},
 		enabled: !!mailboxId && !!query,
+		// Other clients can move results into/out of Spam without a local mutation.
+		refetchInterval: 30_000,
+		refetchOnMount: "always",
+		refetchOnWindowFocus: true,
+		// Surface a failed refresh immediately; the next poll can recover.
+		retry: false,
 	});
 }

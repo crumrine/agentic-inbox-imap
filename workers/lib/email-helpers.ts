@@ -490,7 +490,9 @@ export function toClientEmail(email: object): Record<string, unknown> {
 		if (key in row) projected[key] = row[key];
 	}
     if (row.folder_id === Folders.SPAM) {
-        for (const key of ['subject', 'sender', 'recipient', 'cc', 'bcc', 'in_reply_to', 'email_references', 'message_id', 'thread_id']) {
+        // thread_id is an opaque lookup key, not display text. Truncating it
+        // loses messages or selects an unrelated thread sharing that prefix.
+        for (const key of ['subject', 'sender', 'recipient', 'cc', 'bcc', 'in_reply_to', 'email_references', 'message_id']) {
             if (key in projected) projected[key] = suspiciousText(projected[key], key === 'subject' ? 2048 : 512);
         }
         projected.body = suspiciousText(row.body);
