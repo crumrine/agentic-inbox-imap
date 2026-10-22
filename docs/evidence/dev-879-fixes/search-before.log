@@ -1,0 +1,18 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Normal search must remove alternate-client quarantine within the refresh window
+
+1 !== 0
+
+    at file:///home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/scripts/quarantine-search-browser.mjs:60:10 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 0,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.15.0

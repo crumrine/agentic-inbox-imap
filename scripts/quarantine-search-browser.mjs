@@ -10,7 +10,7 @@ const hostile=`<script>window.previewExecuted=1</script><img src="https://tracke
 const results=[];
 const oversizedBody=hostile+'x'.repeat(20000);
 try {
- for(const width of [1440,390]) {
+ for(const width of (process.env.BROWSER_WIDTHS || '1440,390').split(',').map(Number)) {
   const page=await browser.newPage({viewport:{width,height:1000}});page.setDefaultTimeout(60000);page.setDefaultNavigationTimeout(120000);const network=[],errors=[],actions=[];
   const rows=[{id:'evil',subject:'Synthetic suspicious message',sender:'sender@example.test',recipient:'ui@example.test',folder_id:'spam',date:'2026-10-21T10:00:00Z',read:true,body:oversizedBody,thread_id:'shared',snippet:hostile,attachments:[{id:'image',filename:'track.png',mimetype:'image/png',size:10}]},{id:'trusted',subject:'Trusted conversation',sender:'friend@example.test',recipient:'ui@example.test',folder_id:'inbox',date:'2026-10-21T09:00:00Z',read:true,body:'<p>Normal</p>',thread_id:'shared',snippet:'Normal',attachments:[]}];
   let revision=0,disposition='unknown',pref='none',prefRevision=0, searchCalls=0, failSearch=false;
@@ -56,6 +56,7 @@ try {
   await page.getByRole('region',{name:'Safe Spam preview'}).waitFor();
   await threadResponse;
   assert.equal(threadRequests[0],rows[0].thread_id,'API client must encode lossless thread path');
+  await page.getByRole('button',{name:'Back to Spam',exact:true}).click();
   async function search(q) {
     const input=page.getByPlaceholder('Search emails...', {exact:false});
     if(!await input.isVisible()) await page.getByRole('button',{name:'Search',exact:true}).click();

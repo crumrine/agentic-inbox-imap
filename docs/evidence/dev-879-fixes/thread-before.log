@@ -1,0 +1,61 @@
+
+ RUN  v4.1.11 /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mFailed to write to log file Error: EROFS: read-only file system, open '/home/brian/r9-jobs/home/.config/.wrangler/logs/wrangler-2026-10-22_06-59-54_792.log'[0m
+
+      at open (node:internal/fs/promises:640:25)
+      at writeFile (node:internal/fs/promises:1257:14)
+      at /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@cloudflare/vitest-pool-workers/node_modules/wrangler/wrangler-dist/cli.js:61259:7
+      at Mutex.runWith (/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@cloudflare/vitest-pool-workers/node_modules/miniflare/dist/src/index.js:85487:48)
+      at appendToDebugLogFile (/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@cloudflare/vitest-pool-workers/node_modules/wrangler/wrangler-dist/cli.js:61256:3) {
+    errno: -30,
+    code: 'EROFS',
+    syscall: 'open',
+    path: '/home/brian/r9-jobs/home/.config/.wrangler/logs/wrangler-2026-10-22_06-59-54_792.log'
+  }
+
+
+[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mWould have written: [0m
+
+  --- 2026-10-22T06:59:56.216Z debug
+  🪵  Writing logs to "/home/brian/r9-jobs/home/.config/.wrangler/logs/wrangler-2026-10-22_06-59-54_792.log"
+  ---
+
+
+
+ ❯ test/quarantine.test.ts (9 tests | 1 failed | 8 skipped) 1870ms
+     × preserves long operational IDs without prefix collisions across REST and shared tools 688ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/quarantine.test.ts > Spam thread identity round trips > preserves long operational IDs without prefix collisions across REST and shared tools
+AssertionError: expected 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…' to be 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…' // Object.is equality
+
+Expected: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/?&é/?&é/?&é/?&é/?&é/?&é/?&é/?&é/?&é/?&é/?&é/?&é/?&é/?&é/?&é/?&é/?&é/?&é/?&é/?&é/?&é/?&é"
+Received: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+ ❯ test/quarantine.test.ts:222:30
+    220|     }
+    221|     const detail = await json('/emails/long-a?scope=spam');
+    222|     expect(detail.thread_id).toBe(threadId);
+       |                              ^
+    223|     expect(detail.subject.length).toBe(2048);
+    224|     expect(detail.body.length).toBe(16384);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 skipped (9)
+   Start at  06:59:56
+   Duration  33.23s (transform 10.14s, setup 7.80s, import 19.49s, tests 1.87s, environment 0ms)
+
+🪵  Logs were written to "/home/brian/r9-jobs/home/.config/.wrangler/logs/wrangler-2026-10-22_06-59-54_792.log"
+npm notice
+npm notice New major version of npm available! 11.12.1 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

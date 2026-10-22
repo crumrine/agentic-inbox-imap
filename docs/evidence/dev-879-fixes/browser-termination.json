@@ -1,0 +1,11 @@
+{
+  "browserSession": 98021,
+  "serverSession": 49869,
+  "exitCode": 143,
+  "browserStdoutBytes": 0,
+  "browserStderrBytes": 0,
+  "assertionFailureObserved": false,
+  "cause": "unknown",
+  "advisory": "jev-browser-terminated.json",
+  "repair": "Run Vite and mobile Chromium in one command with owned-process cleanup"
+}

@@ -1,0 +1,20 @@
+{
+  "node": "24.15.0",
+  "npm": "11.12.1",
+  "packages": {
+    "typescript": "5.9.3",
+    "vite": "6.4.1",
+    "vitest": "4.1.11",
+    "pool": "0.22.0",
+    "rootWrangler": "4.74.0",
+    "rootWorkerd": "1.20260312.1",
+    "playwright": "1.64.1",
+    "poolWrangler": "4.124.0",
+    "poolWorkerd": "1.20260815.1"
+  },
+  "sourceCI": {
+    "node": "24.21.0",
+    "npm": "11.19.0",
+    "workerJob": 119689464391
+  }
+}

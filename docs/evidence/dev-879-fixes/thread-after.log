@@ -1,0 +1,28 @@
+
+ RUN  v4.1.11 /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+ ❯ test/quarantine.test.ts (9 tests | 1 failed) 2802ms
+     × preserves long operational IDs without prefix collisions across REST and shared tools 206ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/quarantine.test.ts > Spam thread identity round trips > preserves long operational IDs without prefix collisions across REST and shared tools
+TypeError: (intermediate value).map is not a function
+ ❯ test/quarantine.test.ts:232:83
+    230|     const toolDetail = await toolGetEmail(b.e, BOX, 'long-a', 'spam') …
+    231|     expect(toolDetail.thread_id).toBe(threadId);
+    232|     expect((await toolGetThread(b.e, BOX, toolDetail.thread_id, 'spam'…
+       |                                                                                   ^
+    233|     expect((await request(b.e,base + path + '/read?scope=spam',{})).st…
+    234|     expect((await stub.getEmail('normal-collision'))?.read).toBe(false…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+   Start at  07:02:10
+   Duration  24.76s (transform 8.21s, setup 10.94s, import 8.64s, tests 2.80s, environment 1ms)
