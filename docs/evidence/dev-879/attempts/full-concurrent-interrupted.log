@@ -1,0 +1,42 @@
+
+> test
+> vitest run --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000
+
+
+ RUN  v4.1.11 /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+ ❯ test/imap-append.test.ts (35 tests | 11 failed) 495769ms
+     × never dedups in inbox either 32786ms
+     × appends twice as two rows when the message carries no Message-ID 14894ms
+     × leaves no orphaned R2 object behind when it deduplicates 32520ms
+     × 404s an unknown folder without saying anything about the mailbox 25306ms
+     × 404s an unknown mailbox 30475ms
+     × 413s a body past the size cap, from the declared length alone 42503ms
+     × 413s a body past the size cap when the length was never declared 31806ms
+     × 400s an empty body 31502ms
+     × stores a message with no headers at all rather than refusing it 49104ms
+     × accepts a message right at the size cap 59541ms
+     × drops an absurdly long flag atom without failing the append 32765ms
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.

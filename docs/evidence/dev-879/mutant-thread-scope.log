@@ -1,0 +1,39 @@
+
+ RUN  v4.1.11 /home/brian/r9-jobs/home/.cache/symphony/runs/run-i10c_03i/dev879-mutant-O6B6pw
+
+ ❯ test/quarantine.test.ts (8 tests | 1 failed | 7 skipped) 444ms
+     × excludes forged-chain Spam from normal bodies, participants, unread and needs-reply; explicit review isolates Spam 267ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 skipped (8)
+   Start at  06:35:18
+   Duration  17.61s (transform 6.09s, setup 6.47s, import 7.55s, tests 444ms, environment 1ms)
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/quarantine.test.ts > quarantine through actual authenticated app handlers and shared tools > excludes forged-chain Spam from normal bodies, participants, unread and needs-reply; explicit review isolates Spam
+AssertionError: expected [ 'trusted', 'sent', 'evil' ] to deeply equal [ 'trusted', 'sent' ]
+
+- Expected
++ Received
+
+  [
+    "trusted",
+    "sent",
++   "evil",
+  ]
+
+ ❯ test/quarantine.test.ts:100:88
+     98|     expect(list.emails[0]).toMatchObject({thread_count:2,thread_unread…
+     99|     expect(JSON.stringify(list)).not.toContain('QUARANTINE_CANARY');
+    100|     const normal=await json('/threads/forged-chain');expect(normal.map…
+       |                                                                                        ^
+    101|     expect((await request(bindings().e,base+'/emails/evil')).status).t…
+    102|     expect((await json('/emails/evil?scope=spam')).id).toBe('evil');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

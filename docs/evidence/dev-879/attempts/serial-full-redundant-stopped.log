@@ -1,0 +1,10 @@
+
+> test
+> vitest run --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000
+
+
+ RUN  v4.1.11 /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+

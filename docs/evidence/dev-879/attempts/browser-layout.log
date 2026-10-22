@@ -1,0 +1,62 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+locator.click: Timeout 60000ms exceeded.
+Call log:
+[2m  - waiting for getByText('Synthetic suspicious message', { exact: true })[22m
+[2m    - locator resolved to <span class="text-kumo-subtle">Synthetic suspicious message</span>[22m
+[2m  - attempting click action[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <a data-discover="true" href="/mailbox/ui@example.test/emails/inbox" class="flex items-center gap-3 py-2 px-3 rounded-md text-sm transition-colors text-kumo-strong hover:bg-kumo-tint">…</a> from <div class="fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0 md:z-0 -translate-x-full">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m    - waiting 20ms[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - <a data-discover="true" href="/mailbox/ui@example.test/emails/inbox" class="flex items-center gap-3 py-2 px-3 rounded-md text-sm transition-colors text-kumo-strong hover:bg-kumo-tint">…</a> from <div class="fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0 md:z-0 -translate-x-full">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m      - waiting 100ms[22m
+[2m    94 × waiting for element to be visible, enabled and stable[22m
+[2m       - element is visible, enabled and stable[22m
+[2m       - scrolling into view if needed[22m
+[2m       - done scrolling[22m
+[2m       - <a data-discover="true" href="/mailbox/ui@example.test/emails/inbox" class="flex items-center gap-3 py-2 px-3 rounded-md text-sm transition-colors text-kumo-strong hover:bg-kumo-tint">…</a> from <div class="fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0 md:z-0 -translate-x-full">…</div> subtree intercepts pointer events[22m
+[2m     - retrying click action[22m
+[2m       - waiting 500ms[22m
+
+    at /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/scripts/quarantine-browser.mjs:41:69 {
+  log: [
+    "  - waiting for getByText('Synthetic suspicious message', { exact: true })",
+    '    - locator resolved to <span class="text-kumo-subtle">Synthetic suspicious message</span>',
+    '  - attempting click action',
+    '    2 × waiting for element to be visible, enabled and stable',
+    '      - element is visible, enabled and stable',
+    '      - scrolling into view if needed',
+    '      - done scrolling',
+    '      - <a data-discover="true" href="/mailbox/ui@example.test/emails/inbox" class="flex items-center gap-3 py-2 px-3 rounded-md text-sm transition-colors text-kumo-strong hover:bg-kumo-tint">…</a> from <div class="fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0 md:z-0 -translate-x-full">…</div> subtree intercepts pointer events',
+    '    - retrying click action',
+    '    - waiting 20ms',
+    '    2 × waiting for element to be visible, enabled and stable',
+    '      - element is visible, enabled and stable',
+    '      - scrolling into view if needed',
+    '      - done scrolling',
+    '      - <a data-discover="true" href="/mailbox/ui@example.test/emails/inbox" class="flex items-center gap-3 py-2 px-3 rounded-md text-sm transition-colors text-kumo-strong hover:bg-kumo-tint">…</a> from <div class="fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0 md:z-0 -translate-x-full">…</div> subtree intercepts pointer events',
+    '    - retrying click action',
+    '      - waiting 100ms',
+    '    94 × waiting for element to be visible, enabled and stable',
+    '       - element is visible, enabled and stable',
+    '       - scrolling into view if needed',
+    '       - done scrolling',
+    '       - <a data-discover="true" href="/mailbox/ui@example.test/emails/inbox" class="flex items-center gap-3 py-2 px-3 rounded-md text-sm transition-colors text-kumo-strong hover:bg-kumo-tint">…</a> from <div class="fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0 md:z-0 -translate-x-full">…</div> subtree intercepts pointer events',
+    '     - retrying click action',
+    '       - waiting 500ms'
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v24.15.0

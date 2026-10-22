@@ -1,0 +1,26 @@
+
+ RUN  v4.1.11 /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/types.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/interfaces.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-json-schema-compat.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/validation/ajv-provider.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/server.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/helpers.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/server/completable.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/uriTemplate.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/toolNameValidation.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/mcp-server.js" points to missing source files
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  06:34:10
+   Duration  17.25s (transform 5.03s, setup 6.12s, import 6.82s, tests 953ms, environment 1ms)
+
