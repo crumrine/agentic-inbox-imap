@@ -33,4 +33,3 @@ AssertionError: expected 200 to be 404 // Object.is equality
     103|     expect((await json('/threads/forged-chain?scope=spam')).map((e:any…
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
-

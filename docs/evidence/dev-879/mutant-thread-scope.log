@@ -36,4 +36,3 @@ AssertionError: expected [ 'trusted', 'sent', 'evil' ] to deeply equal [ 'truste
     102|     expect((await json('/emails/evil?scope=spam')).id).toBe('evil');
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
-

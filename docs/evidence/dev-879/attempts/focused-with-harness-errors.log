@@ -88,4 +88,3 @@ The latest test that might've caused the error is "rolls back destination UID an
      Errors  2 errors
    Start at  06:10:56
    Duration  135.41s (transform 27.17s, setup 30.98s, import 63.21s, tests 18.51s, environment 1ms)
-

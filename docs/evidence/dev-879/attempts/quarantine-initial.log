@@ -26,4 +26,3 @@ TypeError: Cannot read properties of undefined (reading 'map')
       Tests  1 failed | 5 passed (6)
    Start at  05:58:21
    Duration  49.36s (transform 12.94s, setup 17.93s, import 17.08s, tests 2.09s, environment 1ms)
-

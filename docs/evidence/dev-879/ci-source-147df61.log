@@ -136,20 +136,20 @@
 2026-10-22T06:25:58.4142586Z   INBOX_LOCAL_ONLY: 1
 2026-10-22T06:25:58.4142959Z   WRANGLER_SEND_METRICS: false
 2026-10-22T06:25:58.4143343Z ##[endgroup]
-2026-10-22T06:26:39.3094490Z 
+2026-10-22T06:26:39.3094490Z
 2026-10-22T06:26:39.3107113Z added 562 packages, and audited 563 packages in 41s
-2026-10-22T06:26:39.3107578Z 
+2026-10-22T06:26:39.3107578Z
 2026-10-22T06:26:39.3108448Z 208 packages are looking for funding
 2026-10-22T06:26:39.3109279Z   run `npm fund` for details
-2026-10-22T06:26:39.5237916Z 
+2026-10-22T06:26:39.5237916Z
 2026-10-22T06:26:39.5238782Z 47 vulnerabilities (7 low, 9 moderate, 30 high, 1 critical)
-2026-10-22T06:26:39.5239208Z 
+2026-10-22T06:26:39.5239208Z
 2026-10-22T06:26:39.5239609Z To address issues that do not require attention, run:
 2026-10-22T06:26:39.5240228Z   npm audit fix
-2026-10-22T06:26:39.5240461Z 
+2026-10-22T06:26:39.5240461Z
 2026-10-22T06:26:39.5240854Z To address all issues (including breaking changes), run:
 2026-10-22T06:26:39.5241370Z   npm audit fix --force
-2026-10-22T06:26:39.5241564Z 
+2026-10-22T06:26:39.5241564Z
 2026-10-22T06:26:39.5241736Z Run `npm audit` for details.
 2026-10-22T06:26:39.5256512Z npm warn install-scripts 7 packages have install scripts not yet covered by allowScripts:
 2026-10-22T06:26:39.5258212Z npm warn install-scripts   esbuild@0.28.1 (postinstall: node install.js)
@@ -168,19 +168,19 @@
 2026-10-22T06:26:39.6407231Z   INBOX_LOCAL_ONLY: 1
 2026-10-22T06:26:39.6407510Z   WRANGLER_SEND_METRICS: false
 2026-10-22T06:26:39.6407782Z ##[endgroup]
-2026-10-22T06:26:39.7443490Z 
+2026-10-22T06:26:39.7443490Z
 2026-10-22T06:26:39.7444102Z > typecheck
 2026-10-22T06:26:39.7444744Z > npm run cf-typegen && react-router typegen && tsc -b
-2026-10-22T06:26:39.7445082Z 
-2026-10-22T06:26:39.8478066Z 
+2026-10-22T06:26:39.7445082Z
+2026-10-22T06:26:39.8478066Z
 2026-10-22T06:26:39.8478713Z > cf-typegen
 2026-10-22T06:26:39.8479362Z > wrangler types
-2026-10-22T06:26:39.8479717Z 
-2026-10-22T06:26:40.7817392Z 
+2026-10-22T06:26:39.8479717Z
+2026-10-22T06:26:40.7817392Z
 2026-10-22T06:26:40.7818693Z  ⛅️ wrangler 4.74.0 (update available 4.151.3)
 2026-10-22T06:26:40.7819903Z ──────────────────────────────────────────────
 2026-10-22T06:26:40.8106432Z Generating project types...
-2026-10-22T06:26:40.8106815Z 
+2026-10-22T06:26:40.8106815Z
 2026-10-22T06:26:40.8168745Z declare namespace Cloudflare {
 2026-10-22T06:26:40.8169467Z 	interface GlobalProps {
 2026-10-22T06:26:40.8170072Z 		mainModule: typeof import("./workers/app");
@@ -205,18 +205,18 @@
 2026-10-22T06:26:40.8183274Z declare namespace NodeJS {
 2026-10-22T06:26:40.8184256Z 	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "DOMAINS" | "EMAIL_ADDRESSES">> {}
 2026-10-22T06:26:40.8185125Z }
-2026-10-22T06:26:40.8185300Z 
+2026-10-22T06:26:40.8185300Z
 2026-10-22T06:26:40.8185499Z Generating runtime types...
-2026-10-22T06:26:40.8185759Z 
+2026-10-22T06:26:40.8185759Z
 2026-10-22T06:26:42.8154308Z Runtime types generated.
-2026-10-22T06:26:42.8154658Z 
-2026-10-22T06:26:42.8161323Z 
+2026-10-22T06:26:42.8154658Z
+2026-10-22T06:26:42.8161323Z
 2026-10-22T06:26:42.8177151Z ✨ Types written to worker-configuration.d.ts
-2026-10-22T06:26:42.8177746Z 
+2026-10-22T06:26:42.8177746Z
 2026-10-22T06:26:42.8184702Z 📖 Read about runtime types
 2026-10-22T06:26:42.8185770Z https://developers.cloudflare.com/workers/languages/typescript/#generate-types
 2026-10-22T06:26:42.8187240Z 📣 Remember to rerun 'wrangler types' after you change your wrangler.jsonc file.
-2026-10-22T06:26:42.8187932Z 
+2026-10-22T06:26:42.8187932Z
 2026-10-22T06:26:53.8866890Z ##[group]Run npm test -- --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000
 2026-10-22T06:26:53.8867481Z [36;1mnpm test -- --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000[0m
 2026-10-22T06:26:53.8928364Z shell: /usr/bin/bash -e {0}
@@ -224,42 +224,42 @@
 2026-10-22T06:26:53.8928829Z   INBOX_LOCAL_ONLY: 1
 2026-10-22T06:26:53.8929089Z   WRANGLER_SEND_METRICS: false
 2026-10-22T06:26:53.8929333Z ##[endgroup]
-2026-10-22T06:26:53.9961226Z 
+2026-10-22T06:26:53.9961226Z
 2026-10-22T06:26:53.9961691Z > test
 2026-10-22T06:26:53.9962780Z > vitest run --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000
-2026-10-22T06:26:53.9963359Z 
-2026-10-22T06:26:55.4794238Z 
+2026-10-22T06:26:53.9963359Z
+2026-10-22T06:26:55.4794238Z
 2026-10-22T06:26:55.4797567Z [1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/home/runner/work/agentic-inbox-imap/agentic-inbox-imap[39m
-2026-10-22T06:26:55.4798459Z 
+2026-10-22T06:26:55.4798459Z
 2026-10-22T06:26:55.5712024Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:26:55.5713673Z 
-2026-10-22T06:26:55.5713683Z 
+2026-10-22T06:26:55.5713673Z
+2026-10-22T06:26:55.5713683Z
 2026-10-22T06:26:57.9341547Z [90mstdout[2m | test/alias-wildcard.test.ts[2m > [22m[2minbound delivery through a domain wildcard[2m > [22m[2mstops being a delivery target when its mailbox is deleted
 2026-10-22T06:26:57.9343946Z [22m[39mRejecting email: no mailbox or alias matches any recipient.
-2026-10-22T06:26:57.9344370Z 
+2026-10-22T06:26:57.9344370Z
 2026-10-22T06:26:57.9916286Z [90mstdout[2m | test/alias-wildcard.test.ts[2m > [22m[2minbound delivery through a domain wildcard[2m > [22m[2mstill refuses an address it does not cover (DEV-700)
 2026-10-22T06:26:57.9917692Z [22m[39mRejecting email: no mailbox or alias matches any recipient.
-2026-10-22T06:26:57.9918040Z 
+2026-10-22T06:26:57.9918040Z
 2026-10-22T06:26:58.1071376Z [90mstdout[2m | test/alias-wildcard.test.ts[2m > [22m[2ma wildcard matches the envelope recipient and nothing else[2m > [22m[2mrefuses a covered address named only in the To header
 2026-10-22T06:26:58.1073377Z [22m[39mRejecting email: no mailbox or alias matches any recipient.
-2026-10-22T06:26:58.1073786Z 
+2026-10-22T06:26:58.1073786Z
 2026-10-22T06:26:58.1576177Z [90mstdout[2m | test/alias-wildcard.test.ts[2m > [22m[2ma wildcard matches the envelope recipient and nothing else[2m > [22m[2mrefuses a local part the sender pointed at a domain we never see
 2026-10-22T06:26:58.1578431Z [22m[39mRejecting email: no mailbox or alias matches any recipient.
-2026-10-22T06:26:58.1578884Z 
+2026-10-22T06:26:58.1578884Z
 2026-10-22T06:26:58.2068756Z [90mstdout[2m | test/alias-wildcard.test.ts[2m > [22m[2ma wildcard matches the envelope recipient and nothing else[2m > [22m[2mmatches nothing at all when there is no envelope recipient
 2026-10-22T06:26:58.2070944Z [22m[39mRejecting email: no mailbox or alias matches any recipient.
-2026-10-22T06:26:58.2071459Z 
+2026-10-22T06:26:58.2071459Z
 2026-10-22T06:27:00.4014411Z  [32m✓[39m test/alias-wildcard.test.ts [2m([22m[2m46 tests[22m[2m)[22m[33m 2914[2mms[22m[39m
 2026-10-22T06:27:00.4063461Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:27:00.4065147Z 
-2026-10-22T06:27:00.4065160Z 
+2026-10-22T06:27:00.4065147Z
+2026-10-22T06:27:00.4065160Z
 2026-10-22T06:27:02.8728554Z [90mstderr[2m | test/alias-display-name.test.ts[2m > [22m[2mSMTP submission uses the alias's display name[2m > [22m[2mrefuses the whole rewrite when the From names more than one mailbox
 2026-10-22T06:27:02.8730825Z [22m[39mSUBMIT: could not rewrite From for automatic send-as; sending as the mailbox
-2026-10-22T06:27:02.8731479Z 
+2026-10-22T06:27:02.8731479Z
 2026-10-22T06:27:03.0885480Z  [32m✓[39m test/alias-display-name.test.ts [2m([22m[2m49 tests[22m[2m)[22m[33m 1582[2mms[22m[39m
 2026-10-22T06:27:03.0927499Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:27:03.0929226Z 
-2026-10-22T06:27:03.0929238Z 
+2026-10-22T06:27:03.0929226Z
+2026-10-22T06:27:03.0929238Z
 2026-10-22T06:27:12.5477662Z console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
 2026-10-22T06:27:13.9455549Z console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
 2026-10-22T06:27:13.9543637Z console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
@@ -276,11 +276,11 @@
 2026-10-22T06:27:15.5668101Z      [33m[2m✓[22m[39m a moved message is fetchable in the destination and gone from the source [33m 1415[2mms[22m[39m
 2026-10-22T06:27:15.5669730Z      [33m[2m✓[22m[39m a copied message is fetchable at both uids from the one shared object [33m 1701[2mms[22m[39m
 2026-10-22T06:27:15.5731216Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:27:15.5733193Z 
-2026-10-22T06:27:15.5734664Z 
+2026-10-22T06:27:15.5733193Z
+2026-10-22T06:27:15.5734664Z
 2026-10-22T06:27:19.1858174Z [90mstderr[2m | test/imap-append.test.ts[2m > [22m[2mAPPEND: internalDate[2m > [22m[2mfalls back to receive time on an unparseable internalDate rather than refusing
 2026-10-22T06:27:19.1859850Z [22m[39mAPPEND: unparseable internalDate; using receive time
-2026-10-22T06:27:19.1860319Z 
+2026-10-22T06:27:19.1860319Z
 2026-10-22T06:27:55.1481533Z  [32m✓[39m test/imap-append.test.ts [2m([22m[2m35 tests[22m[2m)[22m[33m 38399[2mms[22m[39m
 2026-10-22T06:27:55.1483426Z      [33m[2m✓[22m[39m defaults to receive time when absent, not to the Date header [33m 322[2mms[22m[39m
 2026-10-22T06:27:55.1485408Z      [33m[2m✓[22m[39m falls back to receive time on an unparseable internalDate rather than refusing [33m 377[2mms[22m[39m
@@ -302,14 +302,14 @@
 2026-10-22T06:27:55.1506392Z      [33m[2m✓[22m[39m accepts a message right at the size cap [33m 5014[2mms[22m[39m
 2026-10-22T06:27:55.1507445Z      [33m[2m✓[22m[39m drops an absurdly long flag atom without failing the append [33m 4988[2mms[22m[39m
 2026-10-22T06:27:55.1537692Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:27:55.1538579Z 
-2026-10-22T06:27:55.1538585Z 
+2026-10-22T06:27:55.1538579Z
+2026-10-22T06:27:55.1538585Z
 2026-10-22T06:28:00.0718618Z console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
 2026-10-22T06:28:00.7335388Z console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
 2026-10-22T06:28:01.4985583Z console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
 2026-10-22T06:28:01.4989366Z [90mstderr[2m | test/imap-read-api.test.ts[2m > [22m[2mGET /{mailbox}/messages/{uid}/raw[2m > [22m[2mfalls back to synthesis when the stored object has vanished from R2
 2026-10-22T06:28:01.4991469Z [22m[39mRaw message missing from R2 for email gone; synthesizing
-2026-10-22T06:28:01.4992082Z 
+2026-10-22T06:28:01.4992082Z
 2026-10-22T06:28:03.4908410Z console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
 2026-10-22T06:28:03.4980957Z console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
 2026-10-22T06:28:04.7008183Z  [32m✓[39m test/imap-read-api.test.ts [2m([22m[2m26 tests[22m[2m)[22m[33m 8455[2mms[22m[39m
@@ -323,47 +323,47 @@
 2026-10-22T06:28:04.7016980Z      [33m[2m✓[22m[39m 404s distinctly for unknown mailbox, folder and uid, leaking nothing [33m 1064[2mms[22m[39m
 2026-10-22T06:28:04.7017874Z      [33m[2m✓[22m[39m finds a uid only inside the folder it was asked for [33m 1268[2mms[22m[39m
 2026-10-22T06:28:04.7051322Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:04.7053051Z 
-2026-10-22T06:28:04.7053064Z 
+2026-10-22T06:28:04.7053051Z
+2026-10-22T06:28:04.7053064Z
 2026-10-22T06:28:06.8968688Z  [32m✓[39m test/imap-search-api.test.ts [2m([22m[2m42 tests[22m[2m)[22m[33m 1112[2mms[22m[39m
 2026-10-22T06:28:06.9016543Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:06.9018070Z 
-2026-10-22T06:28:06.9018390Z 
+2026-10-22T06:28:06.9018070Z
+2026-10-22T06:28:06.9018390Z
 2026-10-22T06:28:08.5136480Z  [32m✓[39m test/imap-bodystructure.test.ts [2m([22m[2m29 tests[22m[2m)[22m[33m 562[2mms[22m[39m
 2026-10-22T06:28:08.5180473Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:08.5182746Z 
-2026-10-22T06:28:08.5182759Z 
+2026-10-22T06:28:08.5182746Z
+2026-10-22T06:28:08.5182759Z
 2026-10-22T06:28:10.7282329Z  [32m✓[39m test/send-as-alias.test.ts [2m([22m[2m23 tests[22m[2m)[22m[33m 1110[2mms[22m[39m
 2026-10-22T06:28:10.7330592Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:10.7333124Z 
-2026-10-22T06:28:10.7333153Z 
+2026-10-22T06:28:10.7333124Z
+2026-10-22T06:28:10.7333153Z
 2026-10-22T06:28:11.8773002Z console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
 2026-10-22T06:28:12.4875601Z [90mstderr[2m | test/imap-submit.test.ts[2m > [22m[2man upstream failure is a 502 and leaves no trace[2m > [22m[2mrecords no Sent row and stores no raw object
 2026-10-22T06:28:12.4877485Z [22m[39mSUBMIT: upstream refused a recipient: Error
-2026-10-22T06:28:12.4878255Z 
+2026-10-22T06:28:12.4878255Z
 2026-10-22T06:28:12.5935206Z [90mstderr[2m | test/imap-submit.test.ts[2m > [22m[2man upstream failure is a 502 and leaves no trace[2m > [22m[2mstill records the copy when only some recipients fail
 2026-10-22T06:28:12.5936396Z [22m[39mSUBMIT: upstream refused a recipient: Error
-2026-10-22T06:28:12.5936709Z 
+2026-10-22T06:28:12.5936709Z
 2026-10-22T06:28:12.5980763Z [90mstderr[2m | test/imap-submit.test.ts[2m > [22m[2man upstream failure is a 502 and leaves no trace[2m > [22m[2mstill records the copy when only some recipients fail
 2026-10-22T06:28:12.5982320Z [22m[39mSUBMIT: 1 of 2 recipients failed
-2026-10-22T06:28:12.5983164Z 
+2026-10-22T06:28:12.5983164Z
 2026-10-22T06:28:12.7221111Z [90mstderr[2m | test/imap-submit.test.ts[2m > [22m[2mMessage-ID handling[2m > [22m[2mgenerates and inserts one when the client sent none
 2026-10-22T06:28:12.7223057Z [22m[39mSUBMIT: message had no Message-ID; generated one. The client's own APPENDed Sent copy will not deduplicate against this row.
-2026-10-22T06:28:12.7223734Z 
+2026-10-22T06:28:12.7223734Z
 2026-10-22T06:28:13.2822986Z  [32m✓[39m test/imap-submit.test.ts [2m([22m[2m15 tests[22m[2m)[22m[33m 1487[2mms[22m[39m
 2026-10-22T06:28:13.2864826Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:13.2866441Z 
-2026-10-22T06:28:13.2866451Z 
+2026-10-22T06:28:13.2866441Z
+2026-10-22T06:28:13.2866451Z
 2026-10-22T06:28:14.6152129Z [90mstdout[2m | test/aliases.test.ts[2m > [22m[2mreceiveEmail: delivery through the alias registry[2m > [22m[2mstill ignores an address that is neither a mailbox nor an alias
 2026-10-22T06:28:14.6153826Z [22m[39mRejecting email: no mailbox or alias matches any recipient.
-2026-10-22T06:28:14.6154535Z 
+2026-10-22T06:28:14.6154535Z
 2026-10-22T06:28:14.6670589Z [90mstdout[2m | test/aliases.test.ts[2m > [22m[2mreceiveEmail: delivery through the alias registry[2m > [22m[2mstops delivering once the alias is removed
 2026-10-22T06:28:14.6671838Z [22m[39mRejecting email: no mailbox or alias matches any recipient.
-2026-10-22T06:28:14.6672213Z 
+2026-10-22T06:28:14.6672213Z
 2026-10-22T06:28:15.7870456Z  [32m✓[39m test/aliases.test.ts [2m([22m[2m29 tests[22m[2m)[22m[33m 1409[2mms[22m[39m
 2026-10-22T06:28:15.8085745Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:15.8112889Z 
-2026-10-22T06:28:15.8144716Z 
+2026-10-22T06:28:15.8112889Z
+2026-10-22T06:28:15.8144716Z
 2026-10-22T06:28:26.2591290Z  [32m✓[39m test/imap-flags-api.test.ts [2m([22m[2m26 tests[22m[2m)[22m[33m 9351[2mms[22m[39m
 2026-10-22T06:28:26.2593336Z      [33m[2m✓[22m[39m skips an unknown uid while still applying the rest of the batch [33m 321[2mms[22m[39m
 2026-10-22T06:28:26.2594971Z      [33m[2m✓[22m[39m only touches uids inside the folder it was asked for [33m 383[2mms[22m[39m
@@ -376,120 +376,120 @@
 2026-10-22T06:28:26.2601264Z      [33m[2m✓[22m[39m reads back through /messages exactly what the store returned [33m 1180[2mms[22m[39m
 2026-10-22T06:28:26.2602011Z      [33m[2m✓[22m[39m shows a \Seen store in the folder unseen count [33m 1368[2mms[22m[39m
 2026-10-22T06:28:26.2627889Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:26.2628768Z 
-2026-10-22T06:28:26.2628775Z 
+2026-10-22T06:28:26.2628768Z
+2026-10-22T06:28:26.2628775Z
 2026-10-22T06:28:28.2308236Z [90mstdout[2m | test/shadow-scoring.test.ts[2m > [22m[2mactual app email and authenticated REST in local workerd[2m > [22m[2mdoes not score unknown recipients
 2026-10-22T06:28:28.2309903Z [22m[39mRejecting email: no mailbox or alias matches any recipient.
-2026-10-22T06:28:28.2310203Z 
+2026-10-22T06:28:28.2310203Z
 2026-10-22T06:28:29.9067330Z  [32m✓[39m test/shadow-scoring.test.ts [2m([22m[2m20 tests[22m[2m)[22m[33m 1930[2mms[22m[39m
 2026-10-22T06:28:29.9068765Z      [33m[2m✓[22m[39m timeout scorer keeps delivery and records unavailable without preferences or AI [33m 1035[2mms[22m[39m
 2026-10-22T06:28:29.9105411Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:29.9106978Z 
-2026-10-22T06:28:29.9106988Z 
+2026-10-22T06:28:29.9106978Z
+2026-10-22T06:28:29.9106988Z
 2026-10-22T06:28:30.9579466Z  [32m✓[39m test/raw-mime-builder.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 137[2mms[22m[39m
 2026-10-22T06:28:30.9613586Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:30.9614494Z 
-2026-10-22T06:28:30.9614500Z 
+2026-10-22T06:28:30.9614494Z
+2026-10-22T06:28:30.9614500Z
 2026-10-22T06:28:32.5472297Z  [32m✓[39m test/imap-submit-send-as.test.ts [2m([22m[2m15 tests[22m[2m)[22m[33m 587[2mms[22m[39m
 2026-10-22T06:28:32.5504591Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:32.5505695Z 
-2026-10-22T06:28:32.5505910Z 
+2026-10-22T06:28:32.5505695Z
+2026-10-22T06:28:32.5505910Z
 2026-10-22T06:28:34.4000078Z  [32m✓[39m test/quarantine.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 433[2mms[22m[39m
 2026-10-22T06:28:34.4030110Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:34.4031718Z 
-2026-10-22T06:28:34.4031728Z 
+2026-10-22T06:28:34.4031718Z
+2026-10-22T06:28:34.4031728Z
 2026-10-22T06:28:35.5764510Z console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
 2026-10-22T06:28:36.4059166Z  [32m✓[39m test/app-email-api.test.ts [2m([22m[2m11 tests[22m[2m)[22m[33m 965[2mms[22m[39m
 2026-10-22T06:28:36.4092152Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:36.4093607Z 
-2026-10-22T06:28:36.4093615Z 
+2026-10-22T06:28:36.4093607Z
+2026-10-22T06:28:36.4093615Z
 2026-10-22T06:28:38.2951141Z  [32m✓[39m test/app-passwords-api.test.ts [2m([22m[2m23 tests[22m[2m)[22m[33m 832[2mms[22m[39m
 2026-10-22T06:28:38.2982850Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:38.2984416Z 
-2026-10-22T06:28:38.2984428Z 
+2026-10-22T06:28:38.2984416Z
+2026-10-22T06:28:38.2984428Z
 2026-10-22T06:28:40.1921970Z  [32m✓[39m test/imap-credentials.test.ts [2m([22m[2m20 tests[22m[2m)[22m[33m 1059[2mms[22m[39m
 2026-10-22T06:28:40.1954762Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:40.1956003Z 
-2026-10-22T06:28:40.1956136Z 
+2026-10-22T06:28:40.1956003Z
+2026-10-22T06:28:40.1956136Z
 2026-10-22T06:28:41.2642082Z [90mstdout[2m | test/inbound-reject.test.ts[2m > [22m[2minbound: mail we cannot deliver is rejected[2m > [22m[2mrejects an address that is neither a mailbox nor an alias, and writes nothing
 2026-10-22T06:28:41.2644543Z [22m[39mRejecting email: no mailbox or alias matches any recipient.
-2026-10-22T06:28:41.2645196Z 
+2026-10-22T06:28:41.2645196Z
 2026-10-22T06:28:41.3106339Z [90mstdout[2m | test/inbound-reject.test.ts[2m > [22m[2minbound: mail we cannot deliver is rejected[2m > [22m[2mrejects an alias whose target mailbox has since been deleted
 2026-10-22T06:28:41.3107733Z [22m[39mRejecting email: no mailbox or alias matches any recipient.
-2026-10-22T06:28:41.3108113Z 
+2026-10-22T06:28:41.3108113Z
 2026-10-22T06:28:41.3308733Z [90mstdout[2m | test/inbound-reject.test.ts[2m > [22m[2minbound: mail we cannot deliver is rejected[2m > [22m[2mrejects when a non-empty EMAIL_ADDRESSES filters every recipient out
 2026-10-22T06:28:41.3310683Z [22m[39mRejecting email: no recipient matches EMAIL_ADDRESSES.
-2026-10-22T06:28:41.3311189Z 
+2026-10-22T06:28:41.3311189Z
 2026-10-22T06:28:41.3527508Z [90mstdout[2m | test/inbound-reject.test.ts[2m > [22m[2minbound: mail we cannot deliver is rejected[2m > [22m[2mpermanently rejects an oversize message rather than retrying it
 2026-10-22T06:28:41.3529391Z [22m[39mRejecting email: 26214401 bytes exceeds the 26214400 byte limit.
-2026-10-22T06:28:41.3529950Z 
+2026-10-22T06:28:41.3529950Z
 2026-10-22T06:28:41.3729028Z [90mstdout[2m | test/inbound-reject.test.ts[2m > [22m[2minbound: mail we cannot deliver is rejected[2m > [22m[2mpermanently rejects a structurally invalid message
 2026-10-22T06:28:41.3731139Z [22m[39mRejecting email: invalid declared size 0.
-2026-10-22T06:28:41.3731417Z 
+2026-10-22T06:28:41.3731417Z
 2026-10-22T06:28:41.5164708Z [90mstdout[2m | test/inbound-reject.test.ts[2m > [22m[2mreject reasons are safe to put on the wire[2m > [22m[2mnever echo the rejected recipient back
 2026-10-22T06:28:41.5166016Z [22m[39mRejecting email: no mailbox or alias matches any recipient.
-2026-10-22T06:28:41.5166388Z 
+2026-10-22T06:28:41.5166388Z
 2026-10-22T06:28:41.5284456Z [90mstdout[2m | test/inbound-reject.test.ts[2m > [22m[2mreject reasons are safe to put on the wire[2m > [22m[2mnever echo the rejected recipient back
 2026-10-22T06:28:41.5286158Z [22m[39mRejecting email: no mailbox or alias matches any recipient.
-2026-10-22T06:28:41.5286541Z 
+2026-10-22T06:28:41.5286541Z
 2026-10-22T06:28:41.5319553Z [90mstdout[2m | test/inbound-reject.test.ts[2m > [22m[2mreject reasons are safe to put on the wire[2m > [22m[2mnever echo the rejected recipient back
 2026-10-22T06:28:41.5321104Z [22m[39mRejecting email: no mailbox or alias matches any recipient.
-2026-10-22T06:28:41.5321652Z 
+2026-10-22T06:28:41.5321652Z
 2026-10-22T06:28:41.5499863Z  [32m✓[39m test/inbound-reject.test.ts [2m([22m[2m11 tests[22m[2m)[22m[33m 306[2mms[22m[39m
 2026-10-22T06:28:41.5535024Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:41.5536621Z 
-2026-10-22T06:28:41.5536633Z 
+2026-10-22T06:28:41.5536621Z
+2026-10-22T06:28:41.5536633Z
 2026-10-22T06:28:44.4056726Z  [32m✓[39m test/imap-auth-route.test.ts [2m([22m[2m12 tests[22m[2m)[22m[33m 1841[2mms[22m[39m
 2026-10-22T06:28:44.4057699Z      [33m[2m✓[22m[39m hands the budget back after a successful login [33m 498[2mms[22m[39m
 2026-10-22T06:28:44.4089054Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:44.4090655Z 
-2026-10-22T06:28:44.4090665Z 
+2026-10-22T06:28:44.4090655Z
+2026-10-22T06:28:44.4090665Z
 2026-10-22T06:28:45.7012863Z  [32m✓[39m test/aliases-api.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 231[2mms[22m[39m
 2026-10-22T06:28:45.7042868Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:45.7044839Z 
-2026-10-22T06:28:45.7044851Z 
+2026-10-22T06:28:45.7044839Z
+2026-10-22T06:28:45.7044851Z
 2026-10-22T06:28:46.6990397Z  [32m✓[39m test/migration-9-uid-flags.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 177[2mms[22m[39m
 2026-10-22T06:28:46.7023508Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:46.7025349Z 
-2026-10-22T06:28:46.7025373Z 
+2026-10-22T06:28:46.7025349Z
+2026-10-22T06:28:46.7025373Z
 2026-10-22T06:28:48.2405661Z  [32m✓[39m test/mailbox-uid-allocation.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 721[2mms[22m[39m
 2026-10-22T06:28:48.2436589Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:48.2437726Z 
-2026-10-22T06:28:48.2437734Z 
+2026-10-22T06:28:48.2437726Z
+2026-10-22T06:28:48.2437734Z
 2026-10-22T06:28:49.5928154Z  [32m✓[39m test/raw-mime-outbound.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 316[2mms[22m[39m
 2026-10-22T06:28:49.5961740Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:49.5963655Z 
-2026-10-22T06:28:49.5963664Z 
+2026-10-22T06:28:49.5963655Z
+2026-10-22T06:28:49.5963664Z
 2026-10-22T06:28:50.6945553Z [90mstderr[2m | test/raw-mime-inbound.test.ts[2m > [22m[2mreceiveEmail: raw MIME storage (DEV-661)[2m > [22m[2mnever loses mail: if the R2 put throws, the email row is still created with raw_key NULL
 2026-10-22T06:28:50.6947319Z [22m[39mFailed to store raw MIME at raw/inbound-r2-outage@example.com/642227e5-9d8d-42c2-9da0-eaa62394e5be.eml: simulated R2 outage
-2026-10-22T06:28:50.6948109Z 
+2026-10-22T06:28:50.6948109Z
 2026-10-22T06:28:50.7828304Z [90mstderr[2m | test/raw-mime-inbound.test.ts[2m > [22m[2mreceiveEmail: precomputed BODYSTRUCTURE (DEV-678)[2m > [22m[2mleaves body_structure NULL when the raw bytes could not be stored
 2026-10-22T06:28:50.7830333Z [22m[39mFailed to store raw MIME at raw/bs-r2-outage@example.com/22560fa7-b390-4e6a-9d1f-96e40eafcd80.eml: simulated R2 outage
-2026-10-22T06:28:50.7830968Z 
+2026-10-22T06:28:50.7830968Z
 2026-10-22T06:28:50.8433738Z  [32m✓[39m test/raw-mime-inbound.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 217[2mms[22m[39m
 2026-10-22T06:28:50.8464488Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:50.8466733Z 
-2026-10-22T06:28:50.8466749Z 
+2026-10-22T06:28:50.8466733Z
+2026-10-22T06:28:50.8466749Z
 2026-10-22T06:28:52.3271016Z  [32m✓[39m test/imap-folder-status.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 484[2mms[22m[39m
 2026-10-22T06:28:52.3301702Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:52.3303076Z 
-2026-10-22T06:28:52.3303083Z 
+2026-10-22T06:28:52.3303076Z
+2026-10-22T06:28:52.3303083Z
 2026-10-22T06:28:53.4403794Z [90mstderr[2m | test/imap-raw-synthesis-budget.test.ts[2m > [22m[2mGET /{mailbox}/messages/{uid}/raw: legacy synthesis budget[2m > [22m[2mrefuses to synthesize when declared attachment size exceeds the budget, without reading R2
 2026-10-22T06:28:53.4407389Z [22m[39mLegacy message big1 is too large to reconstruct (26214410 bytes exceeds the 26214400 byte synthesis budget)
-2026-10-22T06:28:53.4408713Z 
+2026-10-22T06:28:53.4408713Z
 2026-10-22T06:28:53.4830165Z console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
 2026-10-22T06:28:53.5050820Z  [32m✓[39m test/imap-raw-synthesis-budget.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 150[2mms[22m[39m
 2026-10-22T06:28:53.5083242Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:53.5085066Z 
-2026-10-22T06:28:53.5085081Z 
+2026-10-22T06:28:53.5085066Z
+2026-10-22T06:28:53.5085081Z
 2026-10-22T06:28:54.5096070Z  [32m✓[39m test/mcp-email-projection.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 127[2mms[22m[39m
 2026-10-22T06:28:54.5127328Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:54.5128505Z 
-2026-10-22T06:28:54.5128513Z 
+2026-10-22T06:28:54.5128505Z
+2026-10-22T06:28:54.5128513Z
 2026-10-22T06:28:55.4601332Z  [32m✓[39m test/mint-script-compat.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 118[2mms[22m[39m
 2026-10-22T06:28:55.4634476Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:55.4636056Z 
-2026-10-22T06:28:55.4636065Z 
+2026-10-22T06:28:55.4636056Z
+2026-10-22T06:28:55.4636065Z
 2026-10-22T06:28:56.3586533Z Sourcemap for "/home/runner/work/agentic-inbox-imap/agentic-inbox-imap/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js" points to missing source files
 2026-10-22T06:28:56.3788580Z Sourcemap for "/home/runner/work/agentic-inbox-imap/agentic-inbox-imap/node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js" points to missing source files
 2026-10-22T06:28:56.3909365Z Sourcemap for "/home/runner/work/agentic-inbox-imap/agentic-inbox-imap/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.js" points to missing source files
@@ -506,19 +506,19 @@
 2026-10-22T06:28:57.2303364Z Sourcemap for "/home/runner/work/agentic-inbox-imap/agentic-inbox-imap/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/mcp-server.js" points to missing source files
 2026-10-22T06:28:57.4050730Z  [32m✓[39m test/quarantine-context.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 165[2mms[22m[39m
 2026-10-22T06:28:57.4084140Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:57.4086296Z 
-2026-10-22T06:28:57.4086478Z 
+2026-10-22T06:28:57.4086296Z
+2026-10-22T06:28:57.4086478Z
 2026-10-22T06:28:58.2947126Z  [32m✓[39m test/auth-rate-limit-do.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 60[2mms[22m[39m
 2026-10-22T06:28:58.2976265Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
-2026-10-22T06:28:58.2977821Z 
-2026-10-22T06:28:58.2977833Z 
+2026-10-22T06:28:58.2977821Z
+2026-10-22T06:28:58.2977833Z
 2026-10-22T06:28:59.2305858Z  [32m✓[39m test/migration-10-body-structure.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 113[2mms[22m[39m
-2026-10-22T06:28:59.2352919Z 
+2026-10-22T06:28:59.2352919Z
 2026-10-22T06:28:59.2358043Z [2m Test Files [22m [1m[32m32 passed[39m[22m[90m (32)[39m
 2026-10-22T06:28:59.2362655Z [2m      Tests [22m [1m[32m562 passed[39m[22m[90m (562)[39m
 2026-10-22T06:28:59.2363524Z [2m   Start at [22m 06:26:55
 2026-10-22T06:28:59.2365610Z [2m   Duration [22m 123.75s[2m (transform 1.61s, setup 14.65s, import 7.45s, tests 88.78s, environment 5ms)[22m
-2026-10-22T06:28:59.2367618Z 
+2026-10-22T06:28:59.2367618Z
 2026-10-22T06:28:59.3247123Z Post job cleanup.
 2026-10-22T06:28:59.4470185Z (node:2820) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 2026-10-22T06:28:59.4471702Z (Use `node --trace-deprecation ...` to show where the warning was created)

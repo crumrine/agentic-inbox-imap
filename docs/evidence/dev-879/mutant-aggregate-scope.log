@@ -40,4 +40,3 @@ AssertionError: expected { id: 'trusted', …(16) } to match object { thread_cou
     100|     const normal=await json('/threads/forged-chain');expect(normal.map…
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
-

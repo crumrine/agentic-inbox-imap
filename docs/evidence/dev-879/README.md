@@ -129,3 +129,6 @@ recorded in PR #8 and the DEV-879 implementation result.
 `verification.json` records SHA-256 digests for this bundle. Screenshots, logs
 and fixture data contain synthetic/public test material only; no private mail
 or credentials are included. Failed attempt logs are deliberately retained.
+
+Committed text logs normalize trailing whitespace and trailing blank lines;
+assertions, results, timing and failure text are preserved.
