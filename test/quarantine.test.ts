@@ -184,7 +184,7 @@ describe('quarantine transaction and attachment boundaries',()=>{
     const before=await query(stub,'SELECT id,uid_next FROM folders ORDER BY id');
     await runInDurableObject(stub,(_i,state)=>{state.storage.sql.exec("CREATE TRIGGER synthetic_feedback_failure BEFORE INSERT ON spam_dispositions BEGIN SELECT RAISE(ABORT, 'synthetic'); END");});
     const failed = await runInDurableObject(stub,async instance=>{
-      try { await instance.setSpamDisposition({emailId:'trusted',disposition:'spam',expectedRevision:0}); return false; } catch { return true; }
+      try { await (instance as import('../workers/durableObject').MailboxDO).setSpamDisposition({emailId:'trusted',disposition:'spam',expectedRevision:0}); return false; } catch { return true; }
     });
     expect(failed).toBe(true);
     expect((await stub.getEmail('trusted'))?.folder_id).toBe('inbox');
