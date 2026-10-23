@@ -57,6 +57,12 @@ as long as the client holds an IDLE open. Neither ever renumbers or removes
 a message inside a selection, so a deletion made elsewhere stays visible
 until the client reselects.
 
+Refresh reads one folder through the Worker status endpoint; unchanged UIDNEXT
+skips message metadata. Named STATUS uses that endpoint too (SIZE still needs
+a full metadata listing). An ambiguous display-name/ID match falls back to
+the folder listing to preserve IMAP naming rules. LIST and SELECT retain their
+full-folder lookup. Poll and IDLE request frequency is unchanged.
+
 IDLE is polling, not push. `DefaultIdleInterval` is 30s, which is the
 freshness a client watching a mailbox gets. A push channel from the Durable
 Object (Trellis DEV-674) is the better answer and is still open.
