@@ -294,6 +294,19 @@ export class MailboxDO extends DurableObject<Env> {
 
 	// ── Threaded queries (raw SQL — too complex for Drizzle's builder) ──
 
+	/**
+	 * One RPC for a refresh. Both SQL reads execute before yielding, so a
+	 * concurrent mailbox mutation cannot split the page and count snapshots.
+	 * Keep these calls adjacent and the folder query paths synchronous.
+	 */
+	async getThreadedEmailPage(
+		options: GetEmailsOptions & { folder: string },
+	): Promise<{ emails: any[]; totalCount: number }> {
+		const emails = this.getThreadedEmails(options);
+		const totalCount = this.countThreadedEmails(options.folder);
+		return { emails: await emails, totalCount: await totalCount };
+	}
+
 	async getThreadedEmails(options: GetEmailsOptions = {}) {
 		const {
 			folder,
@@ -324,7 +337,9 @@ export class MailboxDO extends DurableObject<Env> {
 			const result = this.ctx.storage.sql.exec(
 				`WITH
 				folder_emails AS (
-					SELECT *,
+					SELECT id, subject, sender, recipient, date, read, starred,
+						thread_id, folder_id, in_reply_to, email_references,
+						SUBSTR(body, 1, 300) as body,
 						COALESCE(in_reply_to, id) as draft_group_key
 					FROM emails
 					WHERE folder_id = (SELECT id FROM folders WHERE name = ?1 OR id = ?1 LIMIT 1)
@@ -372,11 +387,15 @@ export class MailboxDO extends DurableObject<Env> {
 			}));
 		}
 
-		// Non-draft folders: full threading logic
+		// Non-draft folders: full threading logic. Project only consumed fields:
+		// materialized CTEs and window sorts must not carry full bodies or MIME
+		// metadata on every 30-second refresh. The public snippet remains 300 chars.
 		const result = this.ctx.storage.sql.exec(
 			`WITH
 			folder_emails AS (
-				SELECT *,
+				SELECT id, subject, sender, recipient, date, read, starred,
+					thread_id, folder_id, in_reply_to, email_references,
+					SUBSTR(body, 1, 300) as body,
 					COALESCE(thread_id, id) as raw_thread_id,
 					${NORMALIZED_SUBJECT_SQL} as normalized_subject
 				FROM emails
@@ -395,7 +414,7 @@ export class MailboxDO extends DurableObject<Env> {
 			),
 			all_emails_with_conversation AS (
 				SELECT
-					e.*,
+					e.id, e.thread_id, e.folder_id, e.date, e.read, e.sender,
 					COALESCE(tc.conversation_id, COALESCE(e.thread_id, e.id)) as conversation_id
 				FROM emails e
 				LEFT JOIN thread_to_conversation tc
