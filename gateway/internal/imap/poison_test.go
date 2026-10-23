@@ -161,7 +161,7 @@ func TestTransientFolderFailureDoesNotPoison(t *testing.T) {
 	s := newSelectedSession(t, be, WithPollInterval(0))
 
 	be.mu.Lock()
-	be.foldersErr = &backend.APIError{Kind: backend.ErrKindServer, StatusCode: 503}
+	be.statusErr = &backend.APIError{Kind: backend.ErrKindServer, StatusCode: 503}
 	be.mu.Unlock()
 
 	if err := s.poll(t.Context(), &recordingUpdateWriter{}); err != nil {

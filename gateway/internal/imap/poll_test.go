@@ -54,7 +54,7 @@ func seqToUID(sel *selection) map[uint32]uint32 {
 
 // TestPollWithNoChangeMakesNoMetadataCall pins the cheap path. Poll runs
 // after every authenticated command, so the common case must cost one
-// folders call and nothing else.
+// status call and nothing else.
 func TestPollWithNoChangeMakesNoMetadataCall(t *testing.T) {
 	be := newFakeBackend(t)
 	s := newSelectedSession(t, be, WithPollInterval(0))
@@ -72,8 +72,8 @@ func TestPollWithNoChangeMakesNoMetadataCall(t *testing.T) {
 		t.Errorf("Messages calls = %d, want %d: an unchanged folder must not cost a metadata listing",
 			messages, messagesAfterSelect)
 	}
-	if folders != foldersAfterSelect+3 {
-		t.Errorf("Folders calls = %d, want %d (one per poll)", folders, foldersAfterSelect+3)
+	if folders != foldersAfterSelect || be.statusCount() != 3 {
+		t.Errorf("Folders calls = %d, want %d; status calls = %d, want 3", folders, foldersAfterSelect, be.statusCount())
 	}
 	if raw != 0 {
 		t.Errorf("RawMessage calls = %d, want 0", raw)
@@ -188,9 +188,9 @@ func TestPollBackendErrorReturnsNilAndKeepsSnapshot(t *testing.T) {
 		name   string
 		break_ func(be *fakeBackend)
 	}{
-		{"folders call fails", func(be *fakeBackend) {
+		{"status call fails", func(be *fakeBackend) {
 			be.mu.Lock()
-			be.foldersErr = &backend.APIError{Kind: backend.ErrKindServer, StatusCode: 503}
+			be.statusErr = &backend.APIError{Kind: backend.ErrKindServer, StatusCode: 503}
 			be.mu.Unlock()
 		}},
 		{"metadata call fails", func(be *fakeBackend) {
@@ -357,7 +357,7 @@ func TestPollIntervalThrottlesBackendCalls(t *testing.T) {
 			t.Fatalf("poll: %v", err)
 		}
 	}
-	if _, folders, _, _ := be.counters(); folders != foldersAfterSelect {
+	if _, folders, _, _ := be.counters(); folders != foldersAfterSelect || be.statusCount() != 0 {
 		t.Errorf("Folders calls = %d, want %d: SELECT just built the snapshot, so polls inside the interval must be skipped",
 			folders, foldersAfterSelect)
 	}
@@ -370,8 +370,8 @@ func TestPollIntervalThrottlesBackendCalls(t *testing.T) {
 	if err := s.poll(context.Background(), &recordingUpdateWriter{}); err != nil {
 		t.Fatalf("poll: %v", err)
 	}
-	if _, folders, _, _ := be.counters(); folders != foldersAfterSelect+1 {
-		t.Errorf("Folders calls = %d, want %d after the interval elapsed", folders, foldersAfterSelect+1)
+	if _, folders, _, _ := be.counters(); folders != foldersAfterSelect || be.statusCount() != 1 {
+		t.Errorf("Folders calls = %d, want %d; status calls = %d, want 1 after the interval elapsed", folders, foldersAfterSelect, be.statusCount())
 	}
 }
 
@@ -384,7 +384,7 @@ func TestPollWithoutSelectionDoesNothing(t *testing.T) {
 		t.Fatalf("poll: %v", err)
 	}
 	_, folders, messages, _ := be.counters()
-	if folders != foldersBefore || messages != messagesBefore {
+	if folders != foldersBefore || messages != messagesBefore || be.statusCount() != 0 {
 		t.Errorf("poll without a selection made backend calls: folders %d->%d, messages %d->%d",
 			foldersBefore, folders, messagesBefore, messages)
 	}
