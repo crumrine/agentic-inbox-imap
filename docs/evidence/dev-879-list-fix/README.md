@@ -66,7 +66,8 @@ BROWSER_WIDTHS=1440,390 CHROME_PATH='/path/to/chrome' EVIDENCE_DIR=/tmp/list-che
 Typecheck passed. Full local workerd suite passed **563/563 tests in 32 files**,
 77.58 seconds, using real local SQLite/R2 and synthetic/inert bindings. Full logs
 are under `checks/`. `node --check scripts/quarantine-list-browser.mjs` and
-`git diff --check` passed. No Go source changed; no fresh local Go pass claimed.
+`git diff --check` was originally reported as passed; subsequent triage found
+two surplus trailing blank lines in the committed check logs (see below). No Go source changed; no fresh local Go pass claimed.
 Exact submitted commit, remote CI and workflow disposition are recorded in the
 PR and Trellis correction handoff rather than a self-referential commit hash.
 
@@ -109,3 +110,13 @@ direct counter edits or duplicate ticket/run are used. Independent review of the
 new exact head remains required before completion. Pending live observations
 (real devices, intake/header provenance, hosted CPU/billing and efficacy) retain
 the previously documented separate authorization boundary.
+
+## Evidence normalization after triage
+
+The implementation continuation from `fb39b8e3876525fadd8b790f5fd61cc75e90342a`
+removed exactly one surplus trailing blank line from each of `checks/tests.log`
+and `checks/typecheck.log`. All test output lines and reported results remain
+unchanged. Their manifest hashes and this README hash were updated. This is
+evidence formatting only, not a new execution of those macOS checks. The full
+prerequisite-to-head whitespace check now passes; fresh Linux validation and the
+new submission SHA are recorded separately in the implementation stage result.

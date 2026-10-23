@@ -46,4 +46,3 @@ Runtime types generated.
 📖 Read about runtime types
 https://developers.cloudflare.com/workers/languages/typescript/#generate-types
 📣 Remember to rerun 'wrangler types' after you change your wrangler.jsonc file.
-
