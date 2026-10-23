@@ -1,0 +1,98 @@
+{
+  "dependency": "bb02819e4662e1d680805435dd886e3dc4728906",
+  "hashes": {
+    "packages/core/src/contract.ts": "4ebd49b3444942485f3fb05f04378dcccd6b00213908d68044e421b32b3456c2",
+    "workers/private/protocol.ts": "951ed296dd4e813c0df840e8be1351f99869de94a5fe1a68c7f3ddcf252ac6e4"
+  },
+  "fixture": {
+    "rpcVersion": "1",
+    "ok": true,
+    "result": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-1",
+      "status": "partial",
+      "heuristicScore": 0,
+      "signals": {
+        "spam": "unknown",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [],
+      "limitsHit": [
+        "auth_unknown",
+        "identity_uninspected"
+      ],
+      "error": null
+    }
+  },
+  "preferenceResults": {
+    "none": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-1",
+      "status": "partial",
+      "heuristicScore": 0,
+      "signals": {
+        "spam": "unknown",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [],
+      "limitsHit": [
+        "auth_unknown",
+        "identity_uninspected"
+      ],
+      "error": null
+    },
+    "allow": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-1",
+      "status": "partial",
+      "heuristicScore": 0,
+      "signals": {
+        "spam": "unknown",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [
+        {
+          "id": "sender_allowed",
+          "contribution": 0,
+          "reason": "An explicit verified address allow preference was supplied; other evidence remains."
+        }
+      ],
+      "limitsHit": [
+        "auth_unknown",
+        "identity_uninspected"
+      ],
+      "error": null
+    },
+    "block": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-1",
+      "status": "partial",
+      "heuristicScore": 40,
+      "signals": {
+        "spam": "present",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [
+        {
+          "id": "sender_blocked",
+          "contribution": 40,
+          "reason": "An explicit verified sender block preference was supplied."
+        }
+      ],
+      "limitsHit": [
+        "auth_unknown",
+        "identity_uninspected"
+      ],
+      "error": null
+    }
+  },
+  "passed": true
+}

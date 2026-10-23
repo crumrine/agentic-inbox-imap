@@ -6,6 +6,7 @@ import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+    resolve: { alias: { "virtual:react-router/server-build": new URL("./test/ssr-stub.ts", import.meta.url).pathname } },
 	plugins: [
 		cloudflareTest({
 			// wrangler.jsonc's `main` is the React Router worker, which imports

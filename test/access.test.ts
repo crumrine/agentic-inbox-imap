@@ -8,8 +8,9 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { requireAccess } from "../workers/access";
 import type { Env } from "../workers/types";
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<{ Bindings: Env; Variables: { manualFeedbackHuman?: string } }>();
 app.use("*", requireAccess);
+app.get("/identity", (c) => c.json({ human: c.get("manualFeedbackHuman") ?? null }));
 app.get("*", (c) => c.text("authorized"));
 let signingKey: CryptoKey;
 let otherKey: CryptoKey;
@@ -55,6 +56,17 @@ function request(jwt?: string, config: Partial<Env> = {}) {
 }
 
 describe("production Access boundary", () => {
+	it("keeps verified human feedback identity request-scoped while reusing keys", async () => {
+		const readIdentity = (jwt: string) => app.request("https://inbox.test/identity", {
+			headers: { "cf-access-jwt-assertion": jwt },
+		}, { TEAM_DOMAIN: issuer, POLICY_AUD: "policy" } as Env);
+		expect(await (await readIdentity(await token())).json()).toEqual({ human: "synthetic@example.test" });
+		expect(await (await readIdentity(await token({ service: true }))).json()).toEqual({ human: null });
+		expect((await readIdentity(await token({ key: otherKey }))).status).toBe(403);
+		expect(await (await readIdentity(await token())).json()).toEqual({ human: "synthetic@example.test" });
+		expect(fetchKeys).toHaveBeenCalledTimes(1);
+	});
+
 	it("reuses fetched keys across sequential independently verified requests", async () => {
 		for (let i = 0; i < 5; i++) expect((await request(await token())).status).toBe(200);
 		expect(fetchKeys).toHaveBeenCalledTimes(1);

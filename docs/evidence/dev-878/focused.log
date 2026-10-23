@@ -1,0 +1,14 @@
+
+ RUN  v4.1.11 /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-878/inbox
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+
+ Test Files  2 passed (2)
+      Tests  55 passed (55)
+   Start at  22:38:29
+   Duration  158.44s (transform 7.56s, setup 9.03s, import 12.34s, tests 132.19s, environment 1ms)

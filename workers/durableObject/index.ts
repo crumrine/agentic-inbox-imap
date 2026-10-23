@@ -6,6 +6,9 @@ import { DurableObject } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 import { eq, and, or, asc, desc, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+import { type Assessment, unavailable } from "../lib/mail-scoring/intake";
+import { decodeResponse } from "../lib/mail-scoring/protocol";
+import { feedbackSchema, preferenceSchema, type Feedback, type Preference, type MutationResult } from "../lib/mail-scoring/feedback";
 import * as schema from "../db/schema";
 import { Folders } from "../../shared/folders";
 import type { Env } from "../types";
@@ -1138,6 +1141,7 @@ export class MailboxDO extends DurableObject<Env> {
 		folder: string,
 		email: EmailData,
 		attachments: AttachmentData[],
+		assessment?: Assessment,
 	) {
 		// Resolve folder name or ID to the actual folder ID.
 		const folderRow = this.db
@@ -1191,7 +1195,73 @@ export class MailboxDO extends DurableObject<Env> {
 		if (attachments.length > 0) {
 			this.db.insert(schema.attachments).values(attachments).run();
 		}
+
+        // Optional inspection never rolls back accepted mail. Storage failure
+        // leaves unknown/unscored (the read path's explicit default).
+        if (assessment) {
+            try {
+                let safe = unavailable();
+                // Validate at the DO boundary too; never store unbounded RPC data.
+                if (assessment.version === 1 && assessment.policyVersion === 'inbox-shadow-1' &&
+                    assessment.result && typeof assessment.inputIncomplete === 'boolean') {
+                    const json = JSON.stringify({rpcVersion:'1', ok:true, result:assessment.result});
+                    const decoded = decodeResponse(json);
+                    if (decoded?.ok && decoded.result.status !== 'unavailable') safe = {
+                        version:1, policyVersion:'inbox-shadow-1', status:'partial',
+                        inputIncomplete:assessment.inputIncomplete, result:decoded.result,
+                    };
+                }
+                this.db.insert(schema.spamAssessments).values({email_id:email.id, version:1, assessment:JSON.stringify(safe)}).run();
+            } catch { console.warn('Optional assessment storage unavailable'); }
+        }
 	}
+
+    async getSpamState(emailId: string) {
+        if (!feedbackSchema.shape.emailId.safeParse(emailId).success) return null;
+        if (!this.db.select({id:schema.emails.id}).from(schema.emails).where(eq(schema.emails.id, emailId)).get()) return null;
+        const assessments = this.db.select().from(schema.spamAssessments).where(eq(schema.spamAssessments.email_id, emailId)).orderBy(desc(schema.spamAssessments.version)).limit(10).all();
+        const disposition = this.db.select().from(schema.spamDispositions).where(eq(schema.spamDispositions.email_id, emailId)).get();
+        return {assessments:assessments.map(row => JSON.parse(row.assessment) as Assessment),
+            disposition:disposition?.disposition ?? 'unknown', revision:disposition?.revision ?? 0};
+    }
+
+    async setSpamDisposition(input: Feedback): Promise<MutationResult> {
+        const parsed = feedbackSchema.safeParse(input);
+        if (!parsed.success) return {ok:false, error:'invalid'};
+        const {emailId, disposition, expectedRevision} = parsed.data;
+        return this.ctx.storage.transactionSync(() => {
+            if (!this.db.select({id:schema.emails.id}).from(schema.emails).where(eq(schema.emails.id,emailId)).get()) return {ok:false, error:'not_found'};
+            const old = this.db.select().from(schema.spamDispositions).where(eq(schema.spamDispositions.email_id,emailId)).get();
+            // Same action retried at its original revision is idempotent, but
+            // a stale action cannot override a newer conflicting decision.
+            if (old?.disposition === disposition && (expectedRevision === old.revision || expectedRevision === old.revision - 1)) return {ok:true, revision:old.revision};
+            if ((old?.revision ?? 0) !== expectedRevision) return {ok:false, error:'conflict'};
+            const revision = expectedRevision + 1;
+            this.db.insert(schema.spamDispositions).values({email_id:emailId,disposition,revision}).onConflictDoUpdate({target:schema.spamDispositions.email_id,set:{disposition,revision}}).run();
+            return {ok:true, revision};
+        });
+    }
+
+    async getSenderPreference(sender: string) {
+        if (typeof sender !== "string" || sender.length > 254) return null;
+        const parsed = preferenceSchema.shape.sender.safeParse(sender);
+        if (!parsed.success) return null;
+        return this.db.select().from(schema.senderPreferences).where(eq(schema.senderPreferences.sender,parsed.data)).get() ?? {sender:parsed.data,preference:'none' as const,revision:0};
+    }
+
+    async setSenderPreference(input: Preference): Promise<MutationResult> {
+        const parsed = preferenceSchema.safeParse(input);
+        if (!parsed.success) return {ok:false, error:'invalid'};
+        const {sender,preference,expectedRevision} = parsed.data;
+        return this.ctx.storage.transactionSync(() => {
+            const old = this.db.select().from(schema.senderPreferences).where(eq(schema.senderPreferences.sender,sender)).get();
+            if (old?.preference === preference && (expectedRevision === old.revision || expectedRevision === old.revision - 1)) return {ok:true,revision:old.revision};
+            if ((old?.revision ?? 0) !== expectedRevision) return {ok:false,error:'conflict'};
+            const revision = expectedRevision + 1;
+            this.db.insert(schema.senderPreferences).values({sender,preference,revision}).onConflictDoUpdate({target:schema.senderPreferences.sender,set:{preference,revision}}).run();
+            return {ok:true,revision};
+        });
+    }
 
 	// ── IMAP read API (raw SQL — see the type block below this class) ──
 	//

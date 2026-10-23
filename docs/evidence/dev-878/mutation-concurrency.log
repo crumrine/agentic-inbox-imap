@@ -1,0 +1,35 @@
+
+ RUN  v4.1.11 /home/brian/r9-jobs/home/.cache/symphony/runs/run-p1vlci1m/dev-878-mutation-lPL7oU
+
+ ❯ test/shadow-scoring.test.ts (20 tests | 1 failed | 19 skipped) 1593ms
+     × authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs 1274ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 19 skipped (20)
+   Start at  22:30:36
+   Duration  68.20s (transform 20.01s, setup 26.51s, import 28.41s, tests 1.59s, environment 0ms)
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/shadow-scoring.test.ts > actual app email and authenticated REST in local workerd > authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs
+AssertionError: expected 200 to be 409 // Object.is equality
+
+- Expected
++ Received
+
+- 409
++ 200
+
+ ❯ test/shadow-scoring.test.ts:180:98
+    178|     expect((await request(b.e,`${base}/spam-feedback`,{...body,emailId…
+    179|     for(let i=0;i<2;i++) {const r=await request(b.e,`${base}/spam-feed…
+    180|     expect((await request(b.e,`${base}/spam-feedback`,{...body,disposi…
+       |                                                                                                  ^
+    181|     expect((await request(b.e,`${base}/spam-feedback`,{...body,disposi…
+    182|     expect((await mailbox(BOX).getSpamState(row.id))?.assessments).toE…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯

@@ -554,3 +554,20 @@ export async function toolSendEmail(
 
 	return { status: "sent", messageId, message: `Email sent to ${params.to}` };
 }
+
+// Explicit user actions only. These functions are intentionally absent from
+// the Agent/MCP tool registries: email/model text cannot mint this capability.
+import { hasManualAuthority, feedbackSchema, preferenceSchema, type ManualAuthority, type Feedback, type Preference } from './mail-scoring/feedback';
+
+export async function toolMarkSpam(env: Env, mailboxId: string, input: Feedback, authority: ManualAuthority) {
+    if (!hasManualAuthority(authority, mailboxId)) throw new Error('Explicit manual authority required');
+    const value = feedbackSchema.parse(input);
+    if (!(await env.BUCKET.head(`mailboxes/${mailboxId}.json`))) return {ok:false as const,error:'not_found' as const};
+    return getMailboxStub(env, mailboxId).setSpamDisposition(value);
+}
+export async function toolSetSenderPreference(env: Env, mailboxId: string, input: Preference, authority: ManualAuthority) {
+    if (!hasManualAuthority(authority, mailboxId)) throw new Error('Explicit manual authority required');
+    const value = preferenceSchema.parse(input);
+    if (!(await env.BUCKET.head(`mailboxes/${mailboxId}.json`))) return {ok:false as const,error:'not_found' as const};
+    return getMailboxStub(env, mailboxId).setSenderPreference(value);
+}

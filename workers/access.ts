@@ -32,7 +32,7 @@ function getAccessUrls(teamDomain: string) {
 }
 
 // Production boundary; development bypass stays in app.ts.
-export const requireAccess: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
+export const requireAccess: MiddlewareHandler<{ Bindings: Env; Variables: { manualFeedbackHuman?: string } }> = async (c, next) => {
 	const { POLICY_AUD, TEAM_DOMAIN } = c.env;
 
 	// Fail closed in production if Access is not configured.
@@ -51,10 +51,15 @@ export const requireAccess: MiddlewareHandler<{ Bindings: Env }> = async (c, nex
 	try {
 		const { issuer, certsUrl } = getAccessUrls(TEAM_DOMAIN);
 		const JWKS = getAccessKeySet(certsUrl);
-		await jwtVerify(token, JWKS, {
+		const { payload } = await jwtVerify(token, JWKS, {
 			issuer,
 			audience: POLICY_AUD,
 		});
+		// Persistent feedback requires a verified human, while service tokens
+		// remain valid for the existing mailbox APIs. This identity is request-scoped.
+		if (typeof payload.email === "string" && !payload.common_name) {
+			c.set("manualFeedbackHuman", payload.email);
+		}
 	} catch {
 		return c.text("Invalid or expired Access token", 403);
 	}

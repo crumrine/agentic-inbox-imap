@@ -1,0 +1,73 @@
+{
+  "resumedFrom": "0951210aa8a8eb6ef400081110931c199605f0c4",
+  "runtimeAndTestSourceCommit": "1eb607f3f34cf415a8a4a2ffeb232b01ab26f63c",
+  "inboxBase": "d01da09e26adf76ef8fe60e2a5f76226426a167b",
+  "scorerHead": "bb02819e4662e1d680805435dd886e3dc4728906",
+  "dateUTC": "2026-10-22",
+  "trellisRun": "7da2ef7d-a444-4f91-bb65-ac1be989c3f5",
+  "environment": {
+    "node": "24.15.0",
+    "npm": "11.12.1",
+    "XDG_CONFIG_HOME": "/tmp/dev-878-xdg",
+    "WRANGLER_SEND_METRICS": "false",
+    "INBOX_LOCAL_ONLY": "1"
+  },
+  "checks": [
+    {
+      "command": "npm run typecheck",
+      "exit": 0,
+      "log": "resume-typecheck.log"
+    },
+    {
+      "command": "node scripts/check-scoring-contract.mjs ../mail-scoring",
+      "exit": 0,
+      "evidence": "contract.json",
+      "cases": [
+        "ordinary",
+        "preference none",
+        "preference allow",
+        "preference block"
+      ]
+    },
+    {
+      "command": "npm exec vitest run test/imap-append.test.ts test/shadow-scoring.test.ts -- --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000",
+      "exit": 0,
+      "files": 2,
+      "tests": 55,
+      "wallSeconds": 168.2,
+      "log": "resume-focused.log"
+    },
+    {
+      "command": "git diff --check",
+      "exit": 0
+    }
+  ],
+  "retainedEvidence": {
+    "manifest": "validation.json",
+    "logDigestsReverified": true,
+    "fullSuite": {
+      "files": 30,
+      "tests": 550,
+      "exit": 0
+    },
+    "securityMutantsCaught": 6,
+    "basis": "Runtime/test source remains byte-identical to original tested commit. No local full-suite or mutation rerun in this resumed stage; exact submitted-head CI will run full suite. Both earlier interrupted runs remain disclosed in validation.json."
+  },
+  "pushGate": {
+    "resolved": true,
+    "source": "DEV-878 Trellis event 5416",
+    "ownerObservation": "Disable builds=true saved and reloaded, automatic main and non-production builds paused; runtime/traffic unchanged.",
+    "runnerReobservedDashboard": false,
+    "authorization": "Publish existing source branch and PR only. Leave automatic builds disabled."
+  },
+  "submission": "Final exact commit, PR and CI URLs are recorded in the Trellis implementation result and PR; this pre-commit file does not claim those actions already occurred.",
+  "pendingLiveChecks": [
+    "Cloudflare intake/header availability and per-message provenance",
+    "hosted CPU/billing",
+    "real mailbox efficacy"
+  ],
+  "logSha256": {
+    "resume-typecheck.log": "e33653ce89844e9d6073bc249d77157ce2ac45375fc4259b2a74c8de8992dd32",
+    "resume-focused.log": "232cea0aa8a368445185122c7e335b5c8f59e58914a2801e88488bc194966063"
+  }
+}

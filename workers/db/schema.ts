@@ -2,7 +2,8 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { sqliteTable, text, integer, primaryKey, check } from "drizzle-orm/sqlite-core";
 
 export const folders = sqliteTable("folders", {
 	id: text("id").primaryKey(),
@@ -81,3 +82,25 @@ export const attachments = sqliteTable("attachments", {
 	content_id: text("content_id"),
 	disposition: text("disposition"),
 });
+
+// Assessment JSON contains only validated static evidence, never body data.
+export const spamAssessments = sqliteTable("spam_assessments", {
+    email_id: text("email_id").notNull().references(() => emails.id, {onDelete:"cascade"}),
+    version: integer("version").notNull(),
+    assessment: text("assessment").notNull(),
+}, table => [primaryKey({columns:[table.email_id, table.version]}),
+    check("assessment_version", sql`${table.version} > 0`),
+    check("assessment_bound", sql`length(${table.assessment}) <= 6144`)]);
+export const spamDispositions = sqliteTable("spam_dispositions", {
+    email_id: text("email_id").primaryKey().references(() => emails.id, {onDelete:"cascade"}),
+    disposition: text("disposition", {enum:["spam", "not_spam"]}).notNull(),
+    revision: integer("revision").notNull(),
+}, table => [check("disposition_value", sql`${table.disposition} IN ('spam', 'not_spam')`),
+    check("disposition_revision", sql`${table.revision} > 0`)]);
+export const senderPreferences = sqliteTable("sender_preferences", {
+    sender: text("sender").primaryKey(),
+    preference: text("preference", {enum:["allow", "block", "none"]}).notNull(),
+    revision: integer("revision").notNull(),
+}, table => [check("sender_bound", sql`length(${table.sender}) <= 254`),
+    check("preference_value", sql`${table.preference} IN ('allow', 'block', 'none')`),
+    check("preference_revision", sql`${table.revision} > 0`)]);

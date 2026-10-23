@@ -5,6 +5,9 @@
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import PostalMime from "postal-mime";
+import { toolMarkSpam, toolSetSenderPreference } from "./lib/tools";
+import { authorizeManualFeedback, feedbackSchema, preferenceSchema } from "./lib/mail-scoring/feedback";
+import { assessArrival, inspectableRaw } from "./lib/mail-scoring/intake";
 import { z } from "zod";
 import { sendEmail } from "./email-sender";
 import { storeAttachments, type StoredAttachment } from "./lib/attachments";
@@ -162,6 +165,58 @@ app.use("/api/*", cors({
 }));
 app.use("/api/v1/mailboxes/:mailboxId/*", requireMailbox);
 
+// Manual feedback has a stricter boundary than the existing service APIs.
+// JSON size is bounded while streaming, before parsing or schema validation.
+async function readManualBody(request: Request): Promise<unknown> {
+    if (!request.body) return null;
+    const reader = request.body.getReader();
+    const bytes = new Uint8Array(2048);
+    let size = 0;
+    try {
+        while (true) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            if (size + chunk.value.byteLength > bytes.length) { await reader.cancel(); return null; }
+            bytes.set(chunk.value, size); size += chunk.value.byteLength;
+        }
+        const json = new TextDecoder('utf-8', {fatal:true}).decode(bytes.subarray(0,size));
+        let depth=0, quoted=false, escaped=false;
+        for (const char of json) {
+            if (quoted) { if (escaped) escaped=false; else if (char==='\\') escaped=true; else if (char==='"') quoted=false; continue; }
+            if (char==='"') quoted=true;
+            if (char==='{' || char==='[') { if (++depth>4) return null; }
+            if (char==='}' || char===']') depth--;
+        }
+        return JSON.parse(json);
+    } catch { return null; }
+}
+app.get('/api/v1/mailboxes/:mailboxId/emails/:emailId/spam', async c => {
+    const state = await c.var.mailboxStub.getSpamState(c.req.param('emailId'));
+    return state ? c.json(state) : c.json({error:'Not found'},404);
+});
+app.get('/api/v1/mailboxes/:mailboxId/sender-preference', async c => {
+    const state = await c.var.mailboxStub.getSenderPreference(c.req.query('sender') ?? '');
+    return state ? c.json(state) : c.json({error:'Invalid sender'},400);
+});
+app.post('/api/v1/mailboxes/:mailboxId/spam-feedback', async c => {
+    const mailboxId = c.req.param('mailboxId');
+    const authority = authorizeManualFeedback(c.req.raw, mailboxId, c.get('manualFeedbackHuman'));
+    if (!authority) return c.json({error:'Explicit authenticated user action required'},403);
+    const input = feedbackSchema.safeParse(await readManualBody(c.req.raw));
+    if (!input.success) return c.json({error:'Invalid feedback'},400);
+    const result = await toolMarkSpam(c.env,mailboxId,input.data,authority);
+    return c.json(result,result.ok ? 200 : result.error === 'not_found' ? 404 : 409);
+});
+app.post('/api/v1/mailboxes/:mailboxId/sender-preference', async c => {
+    const mailboxId = c.req.param('mailboxId');
+    const authority = authorizeManualFeedback(c.req.raw, mailboxId, c.get('manualFeedbackHuman'));
+    if (!authority) return c.json({error:'Explicit authenticated user action required'},403);
+    const input = preferenceSchema.safeParse(await readManualBody(c.req.raw));
+    if (!input.success) return c.json({error:'Invalid preference'},400);
+    const result = await toolSetSenderPreference(c.env,mailboxId,input.data,authority);
+    return c.json(result,result.ok ? 200 : result.error === 'not_found' ? 404 : 409);
+});
+
 // -- Config ---------------------------------------------------------
 
 app.get("/api/v1/config", (c) => {
@@ -310,7 +365,7 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 			to, cc, bcc, from, subject, html, text,
 			attachments: attachments?.map((att) => ({ content: att.content, filename: att.filename, type: att.type, disposition: att.disposition || "attachment", contentId: att.contentId })),
 			...(in_reply_to ? { headers: buildThreadingHeaders(in_reply_to, references || []) } : {}),
-		}).catch((e) => console.error("Deferred email delivery failed:", (e as Error).message)),
+		}).catch(() => console.error("deferred_email_delivery_failed")),
 	);
 	return c.json({ id: messageId, status: "sent" }, 202);
 });
@@ -601,7 +656,7 @@ async function streamToArrayBuffer(stream: ReadableStream, streamSize: number) {
  * candidate because it is the only field that is right when the mailbox's
  * address appears nowhere in the headers, which is what a Bcc is.
  */
-type InboundEvent = { raw: ReadableStream; rawSize: number; to?: string };
+type InboundEvent = { raw: ReadableStream; rawSize: number; to?: string; from?: string };
 
 /**
  * What `receiveEmail` decided to do with a message.
@@ -686,6 +741,7 @@ async function receiveEmail(
 	}
 
 	const rawEmail = await streamToArrayBuffer(event.raw, event.rawSize);
+	const rawInspectable = env.MAIL_SCORING_MODE === "shadow" && inspectableRaw(rawEmail);
 	const parsedEmail = await new PostalMime().parse(rawEmail);
 
 	if (!parsedEmail.to?.length || !parsedEmail.to[0].address) {
@@ -805,7 +861,13 @@ async function receiveEmail(
 		body_structure: rawMimeResult.body_structure,
 		delivered_to: deliveredTo,
 	};
-	await stub.createEmail(Folders.INBOX, inboundRow, attachmentData);
+	let preference: "allow" | "block" | "none" | undefined;
+    if (env.MAIL_SCORING_MODE === "shadow" && rawInspectable) {
+        try { preference = (await stub.getSenderPreference(parsedEmail.from?.address ?? ''))?.preference; }
+        catch { /* Preference lookup failure remains unknown; preserve delivery. */ }
+    }
+    const assessment = await assessArrival(env, parsedEmail, rawInspectable, event.from, preference);
+	await stub.createEmail(Folders.INBOX, inboundRow, attachmentData, assessment);
 
 	return { status: "delivered", mailboxId, emailId: messageId };
 }
@@ -824,7 +886,7 @@ async function receiveEmail(
  * satisfies it.
  */
 export async function handleInboundEmail(
-	message: Pick<ForwardableEmailMessage, "raw" | "rawSize" | "to" | "setReject">,
+	message: Pick<ForwardableEmailMessage, "raw" | "rawSize" | "to" | "setReject"> & Partial<Pick<ForwardableEmailMessage, "from">>,
 	env: Env,
 	ctx: ExecutionContext,
 ): Promise<InboundDisposition> {

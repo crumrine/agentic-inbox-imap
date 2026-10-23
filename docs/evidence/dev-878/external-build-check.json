@@ -1,0 +1,6 @@
+{
+  "source": "https://api.github.com/repos/crumrine/agentic-inbox-imap/commits/061da3255440e6c0fee5a55c6eee0a0453e2a866/check-runs",
+  "name": "Workers Builds: agentic-inbox",
+  "conclusion": "success",
+  "finding": "Cloudflare Workers Builds integration exists. Output identifies a Worker version but does not establish current branch commands or active traffic deployment state. Provider account URL intentionally omitted."
+}

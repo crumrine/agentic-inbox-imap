@@ -31,7 +31,7 @@ const requestHandler = createRequestHandler(
 );
 
 // Main app that wraps the API and adds React Router fallback
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<{ Bindings: Env; Variables: { manualFeedbackHuman?: string } }>();
 
 // Cloudflare Access JWT validation middleware (production only)
 app.use("*", (c, next) => {
@@ -130,9 +130,11 @@ export default {
 	async email(message: ForwardableEmailMessage, env: Env, ctx: ExecutionContext) {
 		try {
 			await handleInboundEmail(message, env, ctx);
-		} catch (e) {
-			console.error("Failed to process incoming email:", (e as Error).message, (e as Error).stack);
-			throw e;
+		} catch {
+			console.error("inbound_email_processing_failed");
+			// The runtime may log unhandled exceptions too. Keep the failure
+			// thrown, but do not propagate private text/stack or a hostile getter.
+			throw new Error("inbound_email_processing_failed");
 		}
 	},
 };

@@ -53,3 +53,8 @@ Modified:
 Trademarks are not licensed. "Cloudflare" and any Cloudflare project names are
 the property of Cloudflare, Inc. and are used here only to identify the
 upstream work.
+
+Mail Scoring protocol reuse
+workers/lib/mail-scoring/contract.ts and protocol.ts derive from
+https://github.com/crumrine/mail-scoring at bb02819e4662e1d680805435dd886e3dc4728906.
+Copyright (c) 2026 Brian Crumrine, Apache-2.0. See docs/shadow-scoring.md.
