@@ -99,8 +99,10 @@ export async function storeRawMime(
 			rfc822_size: size,
 			body_structure: deriveBodyStructure(bytes),
 		};
-	} catch (e) {
-		console.error(`Failed to store raw MIME at ${key}:`, (e as Error).message);
+	} catch {
+		// Storage keys and exception properties can contain private or hostile
+		// text. Do not inspect the thrown value, even for its message.
+		console.error("raw_mime_storage_failed");
 		// No stored bytes, so no structure: see StoreRawMimeResult.body_structure.
 		return { raw_key: null, rfc822_size: size, body_structure: null };
 	}
