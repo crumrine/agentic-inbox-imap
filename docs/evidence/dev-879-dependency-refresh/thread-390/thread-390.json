@@ -1,0 +1,16 @@
+{
+  "width": 390,
+  "threadCalls": 4,
+  "rejectedCalls": 3,
+  "selectedCalls": 2,
+  "beforeSelected": 1,
+  "visibleParticipant": 0,
+  "visibleSnippet": 0,
+  "visibleThreadCount": 0,
+  "visibleReply": 0,
+  "network": [],
+  "errors": [],
+  "manualRetryRecovered": true,
+  "rescueRestored": true,
+  "finalThreadCalls": 6
+}

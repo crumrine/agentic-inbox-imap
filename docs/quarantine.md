@@ -1,11 +1,17 @@
 # Recoverable Spam (DEV-879)
 
 Source-only change, stacked on Inbox PR #7 at
-`7cc31772b0ca17ec28ea4d78367e41e0a24e5ce5`. Scorer PR #3 remains pinned at
+`2838cfb45b870054297fd09e7b88a0c1545801f1`, the reviewed successor to the
+original `7cc31772b0ca17ec28ea4d78367e41e0a24e5ce5` prerequisite. The source-branch
+merge at `43889e5c0ba7fd43090e830fbeac048a9551ffc8` incorporates its static error
+diagnostics and clean-install lock repair; prior quarantine implementation and
+historical evidence are unchanged. Scorer PR #3 remains pinned at
 `bb02819e4662e1d680805435dd886e3dc4728906`; no scorer or gateway code changes.
 Future authorized merge order: mail-scoring #1 (`ce6d9afedf607584c150d457f0e078a307047f8a`),
 #2 (`8456996596af6446f533cacb90ff9ce2ecd1a4ab`), #3, Inbox #7, this PR.
 No merge, release, deployment, live mail or provider testing is authorized here.
+See `diagnostics-validation.md` for the corrected automatic-build history;
+source CI must not be interpreted as proof of current production state.
 
 ## Policy and recovery
 
@@ -105,6 +111,10 @@ inspection, URL/DNS fetching, rendering/OCR, private fixtures, raw-content logs 
 paid AI was introduced.
 
 ## Verification and remaining observations
+
+See `evidence/dev-879-dependency-refresh/README.md` for renewed validation of the
+corrected prerequisite and the exact source lineage. Historical bundles below
+retain their original pins, executions and unsuccessful attempts.
 
 See `evidence/dev-879-list-fix/README.md`, `evidence/dev-879-thread-fix/README.md` and `evidence/dev-879-fixes/README.md` for review corrections and
 `evidence/dev-879/README.md` for exact source/commands, failures, runtime and

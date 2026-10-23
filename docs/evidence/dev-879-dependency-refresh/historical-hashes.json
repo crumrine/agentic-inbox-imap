@@ -1,0 +1,511 @@
+{
+  "artifacts": [
+    {
+      "file": "docs/evidence/dev-879/README.md",
+      "sha256": "ee1015256cf66873c326edda5dadf2d9c463207d0b88760178fbb55aa73fee51"
+    },
+    {
+      "file": "docs/evidence/dev-879/attempts/browser-layout-scan.log",
+      "sha256": "e242a6fb88a3a6248c6ad1b274680fed48e4ef7fcf57e58f2bbdbb71a701d160"
+    },
+    {
+      "file": "docs/evidence/dev-879/attempts/browser-layout.log",
+      "sha256": "d90444e8dff0e87323bd6bd18fc1c9dd977b91ff188f6ef42890e785af5555e6"
+    },
+    {
+      "file": "docs/evidence/dev-879/attempts/browser-no-fonts.log",
+      "sha256": "c810663df1877c03cf9e14dbc37e269e77759795f7c0fcdbbc5facfe1faf9ef2"
+    },
+    {
+      "file": "docs/evidence/dev-879/attempts/browser-startup.log",
+      "sha256": "d951d94a057f4d29af76e6e73d7dbaed32c3ee2ef62cb79823e24e487742eeaf"
+    },
+    {
+      "file": "docs/evidence/dev-879/attempts/ci-initial-annotations.json",
+      "sha256": "1d0236ff4cb3076303ca4443ad78cba4d5aed9f04c493f01284f587f72b9aed0"
+    },
+    {
+      "file": "docs/evidence/dev-879/attempts/focused-with-harness-errors.log",
+      "sha256": "2b657e76ea68b755e0a77e8060a8192bc79557dbaa460323e46ad6666b5ba158"
+    },
+    {
+      "file": "docs/evidence/dev-879/attempts/full-concurrent-interrupted.log",
+      "sha256": "feef9b5a638888f6a662320d0966e659c4395336923fed468b11d65170bc0e8b"
+    },
+    {
+      "file": "docs/evidence/dev-879/attempts/layout-diagnostic.log",
+      "sha256": "1173469a70f34e8c8884df015c543e6ae3f07daa6f5a47336809ab426983b918"
+    },
+    {
+      "file": "docs/evidence/dev-879/attempts/quarantine-initial.log",
+      "sha256": "06e26cff163a1ca1edc3cde59e86e2c97724b7afc29d3780666f18a8a04c6338"
+    },
+    {
+      "file": "docs/evidence/dev-879/attempts/serial-full-redundant-stopped.log",
+      "sha256": "1ce9ef28489bb5a258f65e61175661dafa8271b990b5a6d5dc7c6f19e6274a1e"
+    },
+    {
+      "file": "docs/evidence/dev-879/attempts/typecheck-initial.log",
+      "sha256": "25d20f122f6a5cff60558fdde0b2aa1eb0f86c0301e617d390dd234f440a4dde"
+    },
+    {
+      "file": "docs/evidence/dev-879/browser.json",
+      "sha256": "d1b7f46314a4fbe2e6e8d356cd9f1cc526b8d6bb69b4fea62ae0d3642f99288f"
+    },
+    {
+      "file": "docs/evidence/dev-879/browser.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/dev-879/checks-source-8987527.json",
+      "sha256": "7a2883ceb14efbb1ce531c62dab88b360e16d7dd5ae98c0bb925f181452f6803"
+    },
+    {
+      "file": "docs/evidence/dev-879/ci-source-147df61.log",
+      "sha256": "05a5f56e337d3f994af210d9069c7ef43d600bc3a5e2d0e443a81ac67f7cae41"
+    },
+    {
+      "file": "docs/evidence/dev-879/ci-source-8987527.json",
+      "sha256": "fb9ab41cedda7e6185079ac231bd31ddf1bd7c55d8b1da18029c90b9422a9e42"
+    },
+    {
+      "file": "docs/evidence/dev-879/ci-source-8987527.log",
+      "sha256": "250ab20193e3a195dc4d998a4ba10102f670ece12632fe80637964a5cfd63b49"
+    },
+    {
+      "file": "docs/evidence/dev-879/context-final.log",
+      "sha256": "4ecdb9de02ee7ab3d038694cada1ac1792aa814c54850e694584ae0984498264"
+    },
+    {
+      "file": "docs/evidence/dev-879/contract.log",
+      "sha256": "98224cb00bcfa7e1eebc50c8e81c839563d8c6b728df7339b4a48bb3a50d4e48"
+    },
+    {
+      "file": "docs/evidence/dev-879/focused-workerd.log",
+      "sha256": "5b762f82d51b0e0874ed473ef0d1aa5b971524b8dd7097acd83839257301373e"
+    },
+    {
+      "file": "docs/evidence/dev-879/install.log",
+      "sha256": "265ce75b9d8e6b1d2da7e7ae9a1d957aa3d1d9f04ea984af3c0b8ca53bfd9959"
+    },
+    {
+      "file": "docs/evidence/dev-879/jev-browser-layout.json",
+      "sha256": "937e7147570b1f1b67a64c2e24fb631a4d16f0a93c446b339a8e19380b17c7ba"
+    },
+    {
+      "file": "docs/evidence/dev-879/jev-browser-startup.json",
+      "sha256": "3201975d5929f94ec830f499de19793b20f98debabee8bcd054c997a476f8235"
+    },
+    {
+      "file": "docs/evidence/dev-879/jev-full-timeouts.json",
+      "sha256": "bc642009ecb0f738cf3843ad6c715aca23cf88698b7cafd0f3dbf25fe38b2d4c"
+    },
+    {
+      "file": "docs/evidence/dev-879/mutant-aggregate-scope.log",
+      "sha256": "e004db576d001b927546ccfa8bd12d8ba0bf8c7e94aa51eceea53178f3ecd13d"
+    },
+    {
+      "file": "docs/evidence/dev-879/mutant-direct-scope.log",
+      "sha256": "a09b044320d25a6ace15397f5eaa7f07a042b55d85e000db30456d4dbcb75196"
+    },
+    {
+      "file": "docs/evidence/dev-879/mutant-retained-context.log",
+      "sha256": "6a62049f7c9bffef7a2c768fe3c25e0ff0331cdaa887759c20e2619ebec051e3"
+    },
+    {
+      "file": "docs/evidence/dev-879/mutant-thread-scope.log",
+      "sha256": "4218f4bba82ed2a09e530377336e3d613481d0c2962ac9e8c0085347635549a2"
+    },
+    {
+      "file": "docs/evidence/dev-879/mutations.json",
+      "sha256": "cc2b0a90a75bfe9b9e3cc098da2948a8fb307821dd0d2596005df3ea9bc28cb9"
+    },
+    {
+      "file": "docs/evidence/dev-879/quarantine-mutations.log",
+      "sha256": "7f5c6fda08a71b1acf00f88d35514ed6e3e2ba7140d3408298a703ea7ac59336"
+    },
+    {
+      "file": "docs/evidence/dev-879/required-checks.json",
+      "sha256": "10032f4abbd7a99ac064adfd74f204d1a55e7ce2389c8a31d016f80645ecd36d"
+    },
+    {
+      "file": "docs/evidence/dev-879/rulesets.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "file": "docs/evidence/dev-879/scoring/mutation-concurrency.log",
+      "sha256": "4c0f64297c6b81d09377be40de7bbf9743b81c32bf8f428367c084a687557d01"
+    },
+    {
+      "file": "docs/evidence/dev-879/scoring/mutation-mailbox_message_id.log",
+      "sha256": "bc597385f230557484d643f73a1bb838b6d9356610bd57f82c7a9bb432570b31"
+    },
+    {
+      "file": "docs/evidence/dev-879/scoring/mutations.json",
+      "sha256": "8a963033819008f03cf47b70f626120079db9dae47307f8cb8dfa68ea70f98a1"
+    },
+    {
+      "file": "docs/evidence/dev-879/scoring-mutations.log",
+      "sha256": "ff05bdc07e383fb7d7b7470b65c982ba5aa412a9fbd3c17c7acea0b7e8198cc1"
+    },
+    {
+      "file": "docs/evidence/dev-879/spam-1440.png",
+      "sha256": "965f45a97ff4763aa416c461bba1f0b63481781d774951aa007d9bde21f091a5"
+    },
+    {
+      "file": "docs/evidence/dev-879/spam-390.png",
+      "sha256": "199a3f254f433ec77ca12dc7d81bd9b1fa40bd230d6a4883ecf7b1c1b7186f4b"
+    },
+    {
+      "file": "docs/evidence/dev-879/typecheck.log",
+      "sha256": "5152f471e151246c69289906429f285d3a4acc75a5f7f3a526d6a24959c32d46"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/README.md",
+      "sha256": "ad43d91eaaeed660b438e7b544ece38320ab0210e197f0464b93ff28154e2f4c"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/base-branch.json",
+      "sha256": "60b66275b9480963457d9bde047d6227319918754ea474d38694dff62ce9c569"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/browser-termination.json",
+      "sha256": "f264a2fb8d73333476db3bdc18135afa8bff7c8a9bc506dc7025a0089b25c1e7"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/ci-source-pr.json",
+      "sha256": "b5bb5109e74f0ee8490b0fb1b637c6b05339f37bc1fbb0d403cae6c5f7565978"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/ci-source-worker.log",
+      "sha256": "9f53b3d9f951ef202f2425c115f8bba5c4a9a86c971778a81693cf959be0774c"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/ci-source.json",
+      "sha256": "27b968d0fea277c85a4b17ae6fc0cb3c1da313a2ef634b43e5acd124ce65a8e8"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/contract.log",
+      "sha256": "98224cb00bcfa7e1eebc50c8e81c839563d8c6b728df7339b4a48bb3a50d4e48"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/full.log",
+      "sha256": "6eac6e5a0bb5a1d4c4899901e9a23eadff4e836e31d2615b4b0ba0c25cbb9b9c"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/inbox-prerequisite.json",
+      "sha256": "d5be3924b54ee8acf4cfe11e01b13e6705ae520e2b885b19a12b21d660ff7e85"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/jev-browser-terminated.json",
+      "sha256": "ffddff0c20ba5ddb180d480b87e865542c1ce8e4bc0c34bf962e6867139b6879"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/preview.json",
+      "sha256": "d1b7f46314a4fbe2e6e8d356cd9f1cc526b8d6bb69b4fea62ae0d3642f99288f"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/rulesets.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/runtime.json",
+      "sha256": "8b2fa1639e097e801d5ca4809a7f93a7607a266ea3cf9d23179d5f1cbbd3c7c6"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/scorer-prerequisite.json",
+      "sha256": "999effb050b8dbef2305b05d99c925220e2bb7a85bc46632454411e5053e460a"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/search-1440.png",
+      "sha256": "885dca1b93905a0d9b3e1a704dc80133fe1914ec341f809a93a43363d3cc92be"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/search-390.png",
+      "sha256": "221d8a1efc61e0cef60c46d2e8277af3effabaffb022b73702e39c1718f26c7a"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/search-before.log",
+      "sha256": "a0600fe217f74dab8181d78ab089f7c58621cbc0dacc044dcb04e000ff37730e"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/search-desktop.json",
+      "sha256": "68b22fc71c03486bf2195dd43991a6a385290eb1393e9a040eb380312d8da759"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/search-final.log",
+      "sha256": "d5928a9d4caa4447eceaaae9444a4bf8b70ec4304f8dd0849b9f1e2ee1600834"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/search-mobile-retry.log",
+      "sha256": "559e777728ebb191bdb051f0c84bac5832aa02c8b0303e500755ea3925f30891"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/search-mobile.json",
+      "sha256": "bbef6465cbbde665d8b4b5b7aae9f95dc20701064699cf886a0760e340856983"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/search-passed.log",
+      "sha256": "b8feeec12c966107b306b1d9d17ad16046ad9753082ada28232ba34b47550f5d"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/source-checks.json",
+      "sha256": "e94bf9a33058164ea21845da1e96d1b5fa63ab7f89606205483a6c3184f63f14"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/spam-1440.png",
+      "sha256": "965f45a97ff4763aa416c461bba1f0b63481781d774951aa007d9bde21f091a5"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/spam-390.png",
+      "sha256": "199a3f254f433ec77ca12dc7d81bd9b1fa40bd230d6a4883ecf7b1c1b7186f4b"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/thread-after.log",
+      "sha256": "c7d06c4f6675749eff1cf5fc676b5dd41c511ff90070f46210d390d25c9a7d37"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/thread-before.log",
+      "sha256": "d7cd79ce849d44dac923387957b68a1a95d37bd2df6cbf48e5a31c20caadbb81"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/typecheck-before.log",
+      "sha256": "8d7722471e6f4ccab9acd57d06f32d2031db9d93c60eac7c7ac4233787f9a5e5"
+    },
+    {
+      "file": "docs/evidence/dev-879-fixes/typecheck.log",
+      "sha256": "5152f471e151246c69289906429f285d3a4acc75a5f7f3a526d6a24959c32d46"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/README.md",
+      "sha256": "3a0b5aab3d3277f5ec8417dab2e7ccb612627dc74b38790e67cb7c74aee19be4"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/after-desktop/thread-1440.json",
+      "sha256": "3520375c87e1486f54961c9753a778f92664f13ca2425f2a52dda58a43fb6247"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/after-desktop/thread-error-1440.png",
+      "sha256": "3e56693af1f813507c18fb64c3bac6bed214d957bbcc0ea503b1f10e821e0659"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/after-desktop/thread-recovered-1440.png",
+      "sha256": "b685ce9a1bd7e93aa7f4874a672f42c27d5aa6e7dde8558822f0aa194c53236f"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/after-desktop.log",
+      "sha256": "a2a8f9fd9a533ced5c94c469fe3935c7231c1ec5d69d8246f6bd539e90f6d6db"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/after-mobile-retry/thread-390.json",
+      "sha256": "3cd3d25d883ff252edfdd0b9779d2de1db99471324ec5fcfb63eb3c223d8f6b5"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/after-mobile-retry/thread-error-390.png",
+      "sha256": "1068c092b342a59ef13f3a90fabeba5c381b8ef18367c429dbc2ee10daa1a005"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/after-mobile-retry/thread-recovered-390.png",
+      "sha256": "a9be0b70610db3d3007fd653a06cedbaf7e2351b412f97b198d8b0903b34b39c"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/after-mobile-retry.log",
+      "sha256": "f9503c8065b39e84cf59833c219c9fa88bf64e96a7e24d2a482cb6c4feaa976e"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/after-mobile.log",
+      "sha256": "2a6891c208d710e33378b0a2d54e2694cdcd1305f7d08fb86bbfbba911ba04f5"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/after-termination.txt",
+      "sha256": "3477a85ac69568eca13621817b02c7e53ebe36bb06eb85aae82bc4d5bd92255a"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/before/thread-1440.json",
+      "sha256": "c2e5e4ba34a42f3c6e09fd2fb03ca62337b01ba32a09cc2c370424f5aaa25574"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/before/thread-error-1440.png",
+      "sha256": "dff3c3acdc1e4088d79fcbd2d52748b5a24d996142c271ff74e3709528b9ad59"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/before.log",
+      "sha256": "9914c6e2ef946bf75ea723d188edd7270a6bb0d82b67ddd468c3e7c987ba9d00"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/jev-browser-termination.json",
+      "sha256": "82243c0769bfbe1f2530507be6dbb0764f5db0b8fc163f5f082ca43062545124"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/jev-typecheck-termination.json",
+      "sha256": "2a2b795b1a5e36c835141cb3a0d87f92efb25c17381a1b73e2d43f53507b2593"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/preview/browser.json",
+      "sha256": "d1b7f46314a4fbe2e6e8d356cd9f1cc526b8d6bb69b4fea62ae0d3642f99288f"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/preview/spam-1440.png",
+      "sha256": "965f45a97ff4763aa416c461bba1f0b63481781d774951aa007d9bde21f091a5"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/preview/spam-390.png",
+      "sha256": "199a3f254f433ec77ca12dc7d81bd9b1fa40bd230d6a4883ecf7b1c1b7186f4b"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/preview.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/rulesets.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/runtime.json",
+      "sha256": "28f9117f3221ee7ed99ce4acacbe285e5b5e97438ebf0d9d8aa7618737ef782e"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/scope.txt",
+      "sha256": "1b8fe9aec21f6fe79fa0ca99a93a72cf0deb0bd50883cbad8433508236472f8f"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/tsc-isolated.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/typecheck-retry-termination.txt",
+      "sha256": "c4707fe633ee04218742bd4bc91922076bd2f1bbb6595c8e788579b42397a877"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/typecheck-retry.log",
+      "sha256": "5152f471e151246c69289906429f285d3a4acc75a5f7f3a526d6a24959c32d46"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/typecheck-termination.txt",
+      "sha256": "d892565b6672f4e0078d0befb4a809446364fcc92ee087be0313c64581ff0c76"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/typecheck.log",
+      "sha256": "5152f471e151246c69289906429f285d3a4acc75a5f7f3a526d6a24959c32d46"
+    },
+    {
+      "file": "docs/evidence/dev-879-thread-fix/typegen-isolated.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/README.md",
+      "sha256": "f6135a926aeb9607efa7cfad005be5c186ec941e326d12c3620904fd0568c380"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/after/list-1440.json",
+      "sha256": "10268b169d00259ffb4b3936320cb0a344b348968037dd373ad05b5cf3f4569c"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/after/list-390.json",
+      "sha256": "6631b1c43da5f23bf22929b3cf77a956959346eedca7bae33c8904e236f01023"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/after/list-error-1440.png",
+      "sha256": "635987a72f0e6f6c5b0ac86b7828a097f8f17afd4f4f7b8e20fec4efe1e0ca6a"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/after/list-error-390.png",
+      "sha256": "f8f6ba07e755f511a0b2c283f928d94ce8aa602c46c9e39b2c931a720e6b6c27"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/after/list-recovered-1440.png",
+      "sha256": "f266246b3b74b3af5e415220adf9c6fa3e6461a6e7ab0d613274aab781c081f2"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/after/list-recovered-390.png",
+      "sha256": "8d317ad39bfd87a0afdae710e544ff463346dc54d24bf4b23e6fdf425b227b95"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/attempt1/list-1440.json",
+      "sha256": "9226a251c764feecb2e28b50c77d398989e728e9f0ff6b1580f9e788ed58bf86"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/attempt1/list-error-1440.png",
+      "sha256": "635987a72f0e6f6c5b0ac86b7828a097f8f17afd4f4f7b8e20fec4efe1e0ca6a"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/attempt1.log",
+      "sha256": "0bf3d06cd32fdedbb18fa95c6d8aab9102859068c21e4f0bc4ffaf25b2164e64"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/before/list-1440.json",
+      "sha256": "1277c39f230f58356d292535ca06fb979cf32f35d595512d310c73171f063a22"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/before/list-error-1440.png",
+      "sha256": "0b1be4abfa6882e7bf93c91d8118cd2e907c4abf626016a64a203dd80a3ecb10"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/before.log",
+      "sha256": "ca69a595ba61acac6745f1b98140404a67cc856d6275b8f517fd99ddeb0781c3"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/checks/npm-ci.log",
+      "sha256": "b2002fbe6576dadf0fdd99da7e90784f0f6f2d09ccf5c7c7d9dcfa3423134981"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/checks/tests.log",
+      "sha256": "32bb7a4b49365ce057a04c463d4da25aee43d1df13d8383ddcd7b16ac6c16c6d"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/checks/typecheck.log",
+      "sha256": "eb28bae831820c6a5fd9e023e8cc5c088dd279c4456bab75b9c5cdfc4b920f2f"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/desktop-and-mobile-navigation.log",
+      "sha256": "0c681a2512b60290a4a1e480da18c5638b14639a1389a0458cf247dcaa59e423"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/mobile.log",
+      "sha256": "77500fef66804db109672178354a580432fb5728edcee7a40098b1ac5e690c6a"
+    },
+    {
+      "file": "docs/evidence/dev-879-list-fix/runtime.json",
+      "sha256": "c11dcff905b6c8ee4deb943b10ea9ea8fc5affe36438e79308f570b15f9635a1"
+    }
+  ],
+  "source": [
+    {
+      "file": "app/routes/email-list.tsx",
+      "recorded": "a4049a6a494799061ff01f33a0da45827f7a2fbf50adcb49e14fd2039914bbdd",
+      "actual": "a4049a6a494799061ff01f33a0da45827f7a2fbf50adcb49e14fd2039914bbdd",
+      "matches": true
+    },
+    {
+      "file": "scripts/quarantine-list-browser.mjs",
+      "recorded": "d917d9c3082f9adcab63f3df62bc17b407950d7a4df0dda41147eb40cf7b9cb1",
+      "actual": "d917d9c3082f9adcab63f3df62bc17b407950d7a4df0dda41147eb40cf7b9cb1",
+      "matches": true
+    },
+    {
+      "file": "test/browser/fixture.tsx",
+      "recorded": "3e1c568e96312442891710af97011442fba3963935c12e80ddf0da0968a872af",
+      "actual": "3e1c568e96312442891710af97011442fba3963935c12e80ddf0da0968a872af",
+      "matches": true
+    },
+    {
+      "file": "test/browser/vite.config.mjs",
+      "recorded": "efeaf80415c9aaaa36ba8ff27dbae8ada72a7bbd83af23a78e784cad7d3455a7",
+      "actual": "efeaf80415c9aaaa36ba8ff27dbae8ada72a7bbd83af23a78e784cad7d3455a7",
+      "matches": true
+    },
+    {
+      "file": "app/queries/emails.ts",
+      "recorded": "857044c8561abde3db0e71566bc0f389d0962afef5c0fab122ee540a29ffc6ce",
+      "actual": "857044c8561abde3db0e71566bc0f389d0962afef5c0fab122ee540a29ffc6ce",
+      "matches": true
+    },
+    {
+      "file": "package-lock.json",
+      "recorded": "646713613e7638def429c471121d5df51ce48c845f31079a904ad92f09c57d19",
+      "actual": "78e660bfbd992d55aa9c798eb1b6adbfe6031a9e9a89a3f7e7bbabba1dd88a39",
+      "matches": false
+    }
+  ],
+  "note": "Lockfile intentionally changed by corrected prerequisite; evidence bundles unchanged from prior approved b876506."
+}
