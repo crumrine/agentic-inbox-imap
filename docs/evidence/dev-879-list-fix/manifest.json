@@ -1,0 +1,34 @@
+{
+  "baselineHead": "e469f6dd6918e18a20760686c2081729a5a9230c",
+  "prerequisiteHead": "7cc31772b0ca17ec28ea4d78367e41e0a24e5ce5",
+  "scorerHead": "bb02819e4662e1d680805435dd886e3dc4728906",
+  "sourceSha256": {
+    "app/routes/email-list.tsx": "a4049a6a494799061ff01f33a0da45827f7a2fbf50adcb49e14fd2039914bbdd",
+    "scripts/quarantine-list-browser.mjs": "d917d9c3082f9adcab63f3df62bc17b407950d7a4df0dda41147eb40cf7b9cb1",
+    "test/browser/fixture.tsx": "3e1c568e96312442891710af97011442fba3963935c12e80ddf0da0968a872af",
+    "test/browser/vite.config.mjs": "efeaf80415c9aaaa36ba8ff27dbae8ada72a7bbd83af23a78e784cad7d3455a7",
+    "app/queries/emails.ts": "857044c8561abde3db0e71566bc0f389d0962afef5c0fab122ee540a29ffc6ce",
+    "package-lock.json": "646713613e7638def429c471121d5df51ce48c845f31079a904ad92f09c57d19"
+  },
+  "artifacts": {
+    "README.md": "6afe8be041f5d436eb7c5f6417c0b88512d4f7a46eb63a7629942116867306a6",
+    "after/list-1440.json": "10268b169d00259ffb4b3936320cb0a344b348968037dd373ad05b5cf3f4569c",
+    "after/list-390.json": "6631b1c43da5f23bf22929b3cf77a956959346eedca7bae33c8904e236f01023",
+    "after/list-error-1440.png": "635987a72f0e6f6c5b0ac86b7828a097f8f17afd4f4f7b8e20fec4efe1e0ca6a",
+    "after/list-error-390.png": "f8f6ba07e755f511a0b2c283f928d94ce8aa602c46c9e39b2c931a720e6b6c27",
+    "after/list-recovered-1440.png": "f266246b3b74b3af5e415220adf9c6fa3e6461a6e7ab0d613274aab781c081f2",
+    "after/list-recovered-390.png": "8d317ad39bfd87a0afdae710e544ff463346dc54d24bf4b23e6fdf425b227b95",
+    "attempt1/list-1440.json": "9226a251c764feecb2e28b50c77d398989e728e9f0ff6b1580f9e788ed58bf86",
+    "attempt1/list-error-1440.png": "635987a72f0e6f6c5b0ac86b7828a097f8f17afd4f4f7b8e20fec4efe1e0ca6a",
+    "attempt1.log": "0bf3d06cd32fdedbb18fa95c6d8aab9102859068c21e4f0bc4ffaf25b2164e64",
+    "before/list-1440.json": "1277c39f230f58356d292535ca06fb979cf32f35d595512d310c73171f063a22",
+    "before/list-error-1440.png": "0b1be4abfa6882e7bf93c91d8118cd2e907c4abf626016a64a203dd80a3ecb10",
+    "before.log": "ca69a595ba61acac6745f1b98140404a67cc856d6275b8f517fd99ddeb0781c3",
+    "checks/npm-ci.log": "b2002fbe6576dadf0fdd99da7e90784f0f6f2d09ccf5c7c7d9dcfa3423134981",
+    "checks/tests.log": "5e147aed6cea1db77fc60502c3975c905031ca016fb82635d267f5c3e9a1b233",
+    "checks/typecheck.log": "8089103c4e2ac4d1e1880513954bbae87828cf78baffad3c4a4c7fb5699d5614",
+    "desktop-and-mobile-navigation.log": "0c681a2512b60290a4a1e480da18c5638b14639a1389a0458cf247dcaa59e423",
+    "mobile.log": "77500fef66804db109672178354a580432fb5728edcee7a40098b1ac5e690c6a",
+    "runtime.json": "c11dcff905b6c8ee4deb943b10ea9ea8fc5affe36438e79308f570b15f9635a1"
+  }
+}

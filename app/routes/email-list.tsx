@@ -176,10 +176,17 @@ export default function EmailListRoute() {
 	const {
 		data: emailData,
 		isFetching: isRefreshing,
+		isSuccess,
+		isError,
+		refetch,
 	} = useEmails(mailboxId, params, { refetchInterval: 30_000 });
 
-	const emails = emailData?.emails ?? [];
-	const totalCount = emailData?.totalCount ?? 0;
+	// Refetch failures retain cached data, including mail moved to Spam by
+	// another client. Rows, actions and aggregates require a successful current
+	// read; never use those retained results during revalidation or its retries.
+	const validatedData = isSuccess && !isRefreshing ? emailData : undefined;
+	const emails = validatedData?.emails ?? [];
+	const totalCount = validatedData?.totalCount ?? 0;
 
 	const { data: folders = [] } = useFolders(mailboxId);
 
@@ -314,8 +321,15 @@ export default function EmailListRoute() {
 
 				{/* Email rows */}
 				<div className="flex-1 overflow-y-auto">
-				{isRefreshing && emails.length === 0 ? (
+				{isRefreshing ? (
 					<EmailListSkeleton />
+				) : isError ? (
+					<div role="alert" className="p-6 text-center">
+						<p>Emails unavailable. Retry to refresh this folder.</p>
+						<Button onClick={() => refetch()} aria-label="Retry emails">
+							Retry emails
+						</Button>
+					</div>
 				) : emails.length > 0 ? (
 						<div>
 							{emails.map((email) => {

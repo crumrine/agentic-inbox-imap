@@ -1,0 +1,19 @@
+{"phase":"initial-inbox","width":1440,"requests":[{"folder":"spam","status":200},{"folder":"spam","status":200},{"folder":"inbox","status":200}]}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Failed list revalidation must hide quarantined subjects
+
+1 !== 0
+
+    at file:///Users/brian/.codex/worktrees/dev-879-list-refresh/agentic-inbox/scripts/quarantine-list-browser.mjs:85:12 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 0,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.19.0
