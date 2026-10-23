@@ -4,7 +4,7 @@
 
 import { routeAgentRequest } from "agents";
 import { Hono } from "hono";
-import { jwtVerify, createRemoteJWKSet } from "jose";
+import { requireAccess } from "./access";
 import { createRequestHandler } from "react-router";
 import { app as apiApp, handleInboundEmail } from "./index";
 import { EmailMCP } from "./mcp";
@@ -30,67 +30,13 @@ const requestHandler = createRequestHandler(
 	import.meta.env.MODE,
 );
 
-function getAccessUrls(teamDomain: string) {
-	const certsPath = "/cdn-cgi/access/certs";
-	const teamUrl = new URL(teamDomain);
-	const issuer = teamUrl.origin;
-	const certsUrl = teamUrl.pathname.endsWith(certsPath)
-		? teamUrl
-		: new URL(certsPath, issuer);
-
-	return { issuer, certsUrl };
-}
-
 // Main app that wraps the API and adds React Router fallback
 const app = new Hono<{ Bindings: Env }>();
 
 // Cloudflare Access JWT validation middleware (production only)
-app.use("*", async (c, next) => {
-	// Skip validation in development
-	if (import.meta.env.DEV) {
-		return next();
-	}
-
-	const { POLICY_AUD, TEAM_DOMAIN } = c.env;
-
-	// Fail closed in production if Access is not configured.
-	if (!POLICY_AUD || !TEAM_DOMAIN) {
-		return c.text(
-			"Cloudflare Access must be configured in production. Set POLICY_AUD and TEAM_DOMAIN.",
-			500,
-		);
-	}
-
-	const token = c.req.header("cf-access-jwt-assertion");
-	if (!token) {
-		return c.text("Missing required CF Access JWT", 403);
-	}
-
-	try {
-		const { issuer, certsUrl } = getAccessUrls(TEAM_DOMAIN);
-		const JWKS = createRemoteJWKSet(certsUrl);
-		await jwtVerify(token, JWKS, {
-			issuer,
-			audience: POLICY_AUD,
-		});
-	} catch {
-		return c.text("Invalid or expired Access token", 403);
-	}
-
-	// Authorization model note: once a teammate passes the shared Cloudflare
-	// Access policy, they can access all mailboxes in this app by design.
-	//
-	// Service tokens: the IMAP gateway authenticates with a Cloudflare Access
-	// service token (CF-Access-Client-Id / CF-Access-Client-Secret). Access
-	// validates the pair at the edge and mints the same cf-access-jwt-assertion,
-	// but a service-token JWT carries `common_name` instead of `email` and has
-	// no identity claims at all. The verification above checks only the
-	// signature, issuer and audience and never reads an identity claim, so it
-	// accepts service-token JWTs as-is — no change needed. Do not add an
-	// `email`-claim check here without exempting service tokens, or the gateway
-	// breaks. The Access application policy must include an allow rule for the
-	// gateway's service token (action "Service Auth", selector "Service Token").
-	return next();
+app.use("*", (c, next) => {
+	if (import.meta.env.DEV) return next();
+	return requireAccess(c, next);
 });
 
 // MCP server endpoint — used by AI coding tools (ProtoAgent, Claude Code, Cursor, etc.)
