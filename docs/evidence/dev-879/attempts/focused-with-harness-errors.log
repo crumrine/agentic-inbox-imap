@@ -1,0 +1,90 @@
+
+ RUN  v4.1.11 /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+uncaught exception; source = Uncaught (in promise); stack = Error: synthetic: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_TRIGGER)
+    at SQLiteDOPreparedQuery.run (/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/src/durable-sqlite/session.ts:117:39)
+    at QueryPromise.run (/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/src/sqlite-core/query-builders/insert.ts:398:26)
+    at /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/workers/durableObject/index.ts:1235:190
+    at MailboxDO.setSpamDisposition (/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/workers/durableObject/index.ts:1223:33)
+    at home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:365:47
+ ❯ test/quarantine.test.ts (8 tests | 1 failed) 13019ms
+     × requires explicit Spam scope for attachment downloads and preserves IMAP visibility 1516ms
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/types.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/interfaces.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-json-schema-compat.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/validation/ajv-provider.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/server.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/helpers.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/server/completable.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/uriTemplate.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/toolNameValidation.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/mcp-server.js" points to missing source files
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/quarantine.test.ts > quarantine transaction and attachment boundaries > requires explicit Spam scope for attachment downloads and preserves IMAP visibility
+AssertionError: expected '{"messages":[{"uid":1,"flags":[],"int…' to contain 'attachment-mail'
+
+Expected: "attachment-mail"
+Received: "{"messages":[{"uid":1,"flags":[],"internalDate":"2026-01-25T00:00:00.000Z","rfc822Size":531,"envelope":{"subject":"Subject 25","from":[{"name":"","address":"sender@example.com"}],"to":[{"name":"","address":"recipient@example.com"}],"cc":[],"messageId":"","inReplyTo":"","date":"2026-01-25T00:00:00.000Z"},"hasRaw":false}],"uidNext":2}"
+
+ ❯ test/quarantine.test.ts:200:31
+    198|     expect(review.status).toBe(200);expect(await review.text()).toBe('…
+    199|     const imap=await request(b.e,`/api/imap/v1/${BOX}/spam/messages`);…
+    200|     expect(await imap.text()).toContain('attachment-mail');
+       |                               ^
+    201|   });
+    202| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 2 unhandled errors during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: synthetic: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_TRIGGER)
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { remote: true }
+This error originated in "test/quarantine.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "rolls back destination UID and folder when feedback storage fails". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: synthetic: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_TRIGGER)
+ ❯ SQLiteDOPreparedQuery.run node_modules/src/durable-sqlite/session.ts:117:39
+ ❯ QueryPromise.run node_modules/src/sqlite-core/query-builders/insert.ts:398:26
+ ❯ workers/durableObject/index.ts:1235:190
+    1233|             const revision = expectedRevision + 1;
+    1234|             if ((disposition === 'spam' && email.folder !== Folders.SP…
+    1235|             this.db.insert(schema.spamDispositions).values({email_id:e…
+       |                                                                                                                                                                                              ^
+    1236|             return {ok:true, revision};
+    1237|         });
+ ❯ MailboxDO.setSpamDisposition workers/durableObject/index.ts:1223:33
+ ❯ home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:365:47
+
+This error originated in "test/quarantine.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "rolls back destination UID and folder when feedback storage fails". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 11 passed (12)
+     Errors  2 errors
+   Start at  06:10:56
+   Duration  135.41s (transform 27.17s, setup 30.98s, import 63.21s, tests 18.51s, environment 1ms)

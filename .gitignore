@@ -22,3 +22,5 @@ worker-configuration.d.ts
 gateway/agentic-imapd
 gateway/*.exe
 gateway/**/*.test
+
+.browser-build/

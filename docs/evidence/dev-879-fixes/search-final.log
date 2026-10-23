@@ -1,0 +1,47 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+locator.fill: Timeout 60000ms exceeded.
+Call log:
+[2m  - waiting for getByPlaceholder('Search emails...')[22m
+[2m    - locator resolved to <input value="" id="base-ui-_r_4_" aria-label="Search emails" placeholder="Search emails... (try from:name, is:unread, has:attachment)" class="border-0 bg-kumo-control text-kumo-default ring ring-kumo-line outline-none placeholder:text-kumo-subtle disabled:text-kumo-subtle h-9 gap-1.5 rounded-lg px-3 text-base focus:ring-kumo-ring w-full"/>[22m
+[2m    - fill("Trusted")[22m
+[2m  - attempting fill action[22m
+[2m    2 × waiting for element to be visible, enabled and editable[22m
+[2m      - element is not visible[22m
+[2m    - retrying fill action[22m
+[2m    - waiting 20ms[22m
+[2m    2 × waiting for element to be visible, enabled and editable[22m
+[2m      - element is not visible[22m
+[2m    - retrying fill action[22m
+[2m      - waiting 100ms[22m
+[2m    119 × waiting for element to be visible, enabled and editable[22m
+[2m        - element is not visible[22m
+[2m      - retrying fill action[22m
+[2m        - waiting 500ms[22m
+
+    at search (/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/scripts/quarantine-search-browser.mjs:61:17)
+    at /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/scripts/quarantine-search-browser.mjs:63:9 {
+  log: [
+    "  - waiting for getByPlaceholder('Search emails...')",
+    '    - locator resolved to <input value="" id="base-ui-_r_4_" aria-label="Search emails" placeholder="Search emails... (try from:name, is:unread, has:attachment)" class="border-0 bg-kumo-control text-kumo-default ring ring-kumo-line outline-none placeholder:text-kumo-subtle disabled:text-kumo-subtle h-9 gap-1.5 rounded-lg px-3 text-base focus:ring-kumo-ring w-full"/>',
+    '    - fill("Trusted")',
+    '  - attempting fill action',
+    '    2 × waiting for element to be visible, enabled and editable',
+    '      - element is not visible',
+    '    - retrying fill action',
+    '    - waiting 20ms',
+    '    2 × waiting for element to be visible, enabled and editable',
+    '      - element is not visible',
+    '    - retrying fill action',
+    '      - waiting 100ms',
+    '    119 × waiting for element to be visible, enabled and editable',
+    '        - element is not visible',
+    '      - retrying fill action',
+    '        - waiting 500ms'
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v24.15.0

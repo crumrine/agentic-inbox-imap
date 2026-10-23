@@ -1,0 +1,51 @@
+{
+  width: 1440,
+  media: true,
+  rootFont: '16px',
+  styleSheets: [ { href: null, rules: 191 }, { href: null, rules: 190 } ],
+  boxes: [
+    {
+      class: 'flex h-screen overflow-hidden',
+      rect: [Object],
+      position: 'static',
+      transform: 'none',
+      translate: 'none'
+    },
+    {
+      class: 'fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0 md:z-0 -translate-x-full',
+      rect: [Object],
+      position: 'fixed',
+      transform: 'none',
+      translate: '0px'
+    },
+    {
+      class: 'h-full w-64 bg-kumo-recessed flex flex-col shrink-0 border-r border-kumo-line',
+      rect: [Object],
+      position: 'static',
+      transform: 'none',
+      translate: 'none'
+    },
+    {
+      class: 'flex-1 overflow-hidden',
+      rect: [Object],
+      position: 'static',
+      transform: 'none',
+      translate: 'none'
+    }
+  ]
+}
+browser 148.0.7778.96
+[
+  '.fixed { position: fixed; }',
+  '.h-screen { height: 100vh; }',
+  '.min-h-screen { min-height: 100vh; }',
+  '.table-fixed { table-layout: fixed; }',
+  '.-translate-x-full { --tw-translate-x: -100%; translate: var(--tw-translate-x) var(--tw-translate-y); }',
+  '.translate-x-full { --tw-translate-x: 100%; translate: var(--tw-translate-x) var(--tw-translate-y); }',
+  '.md\\:relative {\n  @media (width >= 48rem) {\n  position: relative;\n}\n}',
+  '.fixed { position: fixed; }',
+  '.min-h-screen { min-height: 100vh; }',
+  '.table-fixed { table-layout: fixed; }',
+  '.translate-x-full { --tw-translate-x: 100%; translate: var(--tw-translate-x) var(--tw-translate-y); }'
+]
+{ errors: [], network: [] }

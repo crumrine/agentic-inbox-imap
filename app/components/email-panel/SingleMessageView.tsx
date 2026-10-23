@@ -5,6 +5,8 @@
 import EmailAttachmentList from "~/components/EmailAttachmentList";
 import EmailIframe from "~/components/EmailIframe";
 import { formatDetailDate, rewriteInlineImages } from "~/lib/utils";
+import SuspiciousPreview from "~/components/SuspiciousPreview";
+import { suspiciousText } from "shared/mail-scope";
 import type { Email } from "~/types";
 
 interface SingleMessageViewProps {
@@ -18,6 +20,7 @@ export default function SingleMessageView({
 	mailboxId,
 	onPreviewImage,
 }: SingleMessageViewProps) {
+    if (email.folder_id === "spam") return <SuspiciousPreview body={email.body} />;
 	return (
 		<div className="flex flex-col h-full">
 			<div className="px-4 py-4 border-b border-kumo-line md:px-6">

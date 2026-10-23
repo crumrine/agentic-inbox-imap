@@ -8,6 +8,7 @@
  * Includes: DO stub helpers, sender validation, message-ID generation,
  * threading, HTML utilities, and tool-logic (getFullEmail / getFullThread).
  */
+import { suspiciousText, type MailScope } from "../../shared/mail-scope";
 import type { MailboxDO } from "../durableObject";
 import type { EmailFull } from "./schemas";
 import {
@@ -488,13 +489,23 @@ export function toClientEmail(email: object): Record<string, unknown> {
 	for (const key of CLIENT_EMAIL_FIELDS) {
 		if (key in row) projected[key] = row[key];
 	}
+    if (row.folder_id === Folders.SPAM) {
+        // thread_id is an opaque lookup key, not display text. Truncating it
+        // loses messages or selects an unrelated thread sharing that prefix.
+        for (const key of ['subject', 'sender', 'recipient', 'cc', 'bcc', 'in_reply_to', 'email_references', 'message_id']) {
+            if (key in projected) projected[key] = suspiciousText(projected[key], key === 'subject' ? 2048 : 512);
+        }
+        projected.body = suspiciousText(row.body);
+        projected.raw_headers = null;
+        projected.attachments = [];
+    }
 	return projected;
 }
 
 // ── Tool Logic (getFullEmail / getFullThread) ──────────────────────
 
 type MailboxThreadReaderStub = {
-	getThreadEmails: (threadId: string) => Promise<EmailFull[]>;
+	getThreadEmails: (threadId: string, scope?: MailScope) => Promise<EmailFull[]>;
 };
 
 /**
@@ -507,12 +518,13 @@ type MailboxThreadReaderStub = {
 export async function getFullEmail(
 	stub: DurableObjectStub<MailboxDO>,
 	emailId: string,
+    scope: MailScope = "normal",
 ) {
-	const email = (await stub.getEmail(emailId)) as EmailFull | null;
+	const email = (await stub.getEmail(emailId, scope)) as EmailFull | null;
 	if (!email) return null;
 
-	const textBody = email.body ? stripHtmlToText(email.body) : "";
-	return { ...toClientEmail(email), body_text: textBody, body_html: email.body };
+	const textBody = scope === "spam" ? suspiciousText(email.body) : email.body ? stripHtmlToText(email.body) : "";
+	return { ...toClientEmail(scope === "spam" ? {...email, body:textBody, raw_headers:undefined, attachments:[]} : email), body_text: textBody, body_html: scope === "spam" ? undefined : email.body };
 }
 
 /**
@@ -527,13 +539,14 @@ export async function getFullEmail(
 export async function getFullThread(
 	stub: DurableObjectStub<MailboxDO>,
 	threadId: string,
+    scope: MailScope = "normal",
 ) {
 	const threadStub = stub as unknown as MailboxThreadReaderStub;
-	const emails = await threadStub.getThreadEmails(threadId);
+	const emails = await threadStub.getThreadEmails(threadId, scope);
 
 	const enriched: Record<string, unknown>[] = emails.map((email) => {
-		const textBody = email.body ? stripHtmlToText(email.body) : "";
-		return { ...toClientEmail(email), body_text: textBody };
+		const textBody = scope === "spam" ? suspiciousText(email.body) : email.body ? stripHtmlToText(email.body) : "";
+		return { ...toClientEmail(scope === "spam" ? {...email, body:textBody, raw_headers:undefined, attachments:[]} : email), body_text: textBody };
 	});
 
 	// Already sorted ASC by the DO query, but ensure consistency

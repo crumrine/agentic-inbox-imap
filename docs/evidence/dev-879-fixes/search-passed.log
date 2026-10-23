@@ -1,0 +1,17 @@
+{"width":1440,"searchCalls":11,"searchPages":[1,1,1,1,1,1,1,1,2,2,1],"normalExternalMove":true,"spamExternalRescue":true,"failedRefreshHidesRowsAndCount":true,"paginationShrink":true,"network":[],"errors":[]}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+locator.click: Timeout 60000ms exceeded.
+Call log:
+[2m  - waiting for getByRole('button', { name: 'Back to list', exact: true })[22m
+
+    at /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/scripts/quarantine-search-browser.mjs:59:81 {
+  log: [
+    "  - waiting for getByRole('button', { name: 'Back to list', exact: true })"
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v24.15.0

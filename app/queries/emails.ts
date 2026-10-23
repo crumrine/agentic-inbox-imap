@@ -3,6 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { MailScope } from "shared/mail-scope";
 import api from "~/services/api";
 import type { Email } from "~/types";
 import { queryKeys } from "./keys";
@@ -50,37 +51,40 @@ export function useEmails(
 export function useEmail(
 	mailboxId: string | undefined,
 	emailId: string | undefined,
+    scope: MailScope = "normal",
 ) {
 	return useQuery<Email>({
 		queryKey: mailboxId && emailId
-			? queryKeys.emails.detail(mailboxId, emailId)
+			? queryKeys.emails.detail(mailboxId, emailId, scope)
 			: ["emails", "_disabled_detail"],
-		queryFn: () => api.getEmail(mailboxId!, emailId!) as Promise<Email>,
+		queryFn: ({signal}) => api.getEmail(mailboxId!, emailId!, {scope, signal}) as Promise<Email>,
 		enabled: !!mailboxId && !!emailId,
+        refetchInterval:30_000,
 	});
 }
 
 export function useThreadReplies(
 	mailboxId: string | undefined,
 	threadId: string | undefined | null,
+    scope: MailScope = "normal",
 ) {
 	const qc = useQueryClient();
 
 	return useQuery<Email[]>({
 		queryKey: mailboxId && threadId
-			? queryKeys.emails.thread(mailboxId, threadId)
+			? queryKeys.emails.thread(mailboxId, threadId, scope)
 			: ["emails", "_disabled_thread"],
 		queryFn: async ({ signal }) => {
 			// Single request returns all thread emails with full bodies +
 			// attachments. Eliminates the previous N+1 pattern that fired
 			// a separate getEmail call per thread message.
-			const emails = await api.getThread(mailboxId!, threadId!, { signal }) as Email[];
+			const emails = await api.getThread(mailboxId!, threadId!, { signal, scope }) as Email[];
 
 			// Populate individual email detail caches so clicking a thread
 			// message in the panel doesn't re-fetch.
 			for (const email of emails) {
 				qc.setQueryData(
-					queryKeys.emails.detail(mailboxId!, email.id),
+					queryKeys.emails.detail(mailboxId!, email.id, scope),
 					email,
 				);
 			}
@@ -88,16 +92,18 @@ export function useThreadReplies(
 			return emails;
 		},
 		enabled: !!mailboxId && !!threadId,
+        refetchInterval:30_000,
 	});
 }
 
 // ---------- Mutations ----------
 
 /** Invalidate both the email list and folder counts after any email mutation. */
-function useInvalidateEmailData() {
+export function useInvalidateEmailData() {
 	const qc = useQueryClient();
-	return (mailboxId: string) => {
-		qc.invalidateQueries({ queryKey: ["emails", mailboxId] });
+	return async (mailboxId: string) => {
+        await Promise.all([qc.cancelQueries({queryKey:["emails", mailboxId]}), qc.cancelQueries({queryKey:["search", mailboxId]})]);
+        await Promise.all([qc.resetQueries({queryKey:["emails", mailboxId]}), qc.resetQueries({queryKey:["search", mailboxId]})]);
 		qc.invalidateQueries({
 			queryKey: queryKeys.folders.list(mailboxId),
 		});
@@ -122,9 +128,9 @@ export function useUpdateEmail() {
 		mutationFn: ({
 			mailboxId,
 			id,
-			data,
-		}: { mailboxId: string; id: string; data: unknown }) =>
-			api.updateEmail(mailboxId, id, data),
+			data, scope,
+		}: { mailboxId: string; id: string; data: unknown; scope?: MailScope }) =>
+			api.updateEmail(mailboxId, id, data, scope),
 		onMutate: async ({ mailboxId, id, data }) => {
 			// Only target list queries (3rd key element is an object = params),
 			// NOT detail queries (string = emailId) or thread queries.
@@ -192,9 +198,9 @@ export function useMarkThreadRead() {
 	return useMutation({
 		mutationFn: ({
 			mailboxId,
-			threadId,
-		}: { mailboxId: string; threadId: string }) =>
-			api.markThreadRead(mailboxId, threadId),
+			threadId, scope,
+		}: { mailboxId: string; threadId: string; scope?: MailScope }) =>
+			api.markThreadRead(mailboxId, threadId, scope),
 		onSuccess: (_data, { mailboxId }) => {
 			qc.invalidateQueries({ queryKey: ["emails", mailboxId] });
 			qc.invalidateQueries({

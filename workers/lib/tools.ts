@@ -14,6 +14,7 @@
  * are reused directly — this module covers the remaining shared operations.
  */
 
+import type { MailScope } from "../../shared/mail-scope";
 import type { EmailFull } from "./schemas";
 import {
 	getMailboxStub,
@@ -37,6 +38,7 @@ type MailboxSearchStub = {
 	searchEmails: (options: {
 		query: string;
 		folder?: string;
+        normalOnly?: boolean;
 	}) => Promise<unknown>;
 };
 
@@ -56,10 +58,11 @@ export async function toolListEmails(
 	env: Env,
 	mailboxId: string,
 	params: { folder: string; limit: number; page: number },
+    normalOnly = false,
 ) {
 	const stub = getMailboxStub(env, mailboxId);
 	return stub.getEmails({
-		folder: params.folder,
+		folder: params.folder, normalOnly,
 		limit: params.limit,
 		page: params.page,
 		sortColumn: "date",
@@ -73,9 +76,10 @@ export async function toolGetEmail(
 	env: Env,
 	mailboxId: string,
 	emailId: string,
+    scope: MailScope = "normal",
 ) {
 	const stub = getMailboxStub(env, mailboxId);
-	const email = await getFullEmail(stub, emailId);
+	const email = await getFullEmail(stub, emailId, scope);
 	if (!email) return { error: "Email not found" };
 	return email;
 }
@@ -86,9 +90,10 @@ export async function toolGetThread(
 	env: Env,
 	mailboxId: string,
 	threadId: string,
+    scope: MailScope = "normal",
 ) {
 	const stub = getMailboxStub(env, mailboxId);
-	return getFullThread(stub, threadId);
+	return getFullThread(stub, threadId, scope);
 }
 
 // ── search_emails ──────────────────────────────────────────────────
@@ -97,11 +102,12 @@ export async function toolSearchEmails(
 	env: Env,
 	mailboxId: string,
 	params: { query: string; folder?: string },
+    normalOnly = false,
 ) {
 	const stub = getMailboxStub(env, mailboxId);
 	return (stub as unknown as MailboxSearchStub).searchEmails({
 		query: params.query,
-		folder: params.folder,
+		folder: params.folder, normalOnly,
 	});
 }
 
@@ -134,6 +140,9 @@ export async function toolDraftReply(
 > {
 	const stub = getMailboxStub(env, mailboxId);
 
+	const original = (await stub.getEmail(params.originalEmailId)) as EmailFull | null;
+    if (!original) return {error:"Original email not found; rescue Spam before replying."};
+
 	// Verify/sanitize if requested
 	let processedBody = params.body.trim();
 	if (params.runVerifyDraft) {
@@ -152,7 +161,6 @@ export async function toolDraftReply(
 	const draftId = crypto.randomUUID();
 
 	// Get the original email for thread_id and quoted text
-	const original = (await stub.getEmail(params.originalEmailId)) as EmailFull | null;
 	const threadId = original?.thread_id || params.originalEmailId;
 
 	// Append quoted original message
@@ -333,9 +341,10 @@ export async function toolMarkEmailRead(
 	mailboxId: string,
 	emailId: string,
 	read: boolean,
+    scope: MailScope = "normal",
 ) {
 	const stub = getMailboxStub(env, mailboxId);
-	await stub.updateEmail(emailId, { read });
+	if (!(await stub.updateEmail(emailId, { read }, scope))) return {error:"Email not found"};
 	return { status: "updated", emailId, read };
 }
 

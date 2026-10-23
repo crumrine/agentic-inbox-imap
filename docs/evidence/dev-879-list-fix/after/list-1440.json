@@ -1,0 +1,52 @@
+{
+  "width": 1440,
+  "browser": "155.0.8059.85",
+  "requests": [
+    {
+      "folder": "spam",
+      "status": 200
+    },
+    {
+      "folder": "inbox",
+      "status": 200
+    },
+    {
+      "folder": "inbox",
+      "status": 503
+    },
+    {
+      "folder": "inbox",
+      "status": 503
+    },
+    {
+      "folder": "inbox",
+      "status": 503
+    },
+    {
+      "folder": "inbox",
+      "status": 200
+    },
+    {
+      "folder": "spam",
+      "status": 200
+    },
+    {
+      "folder": "inbox",
+      "status": 200
+    },
+    {
+      "folder": "inbox",
+      "status": 200
+    }
+  ],
+  "rejectedCalls": 3,
+  "staleSubject": 0,
+  "staleCount": 0,
+  "staleRows": 0,
+  "network": [],
+  "errors": [],
+  "retryRecovered": true,
+  "explicitSpamReview": true,
+  "externalRescueRestored": true,
+  "inFlightHidesRowsAndCount": true
+}

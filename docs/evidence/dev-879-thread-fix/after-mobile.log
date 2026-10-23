@@ -1,0 +1,62 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+locator.click: Timeout 60000ms exceeded.
+Call log:
+  - waiting for locator('a[href="/mailbox/ui@example.test/emails/inbox"]')
+    - locator resolved to <a data-discover="true" href="/mailbox/ui@example.test/emails/inbox" class="flex items-center gap-3 py-2 px-3 rounded-md text-sm transition-colors text-kumo-strong hover:bg-kumo-tint">…</a>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - element is outside of the viewport
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - element is outside of the viewport
+    - retrying click action
+      - waiting 100ms
+    112 × waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - element is outside of the viewport
+      - retrying click action
+        - waiting 500ms
+
+    at /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/scripts/quarantine-thread-browser.mjs:38:73 {
+  log: [
+    `  - waiting for locator('a[href="/mailbox/ui@example.test/emails/inbox"]')`,
+    '    - locator resolved to <a data-discover="true" href="/mailbox/ui@example.test/emails/inbox" class="flex items-center gap-3 py-2 px-3 rounded-md text-sm transition-colors text-kumo-strong hover:bg-kumo-tint">…</a>',
+    '  - attempting click action',
+    '    2 × waiting for element to be visible, enabled and stable',
+    '      - element is visible, enabled and stable',
+    '      - scrolling into view if needed',
+    '      - done scrolling',
+    '      - element is outside of the viewport',
+    '    - retrying click action',
+    '    - waiting 20ms',
+    '    2 × waiting for element to be visible, enabled and stable',
+    '      - element is visible, enabled and stable',
+    '      - scrolling into view if needed',
+    '      - done scrolling',
+    '      - element is outside of the viewport',
+    '    - retrying click action',
+    '      - waiting 100ms',
+    '    112 × waiting for element to be visible, enabled and stable',
+    '        - element is visible, enabled and stable',
+    '        - scrolling into view if needed',
+    '        - done scrolling',
+    '        - element is outside of the viewport',
+    '      - retrying click action',
+    '        - waiting 500ms'
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v24.15.0

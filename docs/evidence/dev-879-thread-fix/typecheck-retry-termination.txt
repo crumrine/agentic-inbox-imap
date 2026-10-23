@@ -1,0 +1,1 @@
+Second local typecheck exited143 after generating Wrangler declarations, again no TypeScript diagnostics, run alone. Reused unchanged Jev insufficient_evidence advisory; next diagnostic splits route typegen and tsc without altering checks.

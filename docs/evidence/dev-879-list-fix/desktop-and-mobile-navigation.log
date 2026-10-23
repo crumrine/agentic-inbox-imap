@@ -1,0 +1,65 @@
+{"phase":"initial-inbox","width":1440,"requests":[{"folder":"spam","status":200},{"folder":"inbox","status":200}]}
+{"width":1440,"browser":"155.0.8059.85","requests":[{"folder":"spam","status":200},{"folder":"inbox","status":200},{"folder":"inbox","status":503},{"folder":"inbox","status":503},{"folder":"inbox","status":503},{"folder":"inbox","status":200},{"folder":"spam","status":200},{"folder":"inbox","status":200},{"folder":"inbox","status":200}],"rejectedCalls":3,"staleSubject":0,"staleCount":0,"staleRows":0,"network":[],"errors":[],"retryRecovered":true,"explicitSpamReview":true,"externalRescueRestored":true,"inFlightHidesRowsAndCount":true}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+locator.click: Timeout 45000ms exceeded.
+Call log:
+[2m  - waiting for locator('a[href="/mailbox/ui@example.test/emails/inbox"]')[22m
+[2m    - locator resolved to <a data-discover="true" href="/mailbox/ui@example.test/emails/inbox" class="flex items-center gap-3 py-2 px-3 rounded-md text-sm transition-colors text-kumo-strong hover:bg-kumo-tint">…</a>[22m
+[2m  - attempting click action[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - element is outside of the viewport[22m
+[2m    - retrying click action[22m
+[2m    - waiting 20ms[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - element is outside of the viewport[22m
+[2m    - retrying click action[22m
+[2m      - waiting 100ms[22m
+[2m    87 × waiting for element to be visible, enabled and stable[22m
+[2m       - element is visible, enabled and stable[22m
+[2m       - scrolling into view if needed[22m
+[2m       - done scrolling[22m
+[2m       - element is outside of the viewport[22m
+[2m     - retrying click action[22m
+[2m       - waiting 500ms[22m
+
+    at folderLink (/Users/brian/.codex/worktrees/dev-879-list-refresh/agentic-inbox/scripts/quarantine-list-browser.mjs:59:18)
+    at async file:///Users/brian/.codex/worktrees/dev-879-list-refresh/agentic-inbox/scripts/quarantine-list-browser.mjs:68:5 {
+  log: [
+    `  - waiting for locator('a[href="/mailbox/ui@example.test/emails/inbox"]')`,
+    '    - locator resolved to <a data-discover="true" href="/mailbox/ui@example.test/emails/inbox" class="flex items-center gap-3 py-2 px-3 rounded-md text-sm transition-colors text-kumo-strong hover:bg-kumo-tint">…</a>',
+    '  - attempting click action',
+    '    2 × waiting for element to be visible, enabled and stable',
+    '      - element is visible, enabled and stable',
+    '      - scrolling into view if needed',
+    '      - done scrolling',
+    '      - element is outside of the viewport',
+    '    - retrying click action',
+    '    - waiting 20ms',
+    '    2 × waiting for element to be visible, enabled and stable',
+    '      - element is visible, enabled and stable',
+    '      - scrolling into view if needed',
+    '      - done scrolling',
+    '      - element is outside of the viewport',
+    '    - retrying click action',
+    '      - waiting 100ms',
+    '    87 × waiting for element to be visible, enabled and stable',
+    '       - element is visible, enabled and stable',
+    '       - scrolling into view if needed',
+    '       - done scrolling',
+    '       - element is outside of the viewport',
+    '     - retrying click action',
+    '       - waiting 500ms'
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v24.19.0

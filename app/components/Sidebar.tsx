@@ -13,6 +13,7 @@ import {
 	PlusIcon,
 	TrashIcon,
 	TrayIcon,
+    ShieldWarningIcon,
 } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import { NavLink, useNavigate, useParams } from "react-router";
@@ -27,6 +28,7 @@ const FOLDER_ICONS: Record<string, React.ReactNode> = {
 	[Folders.DRAFT]: <FileIcon size={18} weight="regular" />,
 	[Folders.ARCHIVE]: <ArchiveIcon size={18} weight="regular" />,
 	[Folders.TRASH]: <TrashIcon size={18} weight="regular" />,
+    [Folders.SPAM]: <ShieldWarningIcon size={18} />,
 };
 
 const SYSTEM_FOLDER_LINKS = [
@@ -35,6 +37,7 @@ const SYSTEM_FOLDER_LINKS = [
 	{ id: Folders.DRAFT, label: "Drafts" },
 	{ id: Folders.ARCHIVE, label: "Archive" },
 	{ id: Folders.TRASH, label: "Trash" },
+    { id: Folders.SPAM, label: "Spam" },
 ];
 
 interface FolderLinkProps {

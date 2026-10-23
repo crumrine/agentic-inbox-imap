@@ -1,0 +1,51 @@
+
+> typecheck
+> npm run cf-typegen && react-router typegen && tsc -b
+
+
+> cf-typegen
+> wrangler types
+
+
+ ⛅️ wrangler 4.74.0 (update available 4.151.3)
+──────────────────────────────────────────────
+Generating project types...
+
+declare namespace Cloudflare {
+	interface GlobalProps {
+		mainModule: typeof import("./workers/app");
+		durableNamespaces: "MailboxDO" | "EmailAgent" | "EmailMCP" | "ImapAuthRateLimitDO";
+	}
+	interface Env {
+		BUCKET: R2Bucket;
+		EMAIL: SendEmail;
+		AI: Ai;
+		DOMAINS: "example.com";
+		EMAIL_ADDRESSES: [];
+		MAILBOX: DurableObjectNamespace<import("./workers/app").MailboxDO>;
+		EMAIL_AGENT: DurableObjectNamespace<import("./workers/app").EmailAgent>;
+		EMAIL_MCP: DurableObjectNamespace<import("./workers/app").EmailMCP>;
+		IMAP_AUTH_RATE_LIMIT: DurableObjectNamespace<import("./workers/app").ImapAuthRateLimitDO>;
+	}
+}
+interface Env extends Cloudflare.Env {}
+type StringifyValues<EnvType extends Record<string, unknown>> = {
+	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
+};
+declare namespace NodeJS {
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "DOMAINS" | "EMAIL_ADDRESSES">> {}
+}
+
+Generating runtime types...
+
+Runtime types generated.
+
+
+✨ Types written to worker-configuration.d.ts
+
+📖 Read about runtime types
+https://developers.cloudflare.com/workers/languages/typescript/#generate-types
+📣 Remember to rerun 'wrangler types' after you change your wrangler.jsonc file.
+
+test/quarantine.test.ts(232,13): error TS2352: Conversion of type '{ thread_id: string; message_count: number; messages: Record<string, unknown>[]; }' to type 'any[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type '{ thread_id: string; message_count: number; messages: Record<string, unknown>[]; }' is missing the following properties from type 'any[]': length, pop, push, concat, and 29 more.

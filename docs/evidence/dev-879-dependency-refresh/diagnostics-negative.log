@@ -1,0 +1,162 @@
+
+ RUN  v4.1.11 /home/brian/r9-jobs/home/.cache/symphony/runs/run-7bbsolvu/dev879-diagnostics-nfkw8fqj
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+ ❯ test/inbound-diagnostics.test.ts (8 tests | 8 failed) 911ms
+     × keeps deferred send failures content-free while preserving the accepted response 281ms
+     × preserves actual inbound delivery after raw storage failure, with only a static diagnostic 158ms
+     × raw storage also preserves the fallback for arbitrary thrown values (0) 71ms
+     × raw storage also preserves the fallback for arbitrary thrown values (1) 76ms
+     × raw storage also preserves the fallback for arbitrary thrown values (2) 71ms
+     × keeps internal failures thrown without exposing untrusted diagnostics (0) 90ms
+     × keeps internal failures thrown without exposing untrusted diagnostics (1) 82ms
+     × keeps internal failures thrown without exposing untrusted diagnostics (2) 75ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/inbound-diagnostics.test.ts > content-free inbound diagnostics > keeps deferred send failures content-free while preserving the accepted response
+AssertionError: expected [ [ …(2) ] ] to deeply equal [ Array(1) ]
+
+- Expected
++ Received
+
+  [
+    [
+-     "deferred_email_delivery_failed",
++     "Deferred email delivery failed:",
++     "PRIVATE_SYNTHETIC_CANARY
++ forged_log_record",
+    ],
+  ]
+
+ ❯ test/inbound-diagnostics.test.ts:42:30
+     40|       await waitOnExecutionContext(ctx);
+     41|       expect(r.status).toBe(202); expect(send).toHaveBeenCalledTimes(1…
+     42|       expect(log.mock.calls).toEqual([["deferred_email_delivery_failed…
+       |                              ^
+     43|     } finally { log.mockRestore(); }
+     44|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  test/inbound-diagnostics.test.ts > content-free inbound diagnostics > preserves actual inbound delivery after raw storage failure, with only a static diagnostic
+AssertionError: expected [ [ …(2) ] ] to deeply equal [ [ 'raw_mime_storage_failed' ] ]
+
+- Expected
++ Received
+
+  [
+    [
+-     "raw_mime_storage_failed",
++     "Failed to store raw MIME at raw/diagnostics@inbox.test/902ae136-3f2d-49a6-806b-bbc91e0058d6.eml:",
++     "PRIVATE_SYNTHETIC_CANARY
++ forged_log_record",
+    ],
+  ]
+
+ ❯ test/inbound-diagnostics.test.ts:63:30
+     61|       expect(put).toHaveBeenCalledTimes(1); expect(m.setReject).not.to…
+     62|       expect(b.forbidden).not.toHaveBeenCalled();
+     63|       expect(log.mock.calls).toEqual([["raw_mime_storage_failed"]]);
+       |                              ^
+     64|     } finally { log.mockRestore(); }
+     65|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  test/inbound-diagnostics.test.ts > content-free inbound diagnostics > raw storage also preserves the fallback for arbitrary thrown values (0)
+TypeError: Cannot read properties of null (reading 'message')
+ ❯ Module.storeRawMime workers/lib/raw-mime.ts:103:69
+    101|   };
+    102|  } catch (e) {
+    103|   console.error(`Failed to store raw MIME at ${key}:`, (e as Error).me…
+       |                                                                     ^
+    104|   // No stored bytes, so no structure: see StoreRawMimeResult.body_str…
+    105|   return { raw_key: null, rfc822_size: size, body_structure: null };
+ ❯ test/inbound-diagnostics.test.ts:72:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  test/inbound-diagnostics.test.ts > content-free inbound diagnostics > raw storage also preserves the fallback for arbitrary thrown values (1)
+AssertionError: expected [ [ …(2) ] ] to deeply equal [ [ 'raw_mime_storage_failed' ] ]
+
+- Expected
++ Received
+
+  [
+    [
+-     "raw_mime_storage_failed",
++     "Failed to store raw MIME at raw/diagnostics@inbox.test/synthetic-id.eml:",
++     undefined,
+    ],
+  ]
+
+ ❯ test/inbound-diagnostics.test.ts:73:32
+     71|         const bucket = { put: async () => { throw failure; } } as unkn…
+     72|         expect(await storeRawMime(bucket, BOX, "synthetic-id", raw)).t…
+     73|         expect(log.mock.calls).toEqual([["raw_mime_storage_failed"]]);
+       |                                ^
+     74|       } finally { log.mockRestore(); }
+     75|     },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  test/inbound-diagnostics.test.ts > content-free inbound diagnostics > raw storage also preserves the fallback for arbitrary thrown values (2)
+Error: PRIVATE_SYNTHETIC_CANARY
+forged_log_record
+ ❯ Object.get message [as message] test/inbound-diagnostics.test.ts:67:69
+     65|   });
+     66|
+     67|   it.each([null, "synthetic string", { get message(): never { throw ne…
+       |                                                                     ^
+     68|     "raw storage also preserves the fallback for arbitrary thrown valu…
+     69|       const log = vi.spyOn(console, "error").mockImplementation(() => …
+ ❯ Module.storeRawMime workers/lib/raw-mime.ts:103:69
+ ❯ test/inbound-diagnostics.test.ts:72:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  test/inbound-diagnostics.test.ts > content-free inbound diagnostics > keeps internal failures thrown without exposing untrusted diagnostics (0)
+ FAIL  test/inbound-diagnostics.test.ts > content-free inbound diagnostics > keeps internal failures thrown without exposing untrusted diagnostics (2)
+AssertionError: expected [Function] to throw error including 'inbound_email_processing_failed' but got 'PRIVATE_SYNTHETIC_CANARY\nforged_log_…'
+
+- Expected
++ Received
+
+- inbound_email_processing_failed
++ PRIVATE_SYNTHETIC_CANARY
++ forged_log_record
+
+ ❯ test/inbound-diagnostics.test.ts:84:47
+     82|       const log = vi.spyOn(console, "error").mockImplementation(() => …
+     83|       try {
+     84|         await expect(worker.email(m, b.e, ctx)).rejects.toThrow("inbou…
+       |                                               ^
+     85|         expect(m.setReject).not.toHaveBeenCalled(); expect(b.forbidden…
+     86|         expect(log.mock.calls).toEqual([["inbound_email_processing_fai…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  test/inbound-diagnostics.test.ts > content-free inbound diagnostics > keeps internal failures thrown without exposing untrusted diagnostics (1)
+AssertionError: expected [Function] to throw error including 'inbound_email_processing_failed' but got 'Cannot read properties of null (readi…'
+
+Expected: "inbound_email_processing_failed"
+Received: "Cannot read properties of null (reading 'message')"
+
+ ❯ test/inbound-diagnostics.test.ts:84:47
+     82|       const log = vi.spyOn(console, "error").mockImplementation(() => …
+     83|       try {
+     84|         await expect(worker.email(m, b.e, ctx)).rejects.toThrow("inbou…
+       |                                               ^
+     85|         expect(m.setReject).not.toHaveBeenCalled(); expect(b.forbidden…
+     86|         expect(log.mock.calls).toEqual([["inbound_email_processing_fai…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  8 failed (8)
+   Start at  07:34:17
+   Duration  18.42s (transform 5.78s, setup 6.43s, import 7.65s, tests 911ms, environment 0ms)

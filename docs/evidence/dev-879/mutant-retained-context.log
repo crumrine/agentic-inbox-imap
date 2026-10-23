@@ -1,0 +1,41 @@
+
+ RUN  v4.1.11 /home/brian/r9-jobs/home/.cache/symphony/runs/run-i10c_03i/dev879-mutant-smK1gS
+
+ ❯ test/quarantine-context.test.ts (4 tests | 1 failed | 3 skipped) 210ms
+     × persisted chat context is cut off after quarantine changes, including between model steps 203ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 skipped (4)
+   Start at  06:35:40
+   Duration  15.57s (transform 4.55s, setup 5.96s, import 6.32s, tests 210ms, environment 0ms)
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/types.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/interfaces.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-json-schema-compat.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/validation/ajv-provider.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/server.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/helpers.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/server/completable.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/uriTemplate.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/toolNameValidation.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/mcp-server.js" points to missing source files
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/quarantine-context.test.ts > actual agent and MCP registered callbacks with inert model/transport > persisted chat context is cut off after quarantine changes, including between model steps
+AssertionError: expected '[{"id":"old","role":"assistant","part…' not to contain 'OLD_CANARY'
+
+Expected: "OLD_CANARY"
+Received: "[{"id":"old","role":"assistant","parts":[{"type":"text","text":"OLD_CANARY"}]},{"id":"user1","role":"user","parts":[{"type":"text","text":"new request"}]}]"
+
+ ❯ test/quarantine-context.test.ts:43:62
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯

@@ -1,0 +1,15 @@
+{
+  "exit": 143,
+  "signal": "SIGTERM",
+  "cause": "unproved",
+  "completed": [
+    "preview desktop/mobile",
+    "list desktop"
+  ],
+  "incomplete": [
+    "list mobile",
+    "thread desktop/mobile",
+    "search desktop/mobile"
+  ],
+  "assertionFailureObserved": false
+}

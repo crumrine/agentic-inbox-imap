@@ -35,6 +35,17 @@ INBOX_LOCAL_ONLY=1 WRANGLER_SEND_METRICS=false npm test -- --maxWorkers=1 --test
 INBOX_LOCAL_ONLY=1 WRANGLER_SEND_METRICS=false npm run build
 ```
 
-Cloudflare automatic builds were verified disabled before source publication.
-Leave them disabled. The previous failed provider check is historical evidence;
-neither retrying it nor deploying is part of this validation.
+The earlier observation of Production's **Disable builds=true** did not establish
+that preview-branch uploads were disabled. During correction publication,
+automatic builds uploaded ready versions `cffc2c23` (PR #7) and `407121d7` (PR #8).
+The coordinator reported production version `3c48b616` still serving 100% of
+traffic, then separately disabled, saved and reloaded the Previews Base
+**Builds for Preview branches=false** setting (DEV-878 event 5468 and DEV-879
+event 5470, 2026-10-23). This supersedes the earlier no-upload inference.
+
+Leave both production and preview builds disabled. This is recorded owner
+evidence, not a new dashboard observation or a claim about current traffic.
+The earlier failed provider checks and their then-unknown cause remain in
+historical bundles; the corrected heads' build checks succeeded. Neither a
+provider retry nor deployment is part of source validation. Green source CI
+alone establishes neither absence of a version upload nor live acceptance.

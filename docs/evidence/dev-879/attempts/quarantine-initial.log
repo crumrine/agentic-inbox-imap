@@ -1,0 +1,28 @@
+
+ RUN  v4.1.11 /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-879/inbox
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+ ❯ test/quarantine.test.ts (6 tests | 1 failed) 2091ms
+     × default search, counts, no-folder lists and explicit Spam searches agree 149ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/quarantine.test.ts > quarantine through actual authenticated app handlers and shared tools > default search, counts, no-folder lists and explicit Spam searches agree
+TypeError: Cannot read properties of undefined (reading 'map')
+ ❯ test/quarantine.test.ts:116:43
+    114|     const stub=await crossing();
+    115|     expect(await stub.countEmails()).toBe(2);
+    116|     expect((await json('/emails')).emails.map((e:any)=>e.id).sort()).t…
+       |                                           ^
+    117|     for (const path of ['/search?query=QUARANTINE_CANARY','/search?que…
+    118|       expect(await json(path)).toMatchObject({emails:[],totalCount:0});
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  05:58:21
+   Duration  49.36s (transform 12.94s, setup 17.93s, import 17.08s, tests 2.09s, environment 1ms)

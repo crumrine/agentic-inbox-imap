@@ -1,0 +1,42 @@
+
+ RUN  v4.1.11 /home/brian/r9-jobs/home/.cache/symphony/runs/run-i10c_03i/dev879-mutant-P5W7lZ
+
+ ❯ test/quarantine.test.ts (8 tests | 1 failed | 7 skipped) 412ms
+     × excludes forged-chain Spam from normal bodies, participants, unread and needs-reply; explicit review isolates Spam 224ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 skipped (8)
+   Start at  06:34:33
+   Duration  18.14s (transform 5.99s, setup 6.50s, import 7.69s, tests 412ms, environment 1ms)
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/quarantine.test.ts > quarantine through actual authenticated app handlers and shared tools > excludes forged-chain Spam from normal bodies, participants, unread and needs-reply; explicit review isolates Spam
+AssertionError: expected { id: 'trusted', …(16) } to match object { thread_count: 2, …(3) }
+(13 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "has_draft": false,
+    "needs_reply": false,
+-   "thread_count": 2,
+-   "thread_unread_count": 0,
++   "thread_count": 3,
++   "thread_unread_count": 1,
+  }
+
+ ❯ test/quarantine.test.ts:98:28
+     96|     await crossing();
+     97|     const list=await json('/emails?folder=inbox&threaded=true');
+     98|     expect(list.emails[0]).toMatchObject({thread_count:2,thread_unread…
+       |                            ^
+     99|     expect(JSON.stringify(list)).not.toContain('QUARANTINE_CANARY');
+    100|     const normal=await json('/threads/forged-chain');expect(normal.map…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯

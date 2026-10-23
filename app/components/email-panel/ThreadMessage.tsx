@@ -19,6 +19,8 @@ import {
 	rewriteInlineImages,
 	stripHtml,
 } from "~/lib/utils";
+import SuspiciousPreview from "~/components/SuspiciousPreview";
+import { suspiciousText } from "shared/mail-scope";
 import type { Email } from "~/types";
 
 interface ThreadMessageProps {
@@ -91,7 +93,7 @@ export default function ThreadMessage({
 							</span>
 						</div>
 						<p className="text-xs text-kumo-subtle truncate">
-							{stripHtml(email.body || "").slice(0, 80)}
+							{email.folder_id === "spam" ? suspiciousText(email.body, 80) : stripHtml(email.body || "").slice(0, 80)}
 						</p>
 					</div>
 					<CaretDownIcon size={14} className="text-kumo-subtle shrink-0" />
@@ -157,7 +159,7 @@ export default function ThreadMessage({
 				</div>
 
 				<div className="md:ml-[42px]">
-					<EmailIframe
+					{email.folder_id === "spam" ? <SuspiciousPreview body={email.body} /> : <EmailIframe
 						body={rewriteInlineImages(
 							email.body || "",
 							mailboxId || "",
@@ -165,7 +167,7 @@ export default function ThreadMessage({
 							email.attachments,
 						)}
 						autoSize
-					/>
+					/>}
 				</div>
 
 				{isDraft && (onSendDraft || onEditDraft || onDeleteDraft) && (
@@ -207,13 +209,13 @@ export default function ThreadMessage({
 					</div>
 				)}
 
-				<EmailAttachmentList
+				{email.folder_id !== "spam" && <EmailAttachmentList
 					mailboxId={mailboxId}
 					emailId={email.id}
 					attachments={email.attachments}
 					onPreviewImage={onPreviewImage}
 					className="mt-3 md:ml-[42px]"
-				/>
+				/>}
 			</div>
 		</div>
 	);

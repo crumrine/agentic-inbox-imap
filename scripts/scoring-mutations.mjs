@@ -49,7 +49,7 @@ if(process.argv.includes('--workerd')){
    symlinkSync(join(root,'node_modules'),join(temp,'node_modules'),'dir');
    const path=join(temp,'workers/durableObject/index.ts');const source=readFileSync(path,'utf8');
    const mutant=name==='concurrency'?source.replace("if ((old?.revision ?? 0) !== expectedRevision) return {ok:false, error:'conflict'};",''):
-    source.replace("if (!this.db.select({id:schema.emails.id}).from(schema.emails).where(eq(schema.emails.id,emailId)).get()) return {ok:false, error:'not_found'};",'');
+    source.replace("if (!email) return {ok:false, error:'not_found'};",'');
    assert.notEqual(source,mutant);writeFileSync(path,mutant);
    const r=spawnSync(process.execPath,[join(root,'node_modules/vitest/vitest.mjs'),'run','test/shadow-scoring.test.ts','-t','authenticates explicit feedback'],{cwd:temp,encoding:'utf8',timeout:240000,env:{...process.env,XDG_CONFIG_HOME:'/tmp/dev-878-xdg',WRANGLER_SEND_METRICS:'false'}});
    const log=(r.stdout??'')+(r.stderr??'');

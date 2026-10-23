@@ -1,0 +1,36 @@
+{
+  "width": 1440,
+  "browser": "155.0.8059.85",
+  "requests": [
+    {
+      "folder": "spam",
+      "status": 200
+    },
+    {
+      "folder": "spam",
+      "status": 200
+    },
+    {
+      "folder": "inbox",
+      "status": 200
+    },
+    {
+      "folder": "inbox",
+      "status": 503
+    },
+    {
+      "folder": "inbox",
+      "status": 503
+    },
+    {
+      "folder": "inbox",
+      "status": 503
+    }
+  ],
+  "rejectedCalls": 3,
+  "staleSubject": 1,
+  "staleCount": 1,
+  "staleRows": 1,
+  "network": [],
+  "errors": []
+}

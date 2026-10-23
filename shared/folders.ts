@@ -22,7 +22,7 @@ export const Folders = {
 export type FolderId = (typeof Folders)[keyof typeof Folders];
 
 /**
- * System folder IDs that appear in the sidebar (excludes spam).
+ * System folder IDs that appear in the sidebar (including recoverable Spam).
  * Order here matches the sidebar display order.
  */
 export const SYSTEM_FOLDER_IDS: readonly FolderId[] = [
@@ -31,6 +31,7 @@ export const SYSTEM_FOLDER_IDS: readonly FolderId[] = [
 	Folders.DRAFT,
 	Folders.ARCHIVE,
 	Folders.TRASH,
+	Folders.SPAM,
 ];
 
 /**
@@ -48,11 +49,11 @@ export const FOLDER_DISPLAY_NAMES: Record<string, string> = {
 
 /** Formatted string for tool parameter descriptions (agent + MCP). */
 export const FOLDER_TOOL_DESCRIPTION =
-	"Folder to list: inbox, sent, draft, archive, trash";
+	"Folder to list: inbox, sent, draft, archive, trash, spam (explicit quarantine review)";
 
 /** Formatted string for move-email tool descriptions. */
 export const MOVE_FOLDER_TOOL_DESCRIPTION =
-	"Target folder: inbox, sent, draft, archive, trash";
+	"Target folder: inbox, sent, draft, archive, trash, spam (explicit quarantine review)";
 
 /**
  * Look up a display name for a folder ID, falling back to the raw ID

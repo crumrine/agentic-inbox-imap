@@ -1,3 +1,4 @@
+import { suspiciousText } from "shared/mail-scope";
 // Copyright (c) 2026 Cloudflare, Inc.
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
@@ -72,6 +73,10 @@ const FOLDER_EMPTY_STATES: Record<
 		description:
 			"Move emails here to keep your inbox clean without deleting them.",
 	},
+	[Folders.SPAM]: {
+        icon: <TrayIcon size={48} weight="thin" />, title:"No spam",
+        description:"Messages moved to Spam stay recoverable here. Automatic quarantine is disabled.",
+    },
 	[Folders.TRASH]: {
 		icon: <TrashIcon size={48} weight="thin" className="text-kumo-subtle" />,
 		title: "Trash is empty",
@@ -171,10 +176,17 @@ export default function EmailListRoute() {
 	const {
 		data: emailData,
 		isFetching: isRefreshing,
+		isSuccess,
+		isError,
+		refetch,
 	} = useEmails(mailboxId, params, { refetchInterval: 30_000 });
 
-	const emails = emailData?.emails ?? [];
-	const totalCount = emailData?.totalCount ?? 0;
+	// Refetch failures retain cached data, including mail moved to Spam by
+	// another client. Rows, actions and aggregates require a successful current
+	// read; never use those retained results during revalidation or its retries.
+	const validatedData = isSuccess && !isRefreshing ? emailData : undefined;
+	const emails = validatedData?.emails ?? [];
+	const totalCount = validatedData?.totalCount ?? 0;
 
 	const { data: folders = [] } = useFolders(mailboxId);
 
@@ -244,12 +256,12 @@ export default function EmailListRoute() {
 			if (email.thread_id && email.thread_count && email.thread_count > 1) {
 				markThreadRead.mutate({
 					mailboxId,
-					threadId: email.thread_id,
+					threadId: email.thread_id, scope: email.folder_id === "spam" ? "spam" : "normal",
 				});
 			} else {
 				updateEmail.mutate({
 					mailboxId,
-					id: email.id,
+					id: email.id, scope: email.folder_id === "spam" ? "spam" : "normal",
 					data: { read: true },
 				});
 			}
@@ -309,13 +321,20 @@ export default function EmailListRoute() {
 
 				{/* Email rows */}
 				<div className="flex-1 overflow-y-auto">
-				{isRefreshing && emails.length === 0 ? (
+				{isRefreshing ? (
 					<EmailListSkeleton />
+				) : isError ? (
+					<div role="alert" className="p-6 text-center">
+						<p>Emails unavailable. Retry to refresh this folder.</p>
+						<Button onClick={() => refetch()} aria-label="Retry emails">
+							Retry emails
+						</Button>
+					</div>
 				) : emails.length > 0 ? (
 						<div>
 							{emails.map((email) => {
 								const isSelected = selectedEmailId === email.id;
-								const snippet = getSnippetText(email.snippet);
+								const snippet = email.folder_id === "spam" ? suspiciousText(email.snippet,100) : getSnippetText(email.snippet);
 								return (
 									<div
 										key={email.id}

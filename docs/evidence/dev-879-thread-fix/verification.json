@@ -1,0 +1,55 @@
+{
+  "parentHead": "661cdd848194254ad94ca1b732f3e13508bdb658",
+  "inboxPrerequisite": "7cc31772b0ca17ec28ea4d78367e41e0a24e5ce5",
+  "scorerPrerequisite": "bb02819e4662e1d680805435dd886e3dc4728906",
+  "results": {
+    "negativeControlExit": 1,
+    "desktopExit": 0,
+    "mobileExit": 0,
+    "previewExit": 0,
+    "typegenIsolatedExit": 0,
+    "tscIsolatedExit": 0,
+    "combinedTypecheckExits": [
+      143,
+      143
+    ],
+    "combinedBrowserExit": 143,
+    "mobileNavigationAttemptExit": 1
+  },
+  "sourceDigests": {
+    "app/components/EmailPanel.tsx": "cf17a5cebfdd059b53e19baae1c99e98f1a80eba52481f6043839352051445dc",
+    "test/browser/fixture.tsx": "3e1c568e96312442891710af97011442fba3963935c12e80ddf0da0968a872af",
+    "scripts/quarantine-thread-browser.mjs": "26cdac56ac051bc4b059d78b040b41102b3beb55615098a35ea6fc3387d020d8"
+  },
+  "artifacts": {
+    "README.md": "3a0b5aab3d3277f5ec8417dab2e7ccb612627dc74b38790e67cb7c74aee19be4",
+    "after-desktop/thread-1440.json": "3520375c87e1486f54961c9753a778f92664f13ca2425f2a52dda58a43fb6247",
+    "after-desktop/thread-error-1440.png": "3e56693af1f813507c18fb64c3bac6bed214d957bbcc0ea503b1f10e821e0659",
+    "after-desktop/thread-recovered-1440.png": "b685ce9a1bd7e93aa7f4874a672f42c27d5aa6e7dde8558822f0aa194c53236f",
+    "after-desktop.log": "a2a8f9fd9a533ced5c94c469fe3935c7231c1ec5d69d8246f6bd539e90f6d6db",
+    "after-mobile-retry/thread-390.json": "3cd3d25d883ff252edfdd0b9779d2de1db99471324ec5fcfb63eb3c223d8f6b5",
+    "after-mobile-retry/thread-error-390.png": "1068c092b342a59ef13f3a90fabeba5c381b8ef18367c429dbc2ee10daa1a005",
+    "after-mobile-retry/thread-recovered-390.png": "a9be0b70610db3d3007fd653a06cedbaf7e2351b412f97b198d8b0903b34b39c",
+    "after-mobile-retry.log": "f9503c8065b39e84cf59833c219c9fa88bf64e96a7e24d2a482cb6c4feaa976e",
+    "after-mobile.log": "2a6891c208d710e33378b0a2d54e2694cdcd1305f7d08fb86bbfbba911ba04f5",
+    "after-termination.txt": "3477a85ac69568eca13621817b02c7e53ebe36bb06eb85aae82bc4d5bd92255a",
+    "before/thread-1440.json": "c2e5e4ba34a42f3c6e09fd2fb03ca62337b01ba32a09cc2c370424f5aaa25574",
+    "before/thread-error-1440.png": "dff3c3acdc1e4088d79fcbd2d52748b5a24d996142c271ff74e3709528b9ad59",
+    "before.log": "9914c6e2ef946bf75ea723d188edd7270a6bb0d82b67ddd468c3e7c987ba9d00",
+    "jev-browser-termination.json": "82243c0769bfbe1f2530507be6dbb0764f5db0b8fc163f5f082ca43062545124",
+    "jev-typecheck-termination.json": "2a2b795b1a5e36c835141cb3a0d87f92efb25c17381a1b73e2d43f53507b2593",
+    "preview/browser.json": "d1b7f46314a4fbe2e6e8d356cd9f1cc526b8d6bb69b4fea62ae0d3642f99288f",
+    "preview/spam-1440.png": "965f45a97ff4763aa416c461bba1f0b63481781d774951aa007d9bde21f091a5",
+    "preview/spam-390.png": "199a3f254f433ec77ca12dc7d81bd9b1fa40bd230d6a4883ecf7b1c1b7186f4b",
+    "preview.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rulesets.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "runtime.json": "28f9117f3221ee7ed99ce4acacbe285e5b5e97438ebf0d9d8aa7618737ef782e",
+    "scope.txt": "1b8fe9aec21f6fe79fa0ca99a93a72cf0deb0bd50883cbad8433508236472f8f",
+    "tsc-isolated.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "typecheck-retry-termination.txt": "c4707fe633ee04218742bd4bc91922076bd2f1bbb6595c8e788579b42397a877",
+    "typecheck-retry.log": "5152f471e151246c69289906429f285d3a4acc75a5f7f3a526d6a24959c32d46",
+    "typecheck-termination.txt": "d892565b6672f4e0078d0befb4a809446364fcc92ee087be0313c64581ff0c76",
+    "typecheck.log": "5152f471e151246c69289906429f285d3a4acc75a5f7f3a526d6a24959c32d46",
+    "typegen-isolated.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

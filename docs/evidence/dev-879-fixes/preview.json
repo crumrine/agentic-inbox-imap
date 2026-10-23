@@ -1,0 +1,105 @@
+{
+  "browser": "148.0.7778.96",
+  "results": [
+    {
+      "width": 1440,
+      "blockedExternalRequests": 0,
+      "errors": [],
+      "actions": [
+        {
+          "path": "sender-preference",
+          "body": {
+            "sender": "sender@example.test",
+            "preference": "block",
+            "expectedRevision": 0
+          }
+        },
+        {
+          "path": "sender-preference",
+          "body": {
+            "sender": "sender@example.test",
+            "preference": "allow",
+            "expectedRevision": 1
+          }
+        },
+        {
+          "path": "sender-preference",
+          "body": {
+            "sender": "sender@example.test",
+            "preference": "none",
+            "expectedRevision": 2
+          }
+        },
+        {
+          "path": "emails/evil",
+          "body": {
+            "read": false
+          }
+        },
+        {
+          "path": "spam-feedback",
+          "body": {
+            "emailId": "evil",
+            "disposition": "not_spam",
+            "expectedRevision": 0
+          }
+        }
+      ],
+      "escapedReason": true,
+      "inertPreview": true,
+      "inputBodyCharacters": 20551,
+      "renderedBodyCharacters": 16384,
+      "renderedReasonCharacters": 160
+    },
+    {
+      "width": 390,
+      "blockedExternalRequests": 0,
+      "errors": [],
+      "actions": [
+        {
+          "path": "sender-preference",
+          "body": {
+            "sender": "sender@example.test",
+            "preference": "block",
+            "expectedRevision": 0
+          }
+        },
+        {
+          "path": "sender-preference",
+          "body": {
+            "sender": "sender@example.test",
+            "preference": "allow",
+            "expectedRevision": 1
+          }
+        },
+        {
+          "path": "sender-preference",
+          "body": {
+            "sender": "sender@example.test",
+            "preference": "none",
+            "expectedRevision": 2
+          }
+        },
+        {
+          "path": "emails/evil",
+          "body": {
+            "read": false
+          }
+        },
+        {
+          "path": "spam-feedback",
+          "body": {
+            "emailId": "evil",
+            "disposition": "not_spam",
+            "expectedRevision": 0
+          }
+        }
+      ],
+      "escapedReason": true,
+      "inertPreview": true,
+      "inputBodyCharacters": 20551,
+      "renderedBodyCharacters": 16384,
+      "renderedReasonCharacters": 160
+    }
+  ]
+}
