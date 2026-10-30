@@ -13,6 +13,7 @@ import { createAlias } from '../workers/lib/aliases';
 import { toolMarkSpam, toolSetSenderPreference } from '../workers/lib/tools';
 import { decodeResponse } from '../workers/lib/mail-scoring/protocol';
 import { project } from '../workers/lib/mail-scoring/intake';
+import { REASONS, type ScoreResultV1 } from '../workers/lib/mail-scoring/contract';
 import { applyMigrations, mailboxMigrations } from '../workers/durableObject/migrations';
 import type { Env } from '../workers/types';
 import { mailbox, query, restart, emailData } from './helpers';
@@ -24,8 +25,10 @@ const ORIGIN = 'https://inbox.example.test';
 // Static wire fixture is regenerated/compared against the exact pinned scorer
 // by scripts/check-scoring-contract.mjs; no private content is used.
 import contractEvidence from '../docs/evidence/dev-878/contract.json';
-const result = contractEvidence.fixture.result;
 const wire = JSON.stringify(contractEvidence.fixture);
+const fixture = decodeResponse(wire);
+if (!fixture?.ok) throw new Error('Invalid synthetic scorer fixture');
+const result = fixture.result;
 let humanToken: string;
 let serviceToken: string;
 let jwks: string;
@@ -44,7 +47,7 @@ beforeAll(async () => {
   }));
 });
 afterAll(() => {vi.unstubAllGlobals();vi.unstubAllEnvs();});
-function bindings(mode: 'off' | 'shadow' = 'shadow', response: unknown = wire) {
+function bindings(mode: Env['MAIL_SCORING_MODE'] = 'shadow', response: unknown = wire) {
   const scoreV1 = vi.fn(async (_version: string, _input: Uint8Array, _context?: string) => response as string);
   const send = vi.fn(() => {throw new Error('Outbound forbidden');});
   const ai = vi.fn(() => {throw new Error('AI forbidden');});
@@ -67,7 +70,7 @@ async function deliver(e: Env, raw = bytes(), to = BOX, padding = 0) {
     to,from:'bounce@example.test',setReject:reject} as unknown as ForwardableEmailMessage,e,ctx);
   await waitOnExecutionContext(ctx);
   expect(reject).not.toHaveBeenCalled();
-  const rows = await query<{id:string;folder_id:string;raw_key:string;uid:number;delivered_to:string}>(mailbox(BOX),'SELECT id,folder_id,raw_key,uid,delivered_to FROM emails ORDER BY uid DESC');
+  const rows = await query<{id:string;folder_id:string;raw_key:string;uid:number;delivered_to:string}>(mailbox(BOX),'SELECT id,folder_id,raw_key,uid,delivered_to FROM emails ORDER BY rowid DESC');
   expect(rows.length).toBeGreaterThan(0);
   return rows[0];
 }
@@ -80,6 +83,77 @@ async function request(e: Env, path: string, body?: unknown, token = humanToken,
   return r;
 }
 const base = `/api/v1/mailboxes/${BOX}`;
+
+const suspiciousResult: ScoreResultV1 = {
+  ...result, status:'partial', heuristicScore:45,
+  signals:{spam:'present',phishing:'present',marketing:'unknown'},
+  limitsHit:['auth_unknown','source_incomplete'],
+  reasons:[
+    {id:'reply_to_mismatch',contribution:10,reason:REASONS.reply_to_mismatch},
+    {id:'impersonation_combined',contribution:10,reason:REASONS.impersonation_combined},
+    {id:'sensitive_request_combined',contribution:25,reason:REASONS.sensitive_request_combined},
+  ],
+};
+const responseFor = (value: ScoreResultV1) => JSON.stringify({rpcVersion:'1',ok:true,result:value});
+
+describe('automatic Spam routing for new arrivals', () => {
+  it('preserves existing mail, raw MIME, attachments and assessment; Not spam rescues with correct UIDs', async () => {
+    await registered();const stub=mailbox(BOX);
+    await stub.createEmail('inbox',emailData({id:'existing'}),[]);
+    const b=bindings('filter',responseFor(suspiciousResult));
+    const raw=new TextEncoder().encode(`From: sender@example.test\r\nReply-To: elsewhere@example.org\r\nTo: ${BOX}\r\nSubject: Security team\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=synthetic\r\n\r\n--synthetic\r\nContent-Type: text/plain\r\n\r\nVerify your password\r\n--synthetic\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=fixture.txt\r\nContent-Transfer-Encoding: base64\r\n\r\nU1lOVEhFVElD\r\n--synthetic--\r\n`);
+    const row=await deliver(b.e,raw);
+    expect(row).toMatchObject({folder_id:'spam',uid:1});
+    expect((await stub.getEmail('existing'))?.uid).toBe(1);
+    expect(await stub.getEmail(row.id)).toBeNull();
+    expect(new Uint8Array(await (await env.BUCKET.get(row.raw_key))!.arrayBuffer())).toEqual(raw);
+    expect(await query(stub,'SELECT filename,size FROM attachments')).toEqual([{filename:'fixture.txt',size:9}]);
+    const original=await stub.getSpamState(row.id);
+    expect(original).toMatchObject({disposition:'unknown',revision:0,assessments:[{result:suspiciousResult}]});
+    expect(await (await request(b.e,`${base}/emails/${row.id}/spam`)).json()).toMatchObject({automaticQuarantine:true});
+    expect((await request(b.e,`${base}/emails/${row.id}?scope=spam`)).status).toBe(200);
+    expect((await request(b.e,`/api/imap/v1/${BOX}/spam/messages`)).status).toBe(200);
+    expect((await request(b.e,`${base}/spam-feedback`,{emailId:row.id,disposition:'not_spam',expectedRevision:0})).status).toBe(200);
+    expect((await stub.getEmail(row.id))).toMatchObject({folder_id:'inbox',uid:2,raw_key:row.raw_key});
+    expect((await stub.getSpamState(row.id))?.assessments).toEqual(original?.assessments);
+    await expect((await restart(BOX)).getSpamState(row.id)).resolves.toMatchObject({disposition:'not_spam'});
+    expect(b.scoreV1).toHaveBeenCalledTimes(1);expect(b.ai).not.toHaveBeenCalled();expect(b.send).not.toHaveBeenCalled();
+  });
+  it.each(['off','shadow'] as const)('%s does not move even high scoring mail',async mode=>{
+    await registered();const b=bindings(mode,responseFor(suspiciousResult));
+    const row=await deliver(b.e);expect(row.folder_id).toBe('inbox');
+    expect(await (await request(b.e,`${base}/emails/${row.id}/spam`)).json()).toMatchObject({automaticQuarantine:false});
+  });
+  it.each(['ordinary','below_threshold','marketing','quoted_content','identity_uninspected','field_bytes'])(
+    '%s stays in Inbox',async kind=>{
+      await registered();let value: ScoreResultV1={...suspiciousResult};
+      if(kind==='ordinary') value=result;
+      else if(kind==='marketing') value={...result,reasons:[{id:'marketing_headers',contribution:0,reason:REASONS.marketing_headers}]};
+      else if(kind==='below_threshold') value={...value,heuristicScore:44,reasons:value.reasons.map(r=>r.id==='impersonation_combined'?{...r,contribution:9}:r)};
+      else value={...value,limitsHit:[...value.limitsHit,kind as 'quoted_content'|'identity_uninspected'|'field_bytes']};
+      expect((await deliver(bindings('filter',responseFor(value)).e)).folder_id).toBe('inbox');
+    });
+  it.each(['allow','block'] as const)('honors explicit %s preference',async preference=>{
+    await registered();await mailbox(BOX).setSenderPreference({sender:'sender@example.test',preference,expectedRevision:0});
+    const value=preference==='allow'?suspiciousResult:result;
+    expect((await deliver(bindings('filter',responseFor(value)).e)).folder_id).toBe(preference==='block'?'spam':'inbox');
+  });
+  it('preserves delivery when sender preferences cannot be read',async()=>{
+    await registered();
+    const b=bindings('filter',responseFor(suspiciousResult));const stub=mailbox(BOX);
+    b.e.MAILBOX={idFromName:env.MAILBOX.idFromName.bind(env.MAILBOX),get:()=>({
+      findThreadBySubject:(...args:Parameters<typeof stub.findThreadBySubject>)=>stub.findThreadBySubject(...args),
+      createEmail:(...args:Parameters<typeof stub.createEmail>)=>stub.createEmail(...args),
+      getSenderPreference:async()=>{throw new Error('Synthetic preference lookup failure');},
+    })} as unknown as Env['MAILBOX'];
+    expect((await deliver(b.e)).folder_id).toBe('inbox');
+  });
+  it.each([0,5])('keeps uninspectable raw input in Inbox (padding %i)',async padding=>{
+    await registered();const b=bindings('filter',responseFor(suspiciousResult));
+    expect((await deliver(b.e,padding?bytes():bytes(BOX,'x'.repeat(131073)),BOX,padding)).folder_id).toBe('inbox');
+    expect(b.scoreV1).not.toHaveBeenCalled();
+  });
+});
 
 describe('actual app email and authenticated REST in local workerd', () => {
   it('off makes no calls, leaves legacy unknown, preserves raw bytes, attachments and UID', async () => {
@@ -121,9 +195,10 @@ describe('actual app email and authenticated REST in local workerd', () => {
     await worker.email({raw:new ReadableStream({start(c){c.enqueue(raw);c.close();}}),rawSize:raw.length,to:BOX,setReject:reject} as unknown as ForwardableEmailMessage,b.e,createExecutionContext());
     expect(reject).toHaveBeenCalled(); expect(b.scoreV1).not.toHaveBeenCalled();
   });
+  describe.each(['shadow','filter'] as const)('%s delivery failures', mode => {
   it.each(['missing','throw','timeout','malformed','huge','deep','version','forged_reason','invented_auth','inconsistent','nan','unavailable'])(
     '%s scorer keeps delivery and records unavailable without preferences or AI', async kind => {
-      await registered(); const b = bindings();
+      await registered(); const b = bindings(mode);
       if(kind==='missing') delete b.e.MAIL_SCORER;
       if(kind==='throw') b.scoreV1.mockImplementation(async()=>{throw new Error('SYNTHETIC_PRIVATE_CANARY');});
       if(kind==='timeout') b.scoreV1.mockImplementation(()=>new Promise(()=>{}));
@@ -146,6 +221,7 @@ describe('actual app email and authenticated REST in local workerd', () => {
       expect(JSON.stringify([...error.mock.calls,...warn.mock.calls])).not.toContain('SYNTHETIC_PRIVATE_CANARY');
       error.mockRestore();warn.mockRestore();
     });
+  });
   it('oversized/truncated raw skips optional RPC, oversized fields and HTML remain incomplete',async()=>{
     await registered();const b=bindings();
     for(const [raw,padding] of [[bytes(BOX,'x'.repeat(131073)),0],[bytes(),5]] as const){

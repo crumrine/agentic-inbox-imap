@@ -3,7 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 export interface Env extends Cloudflare.Env {
-	MAIL_SCORING_MODE?: "off" | "shadow";
+	MAIL_SCORING_MODE?: "off" | "shadow" | "filter";
 	MAIL_SCORER?: import("./lib/mail-scoring/protocol").ScorerBinding;
 	POLICY_AUD: string;
 	TEAM_DOMAIN: string;

@@ -64,7 +64,7 @@ export function project(parsed: Email, envelopeFrom?: string): ScoreInputV1 {
 }
 
 export async function assessArrival(env: Env, parsed: Email, rawInspectable: boolean, envelopeFrom?: string, preference?: 'allow' | 'block' | 'none'): Promise<Assessment | undefined> {
-  if (env.MAIL_SCORING_MODE !== 'shadow') return undefined;
+  if (env.MAIL_SCORING_MODE !== 'shadow' && env.MAIL_SCORING_MODE !== 'filter') return undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     if (!rawInspectable || !env.MAIL_SCORER) return unavailable();
@@ -89,4 +89,16 @@ export async function assessArrival(env: Env, parsed: Email, rawInspectable: boo
     return {version:1, policyVersion:'inbox-shadow-1', status:'partial', inputIncomplete:!input.sourceComplete, result:decoded.result};
   } catch { return unavailable(); }
   finally { if (timer !== undefined) clearTimeout(timer); }
+}
+
+export function shouldQuarantine(assessment: Assessment | undefined, preference: 'allow' | 'block' | 'none' | undefined): boolean {
+  const result = assessment?.result;
+  if (!result || assessment.status === 'unavailable' || result.status === 'unavailable' ||
+      preference === undefined || preference === 'allow') return false;
+  if (preference === 'block') return true;
+  // shortcut: conservative rules-1 policy, recalibrate with privately labelled mail before broadening.
+  return result.heuristicScore >= 45 &&
+    result.limitsHit.every(limit => limit === 'auth_unknown' || limit === 'source_incomplete') &&
+    result.reasons.some(reason => reason.id === 'sensitive_request_combined' && reason.contribution === 25) &&
+    result.reasons.some(reason => ['reply_to_mismatch', 'display_identity_mismatch', 'impersonation_combined'].includes(reason.id) && reason.contribution > 0);
 }
