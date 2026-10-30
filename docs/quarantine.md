@@ -17,9 +17,28 @@ source CI must not be interpreted as proof of current production state.
 
 The existing `folder_id = spam` is the quarantine boundary, including mail moved
 by an alternate IMAP client. There is no second store. Scoring remains off by
-default; shadow still records evidence without moving mail. Automatic quarantine
-is not implemented or enabled. No numeric threshold is claimed calibrated.
-Unknown, partial or failed inspection does not imply safety or trigger a move.
+default; shadow still records evidence without moving mail. Owner-authorized
+`MAIL_SCORING_MODE=filter` routes **new arrivals only** directly to Spam when:
+
+- The sender has an explicit mailbox-local block preference and scoring succeeded; or
+- The validated rules-1 score is at least 45, with a full sensitive-request
+  contribution and independent suspicious identity evidence. Only `auth_unknown`
+  and `source_incomplete` inspection limits are tolerated. Other inspection limits
+  retain Inbox delivery. This conservative policy is not a calibrated probability.
+
+An explicit allow preference overrides automatic routing, without erasing the
+score. Missing/failed preference lookup or unavailable/failed scoring retains
+Inbox delivery. Partial inspection alone never triggers routing; transport
+provenance remains unknown, and HTML/attachment content remains uninspected.
+The original body, raw MIME, attachments and assessment remain stored. No Spam
+expiry/emptying job is added. A mail client's own deletion rules are independent.
+Manual Not spam or ordinary moves rescue messages using existing UID allocation.
+Nothing rescans existing mail, trains preferences, sends mail or changes manual
+dispositions automatically. Set the mode back to `shadow` to stop future automatic
+routing; stored mail and prior routing are preserved.
+
+The status API/UI reports the effective routing mode. The policy uses the
+existing Spam store and requires no schema migration.
 No SMTP rejection/deletion, sending, auto-reply or inbound AI activation is added.
 
 Authenticated explicit **Mark as spam** records a disposition and moves to Spam

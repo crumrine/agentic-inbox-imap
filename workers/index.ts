@@ -8,7 +8,7 @@ import PostalMime from "postal-mime";
 import { mailScope } from "../shared/mail-scope";
 import { toolMarkSpam, toolSetSenderPreference } from "./lib/tools";
 import { authorizeManualFeedback, feedbackSchema, preferenceSchema } from "./lib/mail-scoring/feedback";
-import { assessArrival, inspectableRaw } from "./lib/mail-scoring/intake";
+import { assessArrival, inspectableRaw, shouldQuarantine } from "./lib/mail-scoring/intake";
 import { z } from "zod";
 import { sendEmail } from "./email-sender";
 import { storeAttachments, type StoredAttachment } from "./lib/attachments";
@@ -193,7 +193,7 @@ async function readManualBody(request: Request): Promise<unknown> {
 }
 app.get('/api/v1/mailboxes/:mailboxId/emails/:emailId/spam', async c => {
     const state = await c.var.mailboxStub.getSpamState(c.req.param('emailId'));
-    return state ? c.json(state) : c.json({error:'Not found'},404);
+    return state ? c.json({...state, automaticQuarantine:c.env.MAIL_SCORING_MODE === 'filter'}) : c.json({error:'Not found'},404);
 });
 app.get('/api/v1/mailboxes/:mailboxId/sender-preference', async c => {
     const state = await c.var.mailboxStub.getSenderPreference(c.req.query('sender') ?? '');
@@ -743,7 +743,8 @@ async function receiveEmail(
 	}
 
 	const rawEmail = await streamToArrayBuffer(event.raw, event.rawSize);
-	const rawInspectable = env.MAIL_SCORING_MODE === "shadow" && inspectableRaw(rawEmail);
+	const scoringEnabled = env.MAIL_SCORING_MODE === "shadow" || env.MAIL_SCORING_MODE === "filter";
+	const rawInspectable = scoringEnabled && inspectableRaw(rawEmail);
 	const parsedEmail = await new PostalMime().parse(rawEmail);
 
 	if (!parsedEmail.to?.length || !parsedEmail.to[0].address) {
@@ -864,12 +865,13 @@ async function receiveEmail(
 		delivered_to: deliveredTo,
 	};
 	let preference: "allow" | "block" | "none" | undefined;
-    if (env.MAIL_SCORING_MODE === "shadow" && rawInspectable) {
+    if (scoringEnabled && rawInspectable) {
         try { preference = (await stub.getSenderPreference(parsedEmail.from?.address ?? ''))?.preference; }
         catch { /* Preference lookup failure remains unknown; preserve delivery. */ }
     }
     const assessment = await assessArrival(env, parsedEmail, rawInspectable, event.from, preference);
-	await stub.createEmail(Folders.INBOX, inboundRow, attachmentData, assessment);
+	const folder = env.MAIL_SCORING_MODE === "filter" && shouldQuarantine(assessment, preference) ? Folders.SPAM : Folders.INBOX;
+	await stub.createEmail(folder, inboundRow, attachmentData, assessment);
 
 	return { status: "delivered", mailboxId, emailId: messageId };
 }

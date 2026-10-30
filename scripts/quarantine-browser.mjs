@@ -29,7 +29,7 @@ try {
     data={ok:true,revision};
    }else if(path==='folders') data=['inbox','sent','draft','archive','trash','spam'].map(id=>({id,name:id,is_deletable:false,unreadCount:0}));
    else if(path==='emails') {const folder=url.searchParams.get('folder');data={emails:rows.filter(e=>e.folder_id===folder),totalCount:rows.filter(e=>e.folder_id===folder).length};}
-   else if(path==='emails/evil/spam') data={revision,disposition,assessments:[{status:'partial',result:{heuristicScore:42,reasons:[{reason:hostile}]}}]};
+   else if(path==='emails/evil/spam') data={revision,disposition,automaticQuarantine:true,assessments:[{status:'partial',result:{heuristicScore:42,reasons:[{reason:hostile}]}}]};
    else if(path==='emails/trusted/spam') data={revision:0,disposition:'unknown',assessments:[]};
    else if(path==='sender-preference') data={preference:pref,revision:prefRevision};
    else if(path.startsWith('threads/')) data=rows.filter(e=>(e.folder_id==='spam')===(url.searchParams.get('scope')==='spam'));
@@ -41,6 +41,7 @@ try {
   await page.goto('http://127.0.0.1:5189',{waitUntil:'domcontentloaded'});
   await page.getByText('Synthetic suspicious message',{exact:true}).click();
   await page.getByRole('region',{name:'Safe Spam preview'}).waitFor();
+  await page.getByText('Automatic Spam routing is enabled for new mail.',{exact:false}).waitFor();
   assert.equal(await page.locator('iframe').count(),0);
   assert.equal((await page.locator('section[aria-label="Safe Spam preview"] pre').textContent()).length,16384);
   assert.equal((await page.locator('section[aria-label="Spam controls"] li').textContent()).length,160);

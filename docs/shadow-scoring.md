@@ -14,6 +14,9 @@ Use the actual approved scorer's configured Worker name at release time; this
 example does not provision a Worker. Score once per resolved incoming arrival.
 Reads, UI's 30-second refresh, IMAP and routine moves never call the scorer.
 There is no historical scan or re-evaluation endpoint. Shadow never moves mail.
+The later owner-authorized `filter` mode uses the same scoring path with the
+recoverable new-arrival routing policy in `quarantine.md`. Scoring failures keep
+delivery in Inbox. Returning to `shadow` disables automatic routing.
 
 ## Source pins and compatibility
 

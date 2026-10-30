@@ -16,7 +16,7 @@ export default function SpamControls({mailboxId, email, onMoved}: {mailboxId:str
   const validSender = /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(sender) && sender.length <= 254;
   const preference = useQuery({queryKey:['sender-preference',mailboxId,sender],queryFn:()=>api.senderPreference(mailboxId,sender),enabled:validSender});
   // This is a defensive display projection, not permission to trust mail or classifier text.
-  const data = state.data as {revision?:number;disposition?:string;assessments?:{status?:string;result?:{heuristicScore?:number;reasons?:{reason?:string}[]}}[]} | undefined;
+  const data = state.data as {revision?:number;disposition?:string;automaticQuarantine?:boolean;assessments?:{status?:string;result?:{heuristicScore?:number;reasons?:{reason?:string}[]}}[]} | undefined;
   const assessment = Array.isArray(data?.assessments) ? data.assessments[0] : undefined;
   const score = assessment?.result?.heuristicScore;
   const reasons = Array.isArray(assessment?.result?.reasons) ? assessment.result.reasons.slice(0,32) : [];
@@ -31,7 +31,7 @@ export default function SpamControls({mailboxId, email, onMoved}: {mailboxId:str
   const spam = email.folder_id === 'spam';
   return <section aria-label="Spam controls" className="p-4 border-b border-kumo-line space-y-2 text-sm max-h-72 overflow-y-auto shrink-0">
     <p>Sender: {suspiciousText(email.sender,512)}</p>
-    <p>Inspection: {status}. {typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= 100 ? `Heuristic score: ${score} / 100.` : 'No score available.'} Scores are signals, not confidence percentages or proof of safety. Automatic quarantine is disabled.</p>
+    <p>Inspection: {status}. {typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= 100 ? `Heuristic score: ${score} / 100.` : 'No score available.'} Scores are signals, not confidence percentages or proof of safety. {data ? data.automaticQuarantine ? 'Automatic Spam routing is enabled for new mail. Messages are kept and can be rescued to Inbox.' : 'Automatic quarantine is disabled.' : 'Loading Spam routing status.'}</p>
     <ul>{reasons.map((reason,i)=><li key={i}>{suspiciousText(reason?.reason,160)}</li>)}</ul>
     <p>Manual disposition: {suspiciousText(data?.disposition,32) || 'unknown'}.</p>
     <div className="flex flex-wrap gap-3">
