@@ -33,7 +33,8 @@ The existing RPC schema/engine are retained. The decoder accepts stored
 New assessments record policy `inbox-html-2`; old assessments remain unchanged.
 Automatic routing still requires successful scoring, no disallowed inspection
 limits, score >=45 and either the existing combined sensitive/identity evidence
-or the new 45-point `brand_impersonation_combined` evidence. Allow/block
+or positive `brand_impersonation_combined` evidence (normally 45 points, reduced
+only by the global 100-point cap). Allow/block
 preferences, recoverable Spam, manual rescue and raw MIME/UID handling remain.
 Reads do not rescore, and this release does not backfill historical messages.
 

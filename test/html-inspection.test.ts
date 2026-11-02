@@ -63,6 +63,12 @@ describe('bounded native HTML inspection in real workerd',()=>{
     expect(assessment?.status).toBe('partial');expect(shouldQuarantine(assessment,'none')).toBe(true);expect(shouldQuarantine(assessment,'allow')).toBe(false);
     const input=JSON.parse(new TextDecoder().decode(scoreV1.mock.calls[0][1]));
     expect(input.extractedText).toContain('negative review');expect(input.anchors).toHaveLength(1);expect(input).not.toHaveProperty('html');
+    const capped:ScoreResultV1={...result,heuristicScore:100,reasons:[
+      {id:'link_mismatch',contribution:30,reason:REASONS.link_mismatch},{id:'link_userinfo',contribution:5,reason:REASONS.link_userinfo},
+      {id:'sensitive_request_combined',contribution:25,reason:REASONS.sensitive_request_combined},
+      {id:'brand_impersonation_combined',contribution:40,reason:REASONS.brand_impersonation_combined},
+    ]};
+    expect(shouldQuarantine({...assessment!,result:capped},'none')).toBe(true);
     for(const limit of ['quoted_content','url_uninspected','field_bytes'] as const)expect(shouldQuarantine({...assessment!,result:{...result,limitsHit:[...result.limitsHit,limit]}},'none')).toBe(false);
   });
   it('preserves delivery and skips the scorer on parser limit, failure, and off mode',async()=>{

@@ -106,7 +106,7 @@ export function shouldQuarantine(assessment: Assessment | undefined, preference:
   // shortcut: conservative combined-evidence policy, recalibrate with privately labelled mail before broadening.
   return result.heuristicScore >= 45 &&
     result.limitsHit.every(limit => limit === 'auth_unknown' || limit === 'source_incomplete') &&
-    (result.reasons.some(reason => reason.id === 'brand_impersonation_combined' && reason.contribution === 45) ||
+    (result.reasons.some(reason => reason.id === 'brand_impersonation_combined' && reason.contribution > 0) ||
       (result.reasons.some(reason => reason.id === 'sensitive_request_combined' && reason.contribution === 25) &&
       result.reasons.some(reason => ['reply_to_mismatch', 'display_identity_mismatch', 'impersonation_combined'].includes(reason.id) && reason.contribution > 0)));
 }
