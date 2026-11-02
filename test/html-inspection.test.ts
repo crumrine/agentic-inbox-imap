@@ -46,6 +46,9 @@ describe('bounded native HTML inspection in real workerd',()=>{
     expect(await inspectHtml(exact)).toEqual({text:'',anchors:[]});
     expect(await inspectHtml(exact+'x')).toBeNull();
     for(const html of ['<div>'.repeat(32)+'x'+'</div>'.repeat(32),'<br>'.repeat(1024),'x'.repeat(16384),'<a href="https://other.invalid">x</a>'.repeat(50)])expect(await inspectHtml(html)).not.toBeNull();
+    const prefix='//other.invalid/';const href=prefix+'x'.repeat(2048-6-prefix.length);
+    expect((await inspectHtml(`<a href="${href}">x</a>`))?.anchors[0].href).toHaveLength(2048);
+    expect(await inspectHtml(`<a href="${href}x">x</a>`)).toBeNull();
   });
   it('bounds malformed tags, unclosed active content, entity runs and multibyte text without throwing',async()=>{
     for(const html of ['<'.repeat(65536),'<a href="'+'x'.repeat(60000),'<script>'+synthetic,'<div><p>x</div></p>','&#x110000;'.repeat(1000),'😀'.repeat(4096)]) {

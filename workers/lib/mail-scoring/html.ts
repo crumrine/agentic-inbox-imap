@@ -52,8 +52,10 @@ export async function inspectHtml(html:string):Promise<Inspection|null> {
           if(href && /^(?:https?:)?\/\//i.test(href.trim())){
             requireBound(anchors.length<HTML_LIMITS.anchors);
             requireBound(href.length<=HTML_LIMITS.fieldBytes && encoder.encode(href).byteLength<=HTML_LIMITS.fieldBytes);
-            linkBytes+=encoder.encode(href).byteLength;requireBound(linkBytes<=HTML_LIMITS.linkBytes);
-            anchor={text:'',href:href.trim().startsWith('//')?'https:'+href.trim():href.trim()};anchors.push(anchor);active=anchor;anchorBytes=0;
+            const target=href.trim().startsWith('//')?'https:'+href.trim():href.trim();
+            const bytes=encoder.encode(target).byteLength;requireBound(bytes<=HTML_LIMITS.fieldBytes);
+            linkBytes+=bytes;requireBound(linkBytes<=HTML_LIMITS.linkBytes);
+            anchor={text:'',href:target};anchors.push(anchor);active=anchor;anchorBytes=0;
           }
         }
         if(paired)element.onEndTag(()=>{
