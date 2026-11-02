@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Brian Crumrine
 // SPDX-License-Identifier: Apache-2.0
-import {readFileSync, writeFileSync, mkdtempSync, rmSync} from 'node:fs';
+import {readFileSync, writeFileSync, mkdtempSync, rmSync, mkdirSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {resolve, join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -9,8 +9,9 @@ import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 const dependency=resolve(process.argv[2] ?? '../mail-scoring');
-const pin='bb02819e4662e1d680805435dd886e3dc4728906';
+const pin='967ab7383931b27be545a5748643a8f0a29156d0';
 assert.equal(execFileSync('git',['-C',dependency,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),pin);
+assert.equal(execFileSync('git',['-C',dependency,'status','--porcelain'],{encoding:'utf8'}).trim(),'','scorer dependency must be clean');
 const hashes={};
 for(const [source,copy] of [['packages/core/src/contract.ts','contract.ts'],['workers/private/protocol.ts','protocol.ts']]){
  const upstream=readFileSync(join(dependency,source),'utf8');
@@ -45,6 +46,11 @@ try{
   assert.equal(ids.includes('auth_failed'),false);
   preferenceResults[preference]=value.result;
  }
- writeFileSync('docs/evidence/dev-878/contract.json',JSON.stringify({dependency:pin,hashes,fixture,preferenceResults,passed:true},null,2)+'\n');
- console.log('Pinned scorer/caller compatibility passed');
+ mkdirSync('.html-inspection',{recursive:true});
+ await build({entryPoints:[join(dependency,'workers/private/index.ts')],outfile:'.html-inspection/scorer.js',bundle:true,format:'esm',platform:'browser',target:'es2024',external:['cloudflare:workers']});
+ const runtime=await import(pathToFileURL(join(dependency,'node_modules/workerd/lib/main.js')));
+ execFileSync(process.execPath,['node_modules/vitest/vitest.mjs','run','--config','vitest.html.config.ts'],{stdio:'inherit',env:{...process.env,MINIFLARE_WORKERD_PATH:runtime.default.default}});
+ mkdirSync('docs/evidence/html-inspection',{recursive:true});
+ writeFileSync('docs/evidence/html-inspection/contract.json',JSON.stringify({dependency:pin,hashes,fixture,preferenceResults,joinedNativeHtmlRpc:true,passed:true},null,2)+'\n');
+ console.log('Pinned scorer/caller and native HTML -> private RPC -> recoverable routing checks passed');
 }finally{rmSync(temp,{recursive:true,force:true});}

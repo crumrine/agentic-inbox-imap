@@ -97,6 +97,23 @@ const suspiciousResult: ScoreResultV1 = {
 const responseFor = (value: ScoreResultV1) => JSON.stringify({rpcVersion:'1',ok:true,result:value});
 
 describe('automatic Spam routing for new arrivals', () => {
+  it('inspects HTML-only review lures, stores rules-2 evidence, and preserves failed HTML inspection in Inbox',async()=>{
+    await registered();
+    const brand:ScoreResultV1={...result,ruleSetVersion:'rules-2',heuristicScore:45,
+      signals:{spam:'present',phishing:'present',marketing:'unknown'},limitsHit:['auth_unknown','source_incomplete'],
+      reasons:[{id:'brand_impersonation_combined',contribution:45,reason:REASONS.brand_impersonation_combined}]};
+    const b=bindings('filter',responseFor(brand));
+    const make=(html:string)=>new TextEncoder().encode(`From: QuickBooks <notice@sender.invalid>\r\nTo: ${BOX}\r\nSubject: Synthetic notice\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${html}`);
+    const raw=make('<p>Security team: inspect a negative review.</p><a href="https://destination.invalid/">Respond now</a>');
+    const row=await deliver(b.e,raw);expect(row.folder_id).toBe('spam');
+    const input=JSON.parse(new TextDecoder().decode(b.scoreV1.mock.calls[0][1]));
+    expect(input.extractedText).toContain('negative review');expect(input.anchors).toEqual([{text:'Respond now',href:'https://destination.invalid/'}]);
+    expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0].result).toEqual(brand);
+    expect(new Uint8Array(await (await env.BUCKET.get(row.raw_key))!.arrayBuffer())).toEqual(raw);
+    const failed=await deliver(b.e,make('<div>'.repeat(33)));
+    expect(failed.folder_id).toBe('inbox');expect((await mailbox(BOX).getSpamState(failed.id))?.assessments[0].status).toBe('unavailable');
+    expect(b.scoreV1).toHaveBeenCalledTimes(1);expect(b.ai).not.toHaveBeenCalled();expect(b.send).not.toHaveBeenCalled();
+  });
   it('preserves existing mail, raw MIME, attachments and assessment; Not spam rescues with correct UIDs', async () => {
     await registered();const stub=mailbox(BOX);
     await stub.createEmail('inbox',emailData({id:'existing'}),[]);
@@ -205,7 +222,7 @@ describe('actual app email and authenticated REST in local workerd', () => {
       if(kind==='malformed') b.scoreV1.mockResolvedValue('SYNTHETIC_PRIVATE_CANARY');
       if(kind==='huge') b.scoreV1.mockResolvedValue('x'.repeat(4097));
       if(kind==='deep') b.scoreV1.mockResolvedValue('['.repeat(10)+'0'+']'.repeat(10));
-      if(kind==='version') b.scoreV1.mockResolvedValue(wire.replace('rules-1','rules-2'));
+      if(kind==='version') b.scoreV1.mockResolvedValue(wire.replace('rules-1','rules-999'));
       if(kind==='forged_reason') b.scoreV1.mockResolvedValue(JSON.stringify({rpcVersion:'1',ok:true,result:{...result,reasons:[{id:'auth_failed',contribution:20,reason:'SYNTHETIC_PRIVATE_CANARY'}],heuristicScore:20}}));
       if(kind==='invented_auth') b.scoreV1.mockResolvedValue(JSON.stringify({rpcVersion:'1',ok:true,result:{...result,reasons:[{id:'auth_failed',contribution:20,reason:'Verified transport evidence reports authentication failure.'}],heuristicScore:20}}));
       if(kind==='inconsistent') b.scoreV1.mockResolvedValue(JSON.stringify({rpcVersion:'1',ok:true,result:{...result,heuristicScore:10}}));

@@ -1208,12 +1208,12 @@ export class MailboxDO extends DurableObject<Env> {
             try {
                 let safe = unavailable();
                 // Validate at the DO boundary too; never store unbounded RPC data.
-                if (assessment.version === 1 && assessment.policyVersion === 'inbox-shadow-1' &&
+                if (assessment.version === 1 && ['inbox-shadow-1','inbox-html-2'].includes(assessment.policyVersion) &&
                     assessment.result && typeof assessment.inputIncomplete === 'boolean') {
                     const json = JSON.stringify({rpcVersion:'1', ok:true, result:assessment.result});
                     const decoded = decodeResponse(json);
                     if (decoded?.ok && decoded.result.status !== 'unavailable') safe = {
-                        version:1, policyVersion:'inbox-shadow-1', status:'partial',
+                        version:1, policyVersion:assessment.policyVersion, status:'partial',
                         inputIncomplete:assessment.inputIncomplete, result:decoded.result,
                     };
                 }

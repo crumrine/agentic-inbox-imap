@@ -38,6 +38,18 @@ jobs:
         # Match the validated local workerd schedule; assertions stay unchanged.
         run: npm test -- --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000
 
+      - name: Checkout pinned private scorer source
+        uses: actions/checkout@v4
+        with:
+          repository: crumrine/mail-scoring
+          ref: 967ab7383931b27be545a5748643a8f0a29156d0
+          path: .integration/mail-scoring
+
+      - name: Verify native HTML and actual private scorer together
+        run: |
+          npm exec --yes --package=npm@11.12.1 -- npm ci --prefix .integration/mail-scoring --ignore-scripts --no-audit --no-fund
+          node scripts/check-scoring-contract.mjs .integration/mail-scoring
+
   gateway:
     name: Go / gateway
     runs-on: ubuntu-latest
