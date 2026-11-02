@@ -9,7 +9,7 @@ import worker from '../workers/app';
 import type {Env} from '../workers/types';
 import {mailbox,query} from './helpers';
 const BOX='html-joined@example.test';
-const html='<p>Security team: inspect a negative review.</p><a href="https://tracker.example/route?fallback=https%3A%2F%2Fdestination.invalid%2F">Respond now</a>';
+const html='<img src="https://never-fetch.invalid/pixel"><style>@import "https://never-fetch.invalid/style";</style><script src="https://never-fetch.invalid/script">throw 1</script><p>Security team: inspect a negative review.</p><a href="https://tracker.example/route?fallback=https%3A%2F%2Fdestination.invalid%2F">Respond now</a>';
 afterEach(()=>vi.unstubAllGlobals());
 it('joins actual MIME intake, native HTML parser, private Worker RPC, SQLite, recoverable routing and rescue',async()=>{
   await env.BUCKET.put(`mailboxes/${BOX}.json`,'{}');const stub=mailbox(BOX);await stub.getFolders();

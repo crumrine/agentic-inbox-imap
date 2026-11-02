@@ -5,7 +5,7 @@ import {defineConfig} from 'vitest/config';
 export default defineConfig({
   resolve:{alias:{'virtual:react-router/server-build':new URL('./test/ssr-stub.ts',import.meta.url).pathname}},
   plugins:[cloudflareTest({main:'./test/worker-entry.ts',wrangler:{configPath:'./wrangler.jsonc'},remoteBindings:false,
-    miniflare:{serviceBindings:{MAIL_SCORER:'html-scorer'},workers:[{name:'html-scorer',modules:true,
+    miniflare:{outboundService:()=>{throw new Error('forbidden_inbox_network');},serviceBindings:{MAIL_SCORER:'html-scorer'},workers:[{name:'html-scorer',modules:true,
       scriptPath:'./.html-inspection/scorer.js',compatibilityDate:'2026-10-21',
       outboundService:()=>{throw new Error('forbidden_scorer_network');}}]},
   })],
