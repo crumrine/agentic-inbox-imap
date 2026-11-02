@@ -24,14 +24,15 @@ export const REASONS = Object.freeze({
   display_identity_mismatch: 'The display identity names a different sender host.',
   impersonation_combined: 'An authority claim accompanies independent suspicious evidence.',
   sensitive_request_combined: 'A sensitive request accompanies suspicious link or identity evidence.',
+  brand_impersonation_combined: 'A recognized brand claim, unrelated sender and unrelated action link accompany an account or review lure.',
   sender_blocked: 'An explicit verified sender block preference was supplied.',
   sender_allowed: 'An explicit verified address allow preference was supplied; other evidence remains.',
   marketing_headers: 'The message declares mailing-list or bulk characteristics.',
 });
 export const RULE_CAPS = Object.freeze({auth_failed:20,link_mismatch:30,link_userinfo:15,
   reply_to_mismatch:10,display_identity_mismatch:15,impersonation_combined:15,
-  sensitive_request_combined:25,sender_blocked:40,sender_allowed:0,marketing_headers:0});
-export const FAMILY_CAPS = Object.freeze({authentication:20,links:35,identity:20,content:25,preference:40,marketing:0});
+  sensitive_request_combined:25,brand_impersonation_combined:45,sender_blocked:40,sender_allowed:0,marketing_headers:0});
+export const FAMILY_CAPS = Object.freeze({authentication:20,links:35,identity:20,content:25,brand:45,preference:40,marketing:0});
 export type ReasonId = keyof typeof REASONS;
 export type AuthValue = 'pass' | 'fail' | 'unknown';
 export interface ScoreInputV1 {
@@ -54,7 +55,7 @@ export interface ScoreInputV1 {
 export interface ScoreContext { transportVerified?: boolean; preferencesVerified?: boolean; receivedAt?: number }
 export type Status = 'complete' | 'partial' | 'unavailable';
 export interface ScoreResultV1 {
-  schemaVersion: '1'; engineVersion: '0.1.0'; ruleSetVersion: 'rules-1';
+  schemaVersion: '1'; engineVersion: '0.1.0'; ruleSetVersion: 'rules-1' | 'rules-2';
   status: Status;
   heuristicScore: number;
   signals: {spam: 'present' | 'unknown'; phishing: 'present' | 'unknown'; marketing: 'present' | 'unknown'};

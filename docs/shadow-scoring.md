@@ -1,5 +1,8 @@
 # Shadow scoring and manual feedback (DEV-878)
 
+Current HTML/rules-2 extension: [bounded HTML inspection](html-inspection.md).
+The original source-pin and projection description below records DEV-878.
+
 Source-only integration. No deployment or activation is authorized by this PR.
 Missing `MAIL_SCORING_MODE` (or `off`) makes zero scoring calls and performs no
 scoring-only projection. An operator may later configure `shadow` and a private

@@ -1,5 +1,8 @@
 # Recoverable Spam (DEV-879)
 
+The current [HTML inspection extension](html-inspection.md) adds the rules-2
+combined-brand path alongside the policy described below.
+
 Source-only change, stacked on Inbox PR #7 at
 `2838cfb45b870054297fd09e7b88a0c1545801f1`, the reviewed successor to the
 original `7cc31772b0ca17ec28ea4d78367e41e0a24e5ce5` prerequisite. The source-branch
