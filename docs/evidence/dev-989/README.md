@@ -41,7 +41,7 @@ Actions remains disabled (`enabled: false`) per owner instruction (2026-11-04).
 | `INBOX_LOCAL_ONLY=1 NODE_OPTIONS="--max-old-space-size=1536" npm run build` | `build.log`, passed (client + SSR bundles) |
 | `MAIL_SCORING_DIR=... npm exec vitest run test/shadow-scoring.test.ts test/quarantine.test.ts test/quarantine-context.test.ts -- --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000` | `focused-workerd.log`, 68/68 tests in 3 files, 61.33s |
 | Full `MAIL_SCORING_DIR=... INBOX_LOCAL_ONLY=1 npm test -- --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000` | `full-tests.log`, 619/619 tests in 35 files, 633.13s |
-| `node scripts/scoring-mutations.mjs --workerd` | `scoring-mutations.log`, `scoring-mutations.json`, `mutation-*.log`: 7 unit mutants + 4 `workerd` mutants (`concurrency`, `mailbox_message_id`, `gtube_routing_workerd`, `gtube_detection_workerd`), all 11 caught |
+| `node scripts/scoring-mutations.mjs --workerd` | `scoring-mutations.log`, `scoring-mutations.json`, `mutation-*.log`, `mutation-*.patch`: 7 unit mutants + 5 `workerd` mutants (`concurrency`, `mailbox_message_id`, `gtube_version_rejection_workerd`, `gtube_routing_workerd`, and isolated scorer `gtube_detection_workerd` on `packages/core/src/inspection.ts` at `faa15bea06db52f2dc240257d5335a66a933f909` with valid `0.1.0`/`rules-2` RPC protocol), all 12 caught with Spam-versus-Inbox regressions and verified restored passes (`mutation-gtube_routing_workerd-restored.log`, `mutation-gtube_detection_workerd-restored.log`) |
 | `node scripts/quarantine-mutations.mjs` | `quarantine-mutations.log`, `mutations.json`, `mutant-*.log`: all 6 quarantine isolation/preview mutants caught |
 | `npm exec vite -- --config test/browser/vite.config.mjs`, then `node scripts/quarantine-browser.mjs` | `browser.log`, `browser.json`, `spam-1440.png`, `spam-390.png`, `gtube-1440.png`, `gtube-390.png`: desktop (`1440px`) and mobile (`390px`) safe preview, GTUBE score `100 / 100`, static reason, and `Not spam` rescue verified with 0 external requests and 0 errors |
 | Go gateway checks | No Go files changed; `go` toolchain is not installed on this runner, so no local Go execution is claimed |
@@ -51,15 +51,17 @@ Vitest `4.1.11`, Workers pool `0.22.0` (nested Wrangler `4.124.0` / `workerd`
 `1.20260815.1`), root Wrangler `4.74.0` / `workerd` `1.20260312.1`, Playwright
 `1.64.1`, Chromium `148.0.7778.96`.
 
-Browser reproduction on this runner uses the existing extracted libraries and fonts
-documented in `../dev-879/README.md`:
+Browser reproduction on this runner uses the extracted shared libraries and fonts
+available on the host (note: bubblewrap review sandboxes that mount a fresh
+ephemeral `/tmp` and exclude sibling workspaces will not see `/tmp/dev-860-apt`
+or `../DEV-985/.browser-libs`):
 
 ```sh
-export LD_LIBRARY_PATH=/tmp/dev-860-apt/root/usr/lib/x86_64-linux-gnu
+export LD_LIBRARY_PATH=/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-985/.browser-libs/root/usr/lib/x86_64-linux-gnu:/tmp/dev-860-apt/root/usr/lib/x86_64-linux-gnu
 export CHROME_PATH=/home/brian/r9-jobs/home/.cache/ms-playwright/chromium-1223/chrome-linux64/chrome
-export XDG_CONFIG_HOME=/tmp/dev-879-browser-config
-export XDG_CACHE_HOME=/tmp/dev-879-browser-cache
-export FONTCONFIG_FILE=/tmp/dev-879-browser-config/fontconfig/fonts.conf
+export XDG_CONFIG_HOME=/tmp/dev-989-browser-config
+export XDG_CACHE_HOME=/tmp/dev-989-browser-cache
+export FONTCONFIG_FILE=/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-985/.browser-libs/fonts.conf
 ```
 
 ## Retained attempts

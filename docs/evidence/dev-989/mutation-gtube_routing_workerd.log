@@ -1,6 +1,6 @@
- RUN  v4.1.11 /tmp/dev-989-mutation-815nMh
+RUN  v4.1.11 /tmp/dev-989-mutation-DpvlRh
 
- ❯ test/shadow-scoring.test.ts (55 tests | 1 failed | 54 skipped) 458ms
+ ❯ test/shadow-scoring.test.ts (55 tests | 1 failed | 54 skipped) 497ms
      ↓ preserves existing mail, raw MIME, attachments and assessment; Not spam rescues with correct UIDs
      ↓ off does not move even high scoring mail
      ↓ shadow does not move even high scoring mail
@@ -51,7 +51,7 @@
      ↓ authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs
      ↓ routine move, rescue and delete never train; explicit preferences affect only later shadow arrivals
      ↓ migration 12 populated DB upgrades without rescanning and keeps FK/idempotence
-     × routes positive GTUBE to Spam, isolates it from normal views/tools/agent epoch, and rescues via Not spam or ordinary/IMAP move with intact UIDs and assessment 335ms
+     × routes positive GTUBE to Spam, isolates it from normal views/tools/agent epoch, and rescues via Not spam or ordinary/IMAP move with intact UIDs and assessment 334ms
      ↓ routes plain-text, base64, quoted-printable, and mixed-quote GTUBE arrivals while keeping HTML-only and oversized/padded inputs in Inbox
      ↓ keeps negative GTUBE, nonspam controls (score 0 and 10), near-matches, quoted/forwarded markers, forged headers, and off/shadow modes in Inbox
      ↓ preserves explicit sender allow/block precedence on GTUBE and keeps ordinary quarantine partial-inspection guards intact
@@ -59,8 +59,8 @@
 
  Test Files  1 failed (1)
       Tests  1 failed | 54 skipped (55)
-   Start at  19:34:03
-   Duration  21.13s (transform 6.37s, setup 6.56s, import 8.16s, tests 458ms, environment 0ms)
+   Start at  21:04:21
+   Duration  17.66s (transform 6.07s, setup 6.37s, import 7.50s, tests 497ms, environment 1ms)
 
 ▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
 
