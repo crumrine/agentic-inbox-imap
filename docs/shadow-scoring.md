@@ -20,22 +20,48 @@ delivery in Inbox. Returning to `shadow` disables automatic routing.
 
 ## Source pins and compatibility
 
-Inbox base: `d01da09e26adf76ef8fe60e2a5f76226426a167b`.
-Scorer: https://github.com/crumrine/mail-scoring/pull/3 at
-`bb02819e4662e1d680805435dd886e3dc4728906`, still unmerged when inspected.
+Inbox base: `d01da09e26adf76ef8fe60e2a5f76226426a167b` (initial `DEV-878`);
+updated in `DEV-989` on Inbox `main` `08b92457015b3615e325cf4b57954daa12a628c2`.
+Scorer (`DEV-988` merged PR #6): https://github.com/crumrine/mail-scoring at
+`faa15bea06db52f2dc240257d5335a66a933f909` (`rules-2`, advancing from `rules-1`
+main baseline `2fab406320ae3b3596345d2c76e0ef8a08593211` and historical PR #3
+pin `bb02819e4662e1d680805435dd886e3dc4728906`).
 `workers/lib/mail-scoring/{contract,protocol}.ts` are Apache-2.0 copies from
 `packages/core/src/contract.ts` and `workers/private/protocol.ts` at that pin;
 only the protocol import path changes. No Mailguard source or scanner package
-is imported into Inbox. Digests and a real pinned scorer response are in
-`evidence/dev-878/contract.json`. Reproduce with
-`node scripts/check-scoring-contract.mjs ../mail-scoring` at the exact pin.
+is imported into Inbox. Digests and real pinned scorer responses are in
+`evidence/dev-989/contract.json` (preserving historical `evidence/dev-878/contract.json`).
+Reproduce with `node scripts/check-scoring-contract.mjs ../mail-scoring` at the exact pin.
 
 RPC: `scoreV1('1', Uint8Array UTF-8 JSON, context JSON)` returns bounded JSON.
-Supported result: schema `1`, engine `0.1.0`, rules `rules-1`. Strict response
-validation rejects unknown versions/rules/reasons, inconsistent/nonfinite
-contributions, malformed JSON, depth >6 and >4096-byte output. Unknown remains
-distinct from safe. Responses inventing trusted authentication or preferences
-not supplied by this mailbox are rejected.
+Supported results: schema `1`, engine `0.1.0`, rules `rules-1` or `rules-2`.
+`decodeResponse` accepts both `rules-1` and `rules-2` for caller-first rollout
+and stored-assessment readability, rejects `id === "gtube"` when
+`ruleSetVersion === "rules-1"`, and rejects unknown versions/rules/reasons,
+inconsistent/nonfinite contributions, malformed JSON, depth >6 and >4096-byte
+output. Unknown remains distinct from safe. Responses inventing trusted
+authentication or preferences not supplied by this mailbox are rejected.
+
+### Rollout and rollback order (`rules-1` ↔ `rules-2`)
+
+1. **Caller-first rollout**: Deploy the updated Agentic Inbox caller (`DEV-989`,
+   accepting `rules-1 | rules-2`) **before** deploying the `rules-2` `mail-scoring`
+   Worker (`faa15bea06db52f2dc240257d5335a66a933f909`). While the caller is on
+   `DEV-989` and the deployed scorer is still on `2fab406320ae3b3596345d2c76e0ef8a08593211`
+   (`rules-1`), `rules-1` assessments continue validating and routing normally.
+   Once the `rules-2` scorer is deployed (`OPS-599`), validated `gtube` arrivals
+   route to Spam in `filter` mode (unless overridden by an explicit sender `allow`
+   preference), and existing stored `rules-1` rows remain readable.
+2. **Rollback**:
+   - To disable automatic Spam routing immediately without redeploying scorer code,
+     set `MAIL_SCORING_MODE=shadow` (or `off`). Stored mail, UIDs, preferences and
+     prior `rules-1`/`rules-2` assessments remain intact.
+   - To roll back the scorer Worker to `2fab406320ae3b3596345d2c76e0ef8a08593211`
+     (`rules-1`), keep the `DEV-989` caller deployed; it accepts `rules-1` RPC
+     responses and continues reading stored `rules-2` assessments.
+   - Only roll the Inbox caller back to `08b92457015b3615e325cf4b57954daa12a628c2`
+     (`rules-1`-only) after the scorer has been rolled back to `rules-1` or
+     `MAIL_SCORING_MODE` is `off`.
 
 Eventual merge order, only after separate authorization: mail-scoring #1
 (`ce6d9afedf607584c150d457f0e078a307047f8a`) → #2

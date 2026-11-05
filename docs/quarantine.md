@@ -20,15 +20,29 @@ by an alternate IMAP client. There is no second store. Scoring remains off by
 default; shadow still records evidence without moving mail. Owner-authorized
 `MAIL_SCORING_MODE=filter` routes **new arrivals only** directly to Spam when:
 
-- The sender has an explicit mailbox-local block preference and scoring succeeded; or
-- The validated rules-1 score is at least 45, with a full sensitive-request
+- The sender has an explicit mailbox-local block preference and scoring succeeded;
+- The validated `rules-2` result carries `signals.spam === "present"` and the
+  `gtube` reason with positive contribution (the exact 68-byte uppercase ASCII
+  standard GTUBE test marker on an unquoted plain-text line), without requiring
+  unrelated identity, sensitive-request or transport-auth evidence; or
+- The validated `rules-1` or `rules-2` score is at least 45, with a full sensitive-request
   contribution and independent suspicious identity evidence. Only `auth_unknown`
-  and `source_incomplete` inspection limits are tolerated. Other inspection limits
-  retain Inbox delivery. This conservative policy is not a calibrated probability.
+  and `source_incomplete` inspection limits are tolerated for this ordinary
+  heuristic path. Other inspection limits retain Inbox delivery. This conservative
+  policy is not a calibrated probability.
 
-An explicit allow preference overrides automatic routing, without erasing the
-score. Missing/failed preference lookup or unavailable/failed scoring retains
-Inbox delivery. Partial inspection alone never triggers routing; transport
+An explicit allow preference overrides automatic routing — including for a
+validated `gtube` test-marker message — keeping the message in Inbox while
+preserving the stored `rules-2` heuristic score (`100`) and both `sender_allowed`
+(`0`) and `gtube` (`100`) reasons. An explicit block preference routes to Spam
+when scoring succeeds (`sender_blocked` contributes `40`, and if `gtube` also
+fires its contribution is clipped to the remaining `60` under the `100` total cap).
+Missing/failed preference lookup or unavailable/failed scoring retains
+Inbox delivery. Forged `X-Spam-Flag`, `X-Spam-Status` or authentication headers,
+quoted/forwarded GTUBE lines, near-matches, HTML-only bodies, oversized raw inputs
+(`> 131,072` bytes) or over-limit text fields (`> 32,768` bytes), `gtube` claimed
+under `rules-1`, and unknown versions or reason IDs never trigger quarantine.
+Partial inspection alone never triggers routing; transport
 provenance remains unknown, and HTML/attachment content remains uninspected.
 The original body, raw MIME, attachments and assessment remain stored. No Spam
 expiry/emptying job is added. A mail client's own deletion rules are independent.
@@ -131,6 +145,11 @@ paid AI was introduced.
 
 ## Verification and remaining observations
 
+See `evidence/dev-989/README.md` for `rules-2` GTUBE contract parity against
+`mail-scoring` `faa15bea06db52f2dc240257d5335a66a933f909` (and mixed-version
+compatibility with `rules-1` `2fab406320ae3b3596345d2c76e0ef8a08593211`),
+joined local `workerd` tests with the real separate scorer RPC, mutation checks,
+and desktop/mobile browser verification.
 See `evidence/dev-879-dependency-refresh/README.md` for renewed validation of the
 corrected prerequisite and the exact source lineage. Historical bundles below
 retain their original pins, executions and unsuccessful attempts.

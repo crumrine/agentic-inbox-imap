@@ -2,11 +2,71 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { buildSync } from "esbuild";
 import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
 
+const SCORER_PIN = "faa15bea06db52f2dc240257d5335a66a933f909";
+const LEGACY_SCORER_PIN = "2fab406320ae3b3596345d2c76e0ef8a08593211";
+
+function buildScorerWorkers() {
+	const dir = [
+		process.env.MAIL_SCORING_DIR,
+		resolve(process.cwd(), "../mail-scoring"),
+		resolve(process.cwd(), "../../mail-scoring"),
+		"/Users/brian/projects/mail-scoring",
+		"/home/brian/r9-jobs/home/symphony-workspaces/siteforge/mail-scoring",
+	].find((candidate): candidate is string => Boolean(candidate && existsSync(join(candidate, "workers/private/index.ts"))));
+	if (!dir) return undefined;
+	const head = execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+	if (head !== SCORER_PIN) {
+		throw new Error(`Expected mail-scoring HEAD ${SCORER_PIN}, got ${head}`);
+	}
+	const bundle = (entry: string) =>
+		buildSync({
+			entryPoints: [entry],
+			bundle: true,
+			write: false,
+			format: "esm",
+			platform: "neutral",
+			external: ["cloudflare:workers"],
+		}).outputFiles[0].text;
+	const current = bundle(join(dir, "workers/private/index.ts"));
+	const temp = mkdtempSync(join(tmpdir(), "mail-scoring-legacy-"));
+	let legacy: string;
+	try {
+		const archive = execFileSync("git", ["-C", dir, "archive", LEGACY_SCORER_PIN, "tsconfig.json", "packages/core", "workers/private"], { maxBuffer: 8 * 1024 * 1024 });
+		execFileSync("tar", ["-x", "-C", temp], { input: archive });
+		legacy = bundle(join(temp, "workers/private/index.ts"));
+	} finally {
+		rmSync(temp, { recursive: true, force: true });
+	}
+	return {
+		serviceBindings: {
+			MAIL_SCORER: "mail-scoring-private",
+			MAIL_SCORER_LEGACY: "mail-scoring-legacy",
+		},
+		workers: [
+			{
+				name: "mail-scoring-private",
+				compatibilityDate: "2025-11-28",
+				modules: [{ type: "ESModule" as const, path: "index.mjs", contents: current }],
+			},
+			{
+				name: "mail-scoring-legacy",
+				compatibilityDate: "2025-11-28",
+				modules: [{ type: "ESModule" as const, path: "index.mjs", contents: legacy }],
+			},
+		],
+	};
+}
+
 export default defineConfig({
-    resolve: { alias: { "virtual:react-router/server-build": new URL("./test/ssr-stub.ts", import.meta.url).pathname } },
+	resolve: { alias: { "virtual:react-router/server-build": new URL("./test/ssr-stub.ts", import.meta.url).pathname } },
 	plugins: [
 		cloudflareTest({
 			// wrangler.jsonc's `main` is the React Router worker, which imports
@@ -15,6 +75,7 @@ export default defineConfig({
 			// classes, so they run against a thin entrypoint that exports them.
 			main: "./test/worker-entry.ts",
 			wrangler: { configPath: "./wrangler.jsonc" },
+			miniflare: buildScorerWorkers(),
 			// Keep tests fully local: never reach for a real Cloudflare account
 			// for the `ai` / `send_email` bindings.
 			remoteBindings: false,

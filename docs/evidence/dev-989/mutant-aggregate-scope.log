@@ -1,0 +1,73 @@
+ RUN  v4.1.11 /tmp/dev879-mutant-WNfEvP
+
+ ❯ test/quarantine.test.ts (9 tests | 1 failed | 8 skipped) 2102ms
+     × excludes forged-chain Spam from normal bodies, participants, unread and needs-reply; explicit review isolates Spam 1575ms
+     ↓ default search, counts, no-folder lists and explicit Spam searches agree
+     ↓ scopes mark-read and rejects quarantined original before AI verification or reply
+     ↓ manual feedback moves atomically, keeps original assessment and UID history, and rescues
+     ↓ ordinary alternate-client MOVE and rescue never infer feedback; retries do not undo a later ordinary move
+     ↓ subject fallback and legacy/null thread collisions do not include Spam
+     ↓ rolls back destination UID and folder when feedback storage fails
+     ↓ requires explicit Spam scope for attachment downloads and preserves IMAP visibility
+     ↓ preserves long operational IDs without prefix collisions across REST and shared tools
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 skipped (9)
+   Start at  19:41:45
+   Duration  74.76s (transform 24.01s, setup 31.51s, import 24.68s, tests 2.10s, environment 1ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+✘ [ERROR] Failed to write to log file Error: EROFS: read-only file system, open '/home/brian/r9-jobs/home/.config/.wrangler/logs/wrangler-2026-11-05_19-41-36_224.log'
+
+      at open (node:internal/fs/promises:640:25)
+      at writeFile (node:internal/fs/promises:1257:14)
+      at /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@cloudflare/vitest-pool-workers/node_modules/wrangler/wrangler-dist/cli.js:61259:7
+      at Mutex.runWith (/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@cloudflare/vitest-pool-workers/node_modules/miniflare/dist/src/index.js:85487:48)
+      at appendToDebugLogFile (/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@cloudflare/vitest-pool-workers/node_modules/wrangler/wrangler-dist/cli.js:61256:3) {
+    errno: -30,
+    code: 'EROFS',
+    syscall: 'open',
+    path: '/home/brian/r9-jobs/home/.config/.wrangler/logs/wrangler-2026-11-05_19-41-36_224.log'
+  }
+
+
+✘ [ERROR] Would have written:
+
+  --- 2026-11-05T19:41:46.100Z debug
+  🪵  Writing logs to "/home/brian/r9-jobs/home/.config/.wrangler/logs/wrangler-2026-11-05_19-41-36_224.log"
+  ---
+
+
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/quarantine.test.ts > quarantine through actual authenticated app handlers and shared tools > excludes forged-chain Spam from normal bodies, participants, unread and needs-reply; explicit review isolates Spam
+AssertionError: expected { id: 'trusted', …(16) } to match object { thread_count: 2, …(3) }
+(13 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "has_draft": false,
+    "needs_reply": false,
+-   "thread_count": 2,
+-   "thread_unread_count": 0,
++   "thread_count": 3,
++   "thread_unread_count": 1,
+  }
+
+ ❯ test/quarantine.test.ts:98:28
+     96|     await crossing();
+     97|     const list=await json('/emails?folder=inbox&threaded=true');
+     98|     expect(list.emails[0]).toMatchObject({thread_count:2,thread_unread…
+       |                            ^
+     99|     expect(JSON.stringify(list)).not.toContain('QUARANTINE_CANARY');
+    100|     const normal=await json('/threads/forged-chain');expect(normal.map…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+🪵  Logs were written to "/home/brian/r9-jobs/home/.config/.wrangler/logs/wrangler-2026-11-05_19-41-36_224.log"

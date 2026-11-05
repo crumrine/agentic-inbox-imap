@@ -96,6 +96,8 @@ export function shouldQuarantine(assessment: Assessment | undefined, preference:
   if (!result || assessment.status === 'unavailable' || result.status === 'unavailable' ||
       preference === undefined || preference === 'allow') return false;
   if (preference === 'block') return true;
+  if (result.ruleSetVersion === 'rules-2' && result.signals.spam === 'present' &&
+      result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;
   // shortcut: conservative rules-1 policy, recalibrate with privately labelled mail before broadening.
   return result.heuristicScore >= 45 &&
     result.limitsHit.every(limit => limit === 'auth_unknown' || limit === 'source_incomplete') &&
