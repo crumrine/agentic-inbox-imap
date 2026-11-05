@@ -1,0 +1,67 @@
+ RUN  v4.1.11 /tmp/dev879-mutant-iWvtbd
+
+ ❯ test/quarantine-context.test.ts (4 tests | 1 failed | 3 skipped) 370ms
+     ↓ agent default retrieval is isolated and cannot explicitly load Spam
+     ↓ onNewEmail actual handler refuses Spam before any model invocation
+     × persisted chat context is cut off after quarantine changes, including between model steps 364ms
+     ↓ MCP real registry callbacks default normal and provide explicit Spam review
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 skipped (4)
+   Start at  19:47:17
+   Duration  22.68s (transform 5.74s, setup 7.11s, import 7.55s, tests 370ms, environment 1ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+✘ [ERROR] Failed to write to log file Error: EROFS: read-only file system, open '/home/brian/r9-jobs/home/.config/.wrangler/logs/wrangler-2026-11-05_19-47-12_611.log'
+
+      at open (node:internal/fs/promises:640:25)
+      at writeFile (node:internal/fs/promises:1257:14)
+      at /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@cloudflare/vitest-pool-workers/node_modules/wrangler/wrangler-dist/cli.js:61259:7
+      at Mutex.runWith (/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@cloudflare/vitest-pool-workers/node_modules/miniflare/dist/src/index.js:85487:48)
+      at appendToDebugLogFile (/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@cloudflare/vitest-pool-workers/node_modules/wrangler/wrangler-dist/cli.js:61256:3) {
+    errno: -30,
+    code: 'EROFS',
+    syscall: 'open',
+    path: '/home/brian/r9-jobs/home/.config/.wrangler/logs/wrangler-2026-11-05_19-47-12_611.log'
+  }
+
+
+✘ [ERROR] Would have written:
+
+  --- 2026-11-05T19:47:17.405Z debug
+  🪵  Writing logs to "/home/brian/r9-jobs/home/.config/.wrangler/logs/wrangler-2026-11-05_19-47-12_611.log"
+  ---
+
+
+
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/types.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/interfaces.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-json-schema-compat.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/validation/ajv-provider.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/server.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/helpers.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/server/completable.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/uriTemplate.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/toolNameValidation.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/mcp-server.js" points to missing source files
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/quarantine-context.test.ts > actual agent and MCP registered callbacks with inert model/transport > persisted chat context is cut off after quarantine changes, including between model steps
+AssertionError: expected '[{"id":"old","role":"assistant","part…' not to contain 'OLD_CANARY'
+
+Expected: "OLD_CANARY"
+Received: "[{"id":"old","role":"assistant","parts":[{"type":"text","text":"OLD_CANARY"}]},{"id":"user1","role":"user","parts":[{"type":"text","text":"new request"}]}]"
+
+ ❯ test/quarantine-context.test.ts:43:62
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+🪵  Logs were written to "/home/brian/r9-jobs/home/.config/.wrangler/logs/wrangler-2026-11-05_19-47-12_611.log"

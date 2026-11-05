@@ -1,0 +1,28 @@
+[
+  {
+    "name": "aggregate-scope",
+    "result": "assertion_failed"
+  },
+  {
+    "name": "direct-scope",
+    "result": "assertion_failed"
+  },
+  {
+    "name": "thread-scope",
+    "result": "assertion_failed"
+  },
+  {
+    "name": "retained-context",
+    "result": "assertion_failed"
+  },
+  {
+    "name": "preview",
+    "baseline": "passed",
+    "mutant": "assertion_failed"
+  },
+  {
+    "name": "cache-scope",
+    "baseline": "passed",
+    "mutant": "assertion_failed"
+  }
+]

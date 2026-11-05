@@ -16,6 +16,11 @@ export const LIMIT_IDS = Object.freeze([
   'url_uninspected', 'quoted_content', 'identity_uninspected',
 ] as const);
 export type LimitId = typeof LIMIT_IDS[number];
+export const ENGINE_VERSION = '0.1.0';
+export const RULE_SET_VERSION = 'rules-2';
+export const RULE_SET_VERSIONS = Object.freeze(['rules-1', 'rules-2'] as const);
+export type RuleSetVersion = typeof RULE_SET_VERSIONS[number];
+export const GTUBE_MARKER = 'XJS*C4JDBQADN1.NSBN3*2IDNEN*GTUBE-STANDARD-ANTI-UBE-TEST-EMAIL*C.34X';
 export const REASONS = Object.freeze({
   auth_failed: 'Verified transport evidence reports authentication failure.',
   link_mismatch: 'A visible URL names a different host from its target.',
@@ -27,11 +32,12 @@ export const REASONS = Object.freeze({
   sender_blocked: 'An explicit verified sender block preference was supplied.',
   sender_allowed: 'An explicit verified address allow preference was supplied; other evidence remains.',
   marketing_headers: 'The message declares mailing-list or bulk characteristics.',
+  gtube: 'The plain-text body contains the standard GTUBE test marker (intentional test trigger, not a calibrated spam probability).',
 });
 export const RULE_CAPS = Object.freeze({auth_failed:20,link_mismatch:30,link_userinfo:15,
   reply_to_mismatch:10,display_identity_mismatch:15,impersonation_combined:15,
-  sensitive_request_combined:25,sender_blocked:40,sender_allowed:0,marketing_headers:0});
-export const FAMILY_CAPS = Object.freeze({authentication:20,links:35,identity:20,content:25,preference:40,marketing:0});
+  sensitive_request_combined:25,sender_blocked:40,sender_allowed:0,marketing_headers:0,gtube:100});
+export const FAMILY_CAPS = Object.freeze({authentication:20,links:35,identity:20,content:25,preference:40,marketing:0,test:100});
 export type ReasonId = keyof typeof REASONS;
 export type AuthValue = 'pass' | 'fail' | 'unknown';
 export interface ScoreInputV1 {
@@ -54,7 +60,7 @@ export interface ScoreInputV1 {
 export interface ScoreContext { transportVerified?: boolean; preferencesVerified?: boolean; receivedAt?: number }
 export type Status = 'complete' | 'partial' | 'unavailable';
 export interface ScoreResultV1 {
-  schemaVersion: '1'; engineVersion: '0.1.0'; ruleSetVersion: 'rules-1';
+  schemaVersion: '1'; engineVersion: typeof ENGINE_VERSION; ruleSetVersion: RuleSetVersion;
   status: Status;
   heuristicScore: number;
   signals: {spam: 'present' | 'unknown'; phishing: 'present' | 'unknown'; marketing: 'present' | 'unknown'};

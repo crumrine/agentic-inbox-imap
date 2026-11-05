@@ -1,0 +1,11 @@
+RUN  v4.1.11 /tmp/dev-989-mutation-bkuWTt
+
+ ✓ test/shadow-scoring.test.ts (55 tests | 54 skipped) 1145ms
+     ✓ routes positive GTUBE to Spam, isolates it from normal views/tools/agent epoch, and rescues via Not spam or ordinary/IMAP move with intact UIDs and assessment  962ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 54 skipped (55)
+   Start at  21:05:33
+   Duration  18.60s (transform 5.76s, setup 6.33s, import 8.46s, tests 1.15s, environment 0ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
