@@ -7,7 +7,7 @@ import {spawnSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {pathToFileURL} from 'node:url';
-const root=process.cwd(),out=resolve('docs/evidence/dev-879');mkdirSync(out,{recursive:true});
+const root=process.cwd(),out=resolve(process.env.EVIDENCE_DIR || 'docs/evidence/dev-989');mkdirSync(out,{recursive:true});
 const records=[];
 for(const [name,file,mutate,test,pattern] of [
  ['aggregate-scope','workers/durableObject/index.ts',s=>s.replace("WHERE (COALESCE(e.folder_id, '') = 'spam') =\n                  ((SELECT id FROM folders WHERE name = ?1 OR id = ?1 LIMIT 1) = 'spam')",''),'test/quarantine.test.ts','excludes forged-chain'],

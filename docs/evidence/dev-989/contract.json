@@ -1,0 +1,247 @@
+{
+  "dependency": "faa15bea06db52f2dc240257d5335a66a933f909",
+  "legacyDependency": "2fab406320ae3b3596345d2c76e0ef8a08593211",
+  "hashes": {
+    "packages/core/src/contract.ts": "8a0b132480055ee58dd2ad73bd930021081b2a9b75b31d4199dd5206467b3946",
+    "workers/private/protocol.ts": "46754b8b99d34c4f1dbe2223562951b42ef48d8947684fb6f5b4379675b88844"
+  },
+  "fixture": {
+    "rpcVersion": "1",
+    "ok": true,
+    "result": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-2",
+      "status": "partial",
+      "heuristicScore": 0,
+      "signals": {
+        "spam": "unknown",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [],
+      "limitsHit": [
+        "auth_unknown",
+        "identity_uninspected"
+      ],
+      "error": null
+    }
+  },
+  "preferenceResults": {
+    "none": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-2",
+      "status": "partial",
+      "heuristicScore": 0,
+      "signals": {
+        "spam": "unknown",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [],
+      "limitsHit": [
+        "auth_unknown",
+        "identity_uninspected"
+      ],
+      "error": null
+    },
+    "allow": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-2",
+      "status": "partial",
+      "heuristicScore": 0,
+      "signals": {
+        "spam": "unknown",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [
+        {
+          "id": "sender_allowed",
+          "contribution": 0,
+          "reason": "An explicit verified address allow preference was supplied; other evidence remains."
+        }
+      ],
+      "limitsHit": [
+        "auth_unknown",
+        "identity_uninspected"
+      ],
+      "error": null
+    },
+    "block": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-2",
+      "status": "partial",
+      "heuristicScore": 40,
+      "signals": {
+        "spam": "present",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [
+        {
+          "id": "sender_blocked",
+          "contribution": 40,
+          "reason": "An explicit verified sender block preference was supplied."
+        }
+      ],
+      "limitsHit": [
+        "auth_unknown",
+        "identity_uninspected"
+      ],
+      "error": null
+    }
+  },
+  "gtubePreferenceResults": {
+    "none": {
+      "quarantine": true,
+      "result": {
+        "schemaVersion": "1",
+        "engineVersion": "0.1.0",
+        "ruleSetVersion": "rules-2",
+        "status": "partial",
+        "heuristicScore": 100,
+        "signals": {
+          "spam": "present",
+          "phishing": "unknown",
+          "marketing": "unknown"
+        },
+        "reasons": [
+          {
+            "id": "gtube",
+            "contribution": 100,
+            "reason": "The plain-text body contains the standard GTUBE test marker (intentional test trigger, not a calibrated spam probability)."
+          }
+        ],
+        "limitsHit": [
+          "auth_unknown",
+          "identity_uninspected"
+        ],
+        "error": null
+      }
+    },
+    "allow": {
+      "quarantine": false,
+      "result": {
+        "schemaVersion": "1",
+        "engineVersion": "0.1.0",
+        "ruleSetVersion": "rules-2",
+        "status": "partial",
+        "heuristicScore": 100,
+        "signals": {
+          "spam": "present",
+          "phishing": "unknown",
+          "marketing": "unknown"
+        },
+        "reasons": [
+          {
+            "id": "sender_allowed",
+            "contribution": 0,
+            "reason": "An explicit verified address allow preference was supplied; other evidence remains."
+          },
+          {
+            "id": "gtube",
+            "contribution": 100,
+            "reason": "The plain-text body contains the standard GTUBE test marker (intentional test trigger, not a calibrated spam probability)."
+          }
+        ],
+        "limitsHit": [
+          "auth_unknown",
+          "identity_uninspected"
+        ],
+        "error": null
+      }
+    },
+    "block": {
+      "quarantine": true,
+      "result": {
+        "schemaVersion": "1",
+        "engineVersion": "0.1.0",
+        "ruleSetVersion": "rules-2",
+        "status": "partial",
+        "heuristicScore": 100,
+        "signals": {
+          "spam": "present",
+          "phishing": "unknown",
+          "marketing": "unknown"
+        },
+        "reasons": [
+          {
+            "id": "sender_blocked",
+            "contribution": 40,
+            "reason": "An explicit verified sender block preference was supplied."
+          },
+          {
+            "id": "gtube",
+            "contribution": 60,
+            "reason": "The plain-text body contains the standard GTUBE test marker (intentional test trigger, not a calibrated spam probability)."
+          }
+        ],
+        "limitsHit": [
+          "auth_unknown",
+          "identity_uninspected"
+        ],
+        "error": null
+      }
+    }
+  },
+  "negativeResult": {
+    "schemaVersion": "1",
+    "engineVersion": "0.1.0",
+    "ruleSetVersion": "rules-2",
+    "status": "partial",
+    "heuristicScore": 0,
+    "signals": {
+      "spam": "unknown",
+      "phishing": "unknown",
+      "marketing": "unknown"
+    },
+    "reasons": [],
+    "limitsHit": [
+      "auth_unknown",
+      "identity_uninspected"
+    ],
+    "error": null
+  },
+  "quotedResult": {
+    "schemaVersion": "1",
+    "engineVersion": "0.1.0",
+    "ruleSetVersion": "rules-2",
+    "status": "partial",
+    "heuristicScore": 0,
+    "signals": {
+      "spam": "unknown",
+      "phishing": "unknown",
+      "marketing": "unknown"
+    },
+    "reasons": [],
+    "limitsHit": [
+      "auth_unknown",
+      "quoted_content",
+      "identity_uninspected"
+    ],
+    "error": null
+  },
+  "legacyGtubeResult": {
+    "schemaVersion": "1",
+    "engineVersion": "0.1.0",
+    "ruleSetVersion": "rules-1",
+    "status": "partial",
+    "heuristicScore": 0,
+    "signals": {
+      "spam": "unknown",
+      "phishing": "unknown",
+      "marketing": "unknown"
+    },
+    "reasons": [],
+    "limitsHit": [
+      "auth_unknown",
+      "identity_uninspected"
+    ],
+    "error": null
+  },
+  "passed": true
+}

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Brian Crumrine
 // SPDX-License-Identifier: Apache-2.0
-import {LIMITS, LIMIT_IDS, REASONS, RULE_CAPS, type ScoreResultV1} from './contract';
-export type {ScoreInputV1, ScoreResultV1, ScoreContext} from './contract';
+import {ENGINE_VERSION, LIMITS, LIMIT_IDS, REASONS, RULE_CAPS, RULE_SET_VERSIONS, type RuleSetVersion, type ScoreResultV1} from './contract';
+export type {ScoreInputV1, ScoreResultV1, ScoreContext, RuleSetVersion} from './contract';
 export const RPC_VERSION = '1';
 export const RPC_OUTPUT_BYTES = 4096;
 export const CONTEXT_BYTES = 256;
@@ -16,7 +16,7 @@ const keys=(v:unknown, names:readonly string[]):v is Record<string,unknown> =>
 /** Only called on bounded JSON.parse output, never RPC objects with accessors. */
 function resultValid(r:unknown):r is ScoreResultV1 {
   if(!keys(r,['schemaVersion','engineVersion','ruleSetVersion','status','heuristicScore','signals','reasons','limitsHit','error']))return false;
-  if(r.schemaVersion!=='1'||r.engineVersion!=='0.1.0'||r.ruleSetVersion!=='rules-1')return false;
+  if(r.schemaVersion!=='1'||r.engineVersion!==ENGINE_VERSION||!RULE_SET_VERSIONS.includes(r.ruleSetVersion as RuleSetVersion))return false;
   if(!['complete','partial','unavailable'].includes(r.status as string)||typeof r.heuristicScore!=='number'||!Number.isFinite(r.heuristicScore)||r.heuristicScore<0||r.heuristicScore>100)return false;
   if(!keys(r.signals,['spam','phishing','marketing'])||!Object.values(r.signals).every(v=>v==='present'||v==='unknown'))return false;
   if(!Array.isArray(r.reasons)||r.reasons.length>Object.keys(REASONS).length||!Array.isArray(r.limitsHit)||r.limitsHit.length>LIMIT_IDS.length)return false;
@@ -24,6 +24,7 @@ function resultValid(r:unknown):r is ScoreResultV1 {
   for(const v of r.reasons) {
     if(!keys(v,['id','contribution','reason'])||typeof v.id!=='string'||!Object.hasOwn(REASONS,v.id)||seen.has(v.id))return false;
     const id=v.id as keyof typeof REASONS;
+    if(r.ruleSetVersion==='rules-1'&&id==='gtube')return false;
     if(v.reason!==REASONS[id]||typeof v.contribution!=='number'||!Number.isFinite(v.contribution)||v.contribution<0||v.contribution>RULE_CAPS[id])return false;
     seen.add(id);sum+=v.contribution;
   }

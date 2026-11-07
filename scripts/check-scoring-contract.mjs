@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Brian Crumrine
 // SPDX-License-Identifier: Apache-2.0
-import {readFileSync, writeFileSync, mkdtempSync, rmSync} from 'node:fs';
+import {readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {resolve, join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -9,8 +9,10 @@ import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 const dependency=resolve(process.argv[2] ?? '../mail-scoring');
-const pin='bb02819e4662e1d680805435dd886e3dc4728906';
+const pin='faa15bea06db52f2dc240257d5335a66a933f909';
+const legacyPin='2fab406320ae3b3596345d2c76e0ef8a08593211';
 assert.equal(execFileSync('git',['-C',dependency,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),pin);
+assert.equal(execFileSync('git',['-C',dependency,'cat-file','-t',legacyPin],{encoding:'utf8'}).trim(),'commit');
 const hashes={};
 for(const [source,copy] of [['packages/core/src/contract.ts','contract.ts'],['workers/private/protocol.ts','protocol.ts']]){
  const upstream=readFileSync(join(dependency,source),'utf8');
@@ -18,10 +20,20 @@ for(const [source,copy] of [['packages/core/src/contract.ts','contract.ts'],['wo
  assert.equal(local,upstream.replaceAll('../../packages/core/src/contract.js','./contract'));
  hashes[source]=createHash('sha256').update(upstream).digest('hex');
 }
-const temp=mkdtempSync(join(tmpdir(),'dev-878-contract-'));
+const temp=mkdtempSync(join(tmpdir(),'dev-989-contract-'));
 try{
+ const legacyDir=join(temp,'legacy-src');
+ mkdirSync(legacyDir,{recursive:true});
+ const archive=execFileSync('git',['-C',dependency,'archive',legacyPin,'tsconfig.json','packages/core','workers/private'],{maxBuffer:8*1024*1024});
+ execFileSync('tar',['-x','-C',legacyDir],{input:archive});
  const modules={};
- for(const [name,path] of [['scorer',join(dependency,'workers/private/adapter.ts')],['caller',resolve('workers/lib/mail-scoring/intake.ts')]]){
+ for(const [name,path] of [
+  ['scorer',join(dependency,'workers/private/adapter.ts')],
+  ['legacyScorer',join(legacyDir,'workers/private/adapter.ts')],
+  ['caller',resolve('workers/lib/mail-scoring/intake.ts')],
+  ['protocol',resolve('workers/lib/mail-scoring/protocol.ts')],
+  ['contract',resolve('workers/lib/mail-scoring/contract.ts')],
+ ]){
   const out=join(temp,name+'.mjs');
   await build({entryPoints:[path],outfile:out,bundle:true,format:'esm',platform:'node'});
   modules[name]=await import(pathToFileURL(out));
@@ -31,9 +43,11 @@ try{
  const assessment=await modules.caller.assessArrival({MAIL_SCORING_MODE:'shadow',MAIL_SCORER:{scoreV1:async(...args)=>{
   calls.push(args);return modules.scorer.scoreRpc(...args);
  }}},parsed,true,'bounce@example.test');
- assert.equal(calls.length,1);assert.equal(assessment.status,'partial');assert.equal(assessment.result.schemaVersion,'1');
+ assert.equal(calls.length,1);assert.equal(assessment.status,'partial');
+ assert.equal(assessment.result.schemaVersion,'1');assert.equal(assessment.result.ruleSetVersion,'rules-2');
  assert.ok(assessment.result.limitsHit.includes('auth_unknown'));
  assert.equal(assessment.result.heuristicScore,0);
+ assert.equal(modules.caller.shouldQuarantine(assessment,'none'),false);
  const fixture={rpcVersion:'1',ok:true,result:assessment.result};
  const preferenceResults={};
  for(const preference of ['none','allow','block']){
@@ -43,8 +57,57 @@ try{
   assert.equal(ids.includes('sender_allowed'),preference==='allow');
   assert.equal(ids.includes('sender_blocked'),preference==='block');
   assert.equal(ids.includes('auth_failed'),false);
+  assert.equal(modules.caller.shouldQuarantine(value,preference),preference==='block');
   preferenceResults[preference]=value.result;
  }
- writeFileSync('docs/evidence/dev-878/contract.json',JSON.stringify({dependency:pin,hashes,fixture,preferenceResults,passed:true},null,2)+'\n');
+ const marker=modules.contract.GTUBE_MARKER;
+ const gtubeParsed={...parsed,subject:'Test spam mail (GTUBE)',text:`Header text\n\n${marker}\n\nFooter text.`};
+ const gtubePreferenceResults={};
+ for(const preference of ['none','allow','block']){
+  const value=await modules.caller.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async(...args)=>modules.scorer.scoreRpc(...args)}},gtubeParsed,true,'bounce@example.test',preference);
+  assert.equal(value.status,'partial');assert.ok(value.result);
+  assert.equal(value.result.ruleSetVersion,'rules-2');
+  assert.equal(value.result.heuristicScore,100);
+  assert.equal(value.result.signals.spam,'present');
+  const ids=value.result.reasons.map(r=>r.id);
+  assert.ok(ids.includes('gtube'));
+  assert.equal(ids.includes('sender_allowed'),preference==='allow');
+  assert.equal(ids.includes('sender_blocked'),preference==='block');
+  assert.equal(modules.caller.shouldQuarantine(value,preference),preference!=='allow');
+  gtubePreferenceResults[preference]={quarantine:modules.caller.shouldQuarantine(value,preference),result:value.result};
+ }
+ const negativeParsed={...parsed,subject:'Test non-trigger near-match mail',text:marker.slice(0,-1)+'Y'};
+ const negativeAssessment=await modules.caller.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async(...args)=>modules.scorer.scoreRpc(...args)}},negativeParsed,true,'bounce@example.test','none');
+ assert.equal(negativeAssessment.result.heuristicScore,0);
+ assert.equal(modules.caller.shouldQuarantine(negativeAssessment,'none'),false);
+ const quotedParsed={...parsed,subject:'Re: Test spam mail (GTUBE)',text:`> ${marker}`};
+ const quotedAssessment=await modules.caller.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async(...args)=>modules.scorer.scoreRpc(...args)}},quotedParsed,true,'bounce@example.test','none');
+ assert.equal(quotedAssessment.result.heuristicScore,0);
+ assert.ok(quotedAssessment.result.limitsHit.includes('quoted_content'));
+ assert.equal(modules.caller.shouldQuarantine(quotedAssessment,'none'),false);
+ // Mixed-version caller-first transition: updated caller accepts legacy rules-1 scorer output
+ const legacyAssessment=await modules.caller.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async(...args)=>modules.legacyScorer.scoreRpc(...args)}},gtubeParsed,true,'bounce@example.test','none');
+ assert.equal(legacyAssessment.status,'partial');
+ assert.equal(legacyAssessment.result.ruleSetVersion,'rules-1');
+ assert.equal(legacyAssessment.result.heuristicScore,0);
+ assert.equal(modules.caller.shouldQuarantine(legacyAssessment,'none'),false);
+ // Reject gtube reason under rules-1 and reject unknown ruleSetVersion / reason IDs
+ const gtubeWire=JSON.stringify({rpcVersion:'1',ok:true,result:gtubePreferenceResults.none.result});
+ assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"rules-2"','"rules-1"')),null);
+ assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"rules-2"','"rules-3"')),null);
+ assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"gtube"','"unknown_reason"')),null);
+ mkdirSync('docs/evidence/dev-989',{recursive:true});
+ writeFileSync('docs/evidence/dev-989/contract.json',JSON.stringify({
+  dependency:pin,
+  legacyDependency:legacyPin,
+  hashes,
+  fixture,
+  preferenceResults,
+  gtubePreferenceResults,
+  negativeResult:negativeAssessment.result,
+  quotedResult:quotedAssessment.result,
+  legacyGtubeResult:legacyAssessment.result,
+  passed:true,
+ },null,2)+'\n');
  console.log('Pinned scorer/caller compatibility passed');
 }finally{rmSync(temp,{recursive:true,force:true});}

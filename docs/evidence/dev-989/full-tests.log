@@ -1,0 +1,497 @@
+> test
+> vitest run --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000
+
+
+ RUN  v4.1.11 /home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+stdout | test/shadow-scoring.test.ts > actual app email and authenticated REST in local workerd > does not score unknown recipients
+Rejecting email: no mailbox or alias matches any recipient.
+
+ ✓ test/shadow-scoring.test.ts (55 tests) 16632ms
+     ✓ preserves existing mail, raw MIME, attachments and assessment; Not spam rescues with correct UIDs  443ms
+     ✓ shadow scores once after alias/Bcc/multiple-recipient routing and persists across reads/restart  391ms
+       ✓ timeout scorer keeps delivery and records unavailable without preferences or AI  1188ms
+       ✓ timeout scorer keeps delivery and records unavailable without preferences or AI  1194ms
+       ✓ rules1_gtube scorer keeps delivery and records unavailable without preferences or AI  343ms
+       ✓ arbitrary_reason scorer keeps delivery and records unavailable without preferences or AI  726ms
+     ✓ authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs  483ms
+     ✓ routine move, rescue and delete never train; explicit preferences affect only later shadow arrivals  384ms
+     ✓ migration 12 populated DB upgrades without rescanning and keeps FK/idempotence  311ms
+     ✓ routes positive GTUBE to Spam, isolates it from normal views/tools/agent epoch, and rescues via Not spam or ordinary/IMAP move with intact UIDs and assessment  870ms
+     ✓ routes plain-text, base64, quoted-printable, and mixed-quote GTUBE arrivals while keeping HTML-only and oversized/padded inputs in Inbox  578ms
+     ✓ keeps negative GTUBE, nonspam controls (score 0 and 10), near-matches, quoted/forwarded markers, forged headers, and off/shadow modes in Inbox  832ms
+     ✓ preserves explicit sender allow/block precedence on GTUBE and keeps ordinary quarantine partial-inspection guards intact  536ms
+     ✓ supports caller-first mixed-version rollout and rollback between rules-1 and rules-2 while preserving stored assessment readability  529ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+stdout | test/alias-wildcard.test.ts > inbound delivery through a domain wildcard > stops being a delivery target when its mailbox is deleted
+Rejecting email: no mailbox or alias matches any recipient.
+
+stdout | test/alias-wildcard.test.ts > inbound delivery through a domain wildcard > still refuses an address it does not cover (DEV-700)
+Rejecting email: no mailbox or alias matches any recipient.
+
+stdout | test/alias-wildcard.test.ts > a wildcard matches the envelope recipient and nothing else > refuses a covered address named only in the To header
+Rejecting email: no mailbox or alias matches any recipient.
+
+stdout | test/alias-wildcard.test.ts > a wildcard matches the envelope recipient and nothing else > refuses a local part the sender pointed at a domain we never see
+Rejecting email: no mailbox or alias matches any recipient.
+
+stdout | test/alias-wildcard.test.ts > a wildcard matches the envelope recipient and nothing else > matches nothing at all when there is no envelope recipient
+Rejecting email: no mailbox or alias matches any recipient.
+
+ ✓ test/alias-wildcard.test.ts (46 tests) 16481ms
+     ✓ loses to an exact alias, which keeps its own mailbox  328ms
+     ✓ loses to a real mailbox at the address  363ms
+     ✓ delivers when the covered address is the envelope recipient  464ms
+     ✓ matches nothing at all when there is no envelope recipient  452ms
+     ✓ still delivers a real mailbox named only in the To header  633ms
+     ✓ still delivers an exact alias named only in the To header  312ms
+     ✓ lets a wildcard on the envelope beat an exact alias in the header  344ms
+     ✓ draws the same line one level down, in the resolver itself  444ms
+     ✓ replies as the full address the message was delivered to  422ms
+     ✓ forwards as the full address too  342ms
+     ✓ carries the wildcard's display name onto the send  364ms
+     ✓ falls back to the mailbox when the parent knows no delivery address  371ms
+     ✓ composes as the mailbox, never as a covered address  322ms
+     ✓ refuses a covered address the caller asks for outright  327ms
+     ✓ rewrites a default-From reply to the delivered address  394ms
+     ✓ leaves the bytes alone when the parent knows no delivery address  358ms
+     ✓ leaves a fresh compose alone — no parent, no evidence  345ms
+     ✓ refuses a From the client set to a covered address itself  348ms
+     ✓ is invisible to the exact lookup the sender check uses  325ms
+     ✓ does not let the mailbox validate a covered address as its sender  322ms
+     ✓ resolves send-as from nothing at all to the mailbox address  338ms
+     ✓ stops speaking for an address that has become a real mailbox  364ms
+     ✓ does not lend itself to a mailbox that does not own it  335ms
+     ✓ stops resolving once it is deleted  356ms
+     ✓ lists alongside exact aliases, telling itself apart by its spelling  565ms
+     ✓ lists a named wildcard, which is the one state that reopens the object  355ms
+     ✓ refuses a second wildcard on the same local part  337ms
+     ✓ does not collide with an exact alias on the same local part  427ms
+     ✓ cannot be removed by a mailbox that does not own it  355ms
+     ✓ needs a mailbox to point at, like any other alias  338ms
+     ✓ is created by a deployment that declares no domains at all  379ms
+     ✓ honours a non-empty EMAIL_ADDRESSES through the addresses it would cover  363ms
+     ✓ accepts ordinary local parts  335ms
+     ✓ refuses anything that could escape or traverse the key namespace  340ms
+     ✓ refuses the same values as a wildcard, so nothing is ever written  345ms
+     ✓ creates a wildcard and hands the record back  394ms
+     ✓ normalises case and whitespace like any other address  357ms
+     ✓ still refuses a bare token with no @ at all  409ms
+     ✓ renames and removes a wildcard through the same routes  377ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+stderr | test/alias-display-name.test.ts > SMTP submission uses the alias's display name > refuses the whole rewrite when the From names more than one mailbox
+SUBMIT: could not rewrite From for automatic send-as; sending as the mailbox
+
+ ✓ test/alias-display-name.test.ts (49 tests) 9286ms
+     ✓ PATCHes a name onto an existing alias without re-pointing it  310ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+ ✓ test/imap-copy-move-expunge.test.ts (27 tests) 48843ms
+     ✓ leaves the source intact and creates a destination row with a new uid  310ms
+     ✓ preserves flags on the copy, \Deleted included (RFC 9051 §6.4.7)  303ms
+     ✓ does not copy attachment rows, because a blob key names its owning email  357ms
+     ✓ skips an unknown uid while still copying the rest of the batch  438ms
+     ✓ reports the existing uid when the destination is the folder it is already in  478ms
+     ✓ accepts an empty batch as a no-op  540ms
+     ✓ retires the source uid and mints a new one in the destination  764ms
+     ✓ never reuses a uid in either folder afterwards  865ms
+     ✓ skips an unknown uid while still moving the rest of the batch  789ms
+     ✓ is a no-op when the destination is the folder the message is already in  901ms
+     ✓ relocates to Trash rather than destroying  1130ms
+     ✓ clears \Deleted on the relocated message so Trash is not pre-armed  1166ms
+     ✓ takes exactly the \Deleted set and nothing else when no uid list is given  1309ms
+     ✓ treats a uid list as a restriction on the \Deleted set, never an extension  1288ms
+     ✓ accepts a body with no uids, a null uids, and no body at all  1412ms
+     ✓ destroys the row and purges the R2 objects it alone owned  1786ms
+     ✓ leaves a shared raw object alone while any other row still points at it  1995ms
+     ✓ destroys only the \Deleted messages in Trash  2264ms
+     ✓ 404s an unknown destination without saying anything about the mailbox  2330ms
+     ✓ 404s an unknown source folder and an unknown mailbox, distinctly  2839ms
+     ✓ rejects a malformed body with 400 and no echo of the input  2897ms
+     ✓ rejects a body that is not JSON at all  2988ms
+     ✓ rejects a batch larger than the per-request cap  3806ms
+     ✓ keeps the folder counts correct after a copy, a move and an expunge  4581ms
+     ✓ a moved message is fetchable in the destination and gone from the source  5287ms
+     ✓ a copied message is fetchable at both uids from the one shared object  5759ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+stderr | test/imap-append.test.ts > APPEND: internalDate > falls back to receive time on an unparseable internalDate rather than refusing
+APPEND: unparseable internalDate; using receive time
+
+ ✓ test/imap-append.test.ts (35 tests) 137104ms
+     ✓ creates a message the metadata endpoint reports with the right envelope  319ms
+     ✓ reports the uidValidity of the destination folder  310ms
+     ✓ stores the raw bytes byte-for-byte, not a rebuild of them  391ms
+     ✓ round trips: what /raw hands back is what was appended  442ms
+     ✓ allocates from the target folder and advances its uid_next  556ms
+     ✓ runs a separate uid sequence per folder  669ms
+     ✓ accepts the folder's display name as well as its id  707ms
+     ✓ applies the supplied flags  749ms
+     ✓ keeps a custom keyword  840ms
+     ✓ ignores \Recent instead of failing, and does not store it as a keyword  926ms
+     ✓ ignores \Draft, which is derived from the folder  1046ms
+     ✓ treats flag atoms case insensitively, as IMAP does  1214ms
+     ✓ appends unflagged when no flags are supplied  1369ms
+     ✓ marks a Sent copy read even when the client omitted \Seen  1456ms
+     ✓ honours a supplied internalDate  1540ms
+     ✓ defaults to receive time when absent, not to the Date header  1663ms
+     ✓ falls back to receive time on an unparseable internalDate rather than refusing  1877ms
+     ✓ returns the existing uid and writes nothing on a repeat  1808ms
+     ✓ does not burn a uid on the deduplicated append  2076ms
+     ✓ dedups within a folder only, never across the mailbox  2907ms
+     ✓ applies the second append's flags to the message it deduplicated onto  3176ms
+     ✓ marks an already-recorded Sent copy read when the client appends it \Seen  3914ms
+     ✓ never dedups in draft: a re-APPENDed draft is a new row with the new body  3931ms
+     ✓ never dedups in inbox either  4394ms
+     ✓ appends twice as two rows when the message carries no Message-ID  5298ms
+     ✓ leaves no orphaned R2 object behind when it deduplicates  5723ms
+     ✓ 404s an unknown folder without saying anything about the mailbox  6901ms
+     ✓ 404s an unknown mailbox  7414ms
+     ✓ 413s a body past the size cap, from the declared length alone  8700ms
+     ✓ 413s a body past the size cap when the length was never declared  9609ms
+     ✓ 400s an empty body  10603ms
+     ✓ stores a message with no headers at all rather than refusing it  12335ms
+     ✓ accepts a message right at the size cap  16076ms
+     ✓ drops an absurdly long flag atom without failing the append  15870ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+stderr | test/imap-read-api.test.ts > GET /{mailbox}/messages/{uid}/raw > falls back to synthesis when the stored object has vanished from R2
+Raw message missing from R2 for email gone; synthesizing
+
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+ ✓ test/imap-read-api.test.ts (26 tests) 38575ms
+     ✓ returns per-folder counts from SQL aggregates  307ms
+     ✓ keys the folder path segment on the folder id  371ms
+     ✓ derives every system flag and carries custom keywords through  478ms
+     ✓ returns internalDate, rfc822Size and hasRaw for a stored message  511ms
+     ✓ marks a legacy row hasRaw:false and estimates its size  531ms
+     ✓ builds the envelope from the stored headers, not just the columns  647ms
+     ✓ takes the envelope date from the Date header, not from internalDate  595ms
+     ✓ falls back to internalDate when there is no Date header  800ms
+     ✓ normalises an unparseable stored date instead of emitting it raw  1119ms
+     ✓ honours sinceUid  1047ms
+     ✓ honours limit and returns messages in ascending uid order  1223ms
+     ✓ clamps limit to the server maximum  1456ms
+     ✓ rejects a malformed sinceUid or limit  1318ms
+     ✓ 404s for an unknown folder and an unknown mailbox, distinctly  1628ms
+     ✓ returns an empty page rather than a 404 for an empty folder  1790ms
+     ✓ serves message metadata without reading a single message body  1621ms
+     ✓ does not read R2 to list folders either  2526ms
+     ✓ streams a stored message back byte-identically  2614ms
+     ✓ synthesizes a legacy message that has no stored bytes  2862ms
+     ✓ includes attachment bytes when rebuilding a legacy message  2934ms
+     ✓ falls back to synthesis when the stored object has vanished from R2  3113ms
+     ✓ 404s distinctly for unknown mailbox, folder and uid, leaking nothing  3655ms
+     ✓ finds a uid only inside the folder it was asked for  4736ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/imap-search-api.test.ts (42 tests) 6704ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/imap-bodystructure.test.ts (29 tests) 4868ms
+     ✓ serves the structure APPEND computed, matching the deriver  458ms
+     ✓ stores it in the column, once, at write time  482ms
+     ✓ omits the field entirely for a row with nothing stored  721ms
+     ✓ omits the field when the stored value is unreadable  337ms
+     ✓ is purely additive: nothing else about the payload changed  502ms
+     ✓ carries the structure to a COPY, which shares the same bytes  650ms
+     ✓ stores nothing for a message whose MIME the deriver declines  546ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/send-as-alias.test.ts (23 tests) 6818ms
+     ✓ adds a nullable TEXT column, and is the last migration in the list  384ms
+     ✓ createEmail persists it instead of dropping the key  318ms
+     ✓ records the alias a real inbound message routed through  392ms
+     ✓ GET /emails/{id} includes it, and still excludes the internal columns  479ms
+     ✓ replies as the alias when the original was delivered to one  324ms
+     ✓ forwards as the alias too  411ms
+     ✓ keeps the display name the client asked for on the chosen address  353ms
+     ✓ falls back to the mailbox address when delivered_to is NULL  438ms
+     ✓ replies from the message being answered, not from the draft answering it  314ms
+     ✓ does NOT send as an alias that has since been deleted  320ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+stderr | test/imap-submit.test.ts > an upstream failure is a 502 and leaves no trace > records no Sent row and stores no raw object
+SUBMIT: upstream refused a recipient: Error
+
+stderr | test/imap-submit.test.ts > an upstream failure is a 502 and leaves no trace > still records the copy when only some recipients fail
+SUBMIT: upstream refused a recipient: Error
+
+stderr | test/imap-submit.test.ts > an upstream failure is a 502 and leaves no trace > still records the copy when only some recipients fail
+SUBMIT: 1 of 2 recipients failed
+
+stderr | test/imap-submit.test.ts > Message-ID handling > generates and inserts one when the client sent none
+SUBMIT: message had no Message-ID; generated one. The client's own APPENDed Sent copy will not deduplicate against this row.
+
+ ✓ test/imap-submit.test.ts (15 tests) 7263ms
+     ✓ sends to the envelope recipient and files a Sent copy  308ms
+     ✓ returns 429 with a usable Retry-After once the hourly cap is spent  553ms
+     ✓ returns 413 with the real limit and never calls the binding  505ms
+     ✓ delivers to a Bcc'd recipient who appears in no header  559ms
+     ✓ records no Sent row and stores no raw object  618ms
+     ✓ still records the copy when only some recipients fail  577ms
+     ✓ generates and inserts one when the client sent none  661ms
+     ✓ 404s an unknown mailbox  620ms
+     ✓ 400s when the envelope is missing  735ms
+     ✓ 400s an empty body  813ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+stdout | test/aliases.test.ts > receiveEmail: delivery through the alias registry > still ignores an address that is neither a mailbox nor an alias
+Rejecting email: no mailbox or alias matches any recipient.
+
+stdout | test/aliases.test.ts > receiveEmail: delivery through the alias registry > stops delivering once the alias is removed
+Rejecting email: no mailbox or alias matches any recipient.
+
+ ✓ test/aliases.test.ts (29 tests) 6677ms
+     ✓ prefers a real mailbox over an alias when both recipients are ours  392ms
+     ✓ routes by the SMTP envelope recipient when the headers do not name us  364ms
+     ✓ reports which address routed the message, not just the mailbox  329ms
+     ✓ returns null when nothing matches  303ms
+     ✓ does not deliver through an alias whose mailbox has been deleted  824ms
+     ✓ still accepts the mailbox's own address  374ms
+     ✓ accepts an address verified to alias to this mailbox  387ms
+     ✓ rejects an unrelated address  307ms
+     ✓ rejects an address aliased to a DIFFERENT mailbox  364ms
+     ✓ rejects an unregistered lookalike on the mailbox's own domain  366ms
+     ✓ rejects an unregistered address on a domain that HAS registered aliases  363ms
+     ✓ rejects an alias after it has been deleted  310ms
+     ✓ keeps the synchronous form strict for callers that pass no aliases  335ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/imap-flags-api.test.ts (26 tests) 34487ms
+     ✓ treats flag names case-insensitively, as IMAP atoms are  373ms
+     ✓ returns the complete resulting flag set, not just what changed  394ms
+     ✓ adds a keyword while preserving the existing ones  393ms
+     ✓ removes only the named keyword and leaves the unrelated ones  511ms
+     ✓ does not duplicate a keyword the message already carries  533ms
+     ✓ removing a keyword the message never had is a no-op, not an error  456ms
+     ✓ caps how many keywords one message can accumulate  1340ms
+     ✓ ignores \Draft and \Recent instead of failing the store  682ms
+     ✓ cannot remove \Draft from a message in the drafts folder  774ms
+     ✓ does not store an unrecognised system-namespace flag as a keyword  998ms
+     ✓ applies several uids in one call  1190ms
+     ✓ skips an unknown uid while still applying the rest of the batch  1231ms
+     ✓ only touches uids inside the folder it was asked for  1184ms
+     ✓ folds two updates naming the same uid instead of letting one win  1413ms
+     ✓ accepts an empty batch as a no-op  1826ms
+     ✓ rejects a malformed body with 400 and no echo of the input  2070ms
+     ✓ rejects a body that is not JSON at all  2221ms
+     ✓ rejects a batch larger than the per-request cap  3431ms
+     ✓ 404s for an unknown folder and an unknown mailbox, distinctly  3689ms
+     ✓ reads back through /messages exactly what the store returned  3815ms
+     ✓ shows a \Seen store in the folder unseen count  4808ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/raw-mime-builder.test.ts (25 tests) 667ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/quarantine.test.ts (9 tests) 2139ms
+     ✓ excludes forged-chain Spam from normal bodies, participants, unread and needs-reply; explicit review isolates Spam  481ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/imap-submit-send-as.test.ts (15 tests) 1886ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+ ✓ test/app-email-api.test.ts (11 tests) 4171ms
+     ✓ leaves a raw object alone while an IMAP COPY still references it, and the survivor still serves it  314ms
+     ✓ purges the shared raw object once the last copy is deleted too  334ms
+     ✓ removes the row for a legacy message with no raw_key  320ms
+     ✓ GET /emails/{id} returns the client fields and none of the IMAP ones  432ms
+     ✓ keeps attachment metadata on the projected email  335ms
+     ✓ PUT /emails/{id} echoes back a narrowed row too  540ms
+     ✓ GET /threads/{threadId} narrows every message, not just the first  581ms
+     ✓ still hands the IMAP read API every column it needs  619ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/app-passwords-api.test.ts (23 tests) 4402ms
+     ✓ verifies with the dashes stripped, the way a client may send it  330ms
+     ✓ leaves a sibling password working  540ms
+     ✓ returns 204 and stops the password authenticating  328ms
+     ✓ revokes only the named password  428ms
+     ✓ 404s an id belonging to another mailbox  324ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/imap-credentials.test.ts (20 tests) 6345ms
+     ✓ rejects a wrong password  307ms
+     ✓ still hashes when the mailbox does not exist, so there is no fast path  671ms
+     ✓ accepts each password independently and revokes them independently  1707ms
+     ✓ records the iteration count per entry  760ms
+     ✓ logs nothing at all on the create, verify, list and revoke paths  469ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+stdout | test/inbound-reject.test.ts > inbound: mail we cannot deliver is rejected > rejects an address that is neither a mailbox nor an alias, and writes nothing
+Rejecting email: no mailbox or alias matches any recipient.
+
+stdout | test/inbound-reject.test.ts > inbound: mail we cannot deliver is rejected > rejects an alias whose target mailbox has since been deleted
+Rejecting email: no mailbox or alias matches any recipient.
+
+stdout | test/inbound-reject.test.ts > inbound: mail we cannot deliver is rejected > rejects when a non-empty EMAIL_ADDRESSES filters every recipient out
+Rejecting email: no recipient matches EMAIL_ADDRESSES.
+
+stdout | test/inbound-reject.test.ts > inbound: mail we cannot deliver is rejected > permanently rejects an oversize message rather than retrying it
+Rejecting email: 26214401 bytes exceeds the 26214400 byte limit.
+
+stdout | test/inbound-reject.test.ts > inbound: mail we cannot deliver is rejected > permanently rejects a structurally invalid message
+Rejecting email: invalid declared size 0.
+
+stdout | test/inbound-reject.test.ts > reject reasons are safe to put on the wire > never echo the rejected recipient back
+Rejecting email: no mailbox or alias matches any recipient.
+
+stdout | test/inbound-reject.test.ts > reject reasons are safe to put on the wire > never echo the rejected recipient back
+Rejecting email: no mailbox or alias matches any recipient.
+
+stdout | test/inbound-reject.test.ts > reject reasons are safe to put on the wire > never echo the rejected recipient back
+Rejecting email: no mailbox or alias matches any recipient.
+
+ ✓ test/inbound-reject.test.ts (11 tests) 1334ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/imap-auth-route.test.ts (12 tests) 11121ms
+     ✓ returns 200 and the mailbox for a valid app password  302ms
+     ✓ normalises the mailbox before looking it up  314ms
+     ✓ returns 401 for a wrong password  301ms
+     ✓ returns 401 for a revoked password  361ms
+     ✓ makes an unknown mailbox indistinguishable from a wrong password  430ms
+     ✓ does not leak how many app passwords a mailbox has  765ms
+     ✓ blocks further attempts once the per-mailbox threshold is reached  1138ms
+     ✓ limits per mailbox, not globally  1777ms
+     ✓ counts unknown mailboxes too, so the limiter is not bypassable  1020ms
+     ✓ hands the budget back after a successful login  3110ms
+     ✓ never writes the password to any console channel on any path  1576ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/aliases-api.test.ts (16 tests) 951ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/migration-9-uid-flags.test.ts (4 tests) 833ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/mailbox-uid-allocation.test.ts (10 tests) 3561ms
+     ✓ mints a new uid in the target folder and retires the old one  323ms
+     ✓ does not renumber a message moved to the folder it is already in  331ms
+     ✓ burns no uid for an unknown message or an unknown folder  337ms
+     ✓ is stable across Durable Object restarts  420ms
+     ✓ rejects a duplicate uid within a folder but allows it across folders  456ms
+     ✓ writes state under a shared name  528ms
+     ✓ does not see the previous test's state  512ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/raw-mime-outbound.test.ts (5 tests) 1576ms
+     ✓ POST /emails (compose/send)  301ms
+     ✓ POST /emails/:id/forward  325ms
+     ✓ toolSendReply (agent/MCP send path)  386ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+stderr | test/raw-mime-inbound.test.ts > receiveEmail: raw MIME storage (DEV-661) > never loses mail: if the R2 put throws, the email row is still created with raw_key NULL
+raw_mime_storage_failed
+
+stderr | test/raw-mime-inbound.test.ts > receiveEmail: precomputed BODYSTRUCTURE (DEV-678) > leaves body_structure NULL when the raw bytes could not be stored
+raw_mime_storage_failed
+
+ ✓ test/raw-mime-inbound.test.ts (4 tests) 922ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/imap-folder-status.test.ts (8 tests) 2210ms
+     ✓ matches the corresponding entry of /folders exactly, for every folder  332ms
+     ✓ does not shadow the sibling routes on the same path shape  422ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/access.test.ts (11 tests) 558ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+stderr | test/imap-raw-synthesis-budget.test.ts > GET /{mailbox}/messages/{uid}/raw: legacy synthesis budget > refuses to synthesize when declared attachment size exceeds the budget, without reading R2
+Legacy message big1 is too large to reconstruct (26214410 bytes exceeds the 26214400 byte synthesis budget)
+
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+ ✓ test/imap-raw-synthesis-budget.test.ts (6 tests) 590ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/types.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/interfaces.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-json-schema-compat.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/validation/ajv-provider.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/server.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/helpers.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/server/completable.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/uriTemplate.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/toolNameValidation.js" points to missing source files
+Sourcemap for "/home/brian/r9-jobs/home/symphony-workspaces/siteforge/DEV-989/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/mcp-server.js" points to missing source files
+ ✓ test/quarantine-context.test.ts (4 tests) 552ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/mcp-email-projection.test.ts (3 tests) 560ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/inbound-diagnostics.test.ts (8 tests) 845ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/mint-script-compat.test.ts (4 tests) 629ms
+     ✓ a credential file built the way the script builds it actually authenticates  411ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/threaded-query.test.ts (2 tests) 11192ms
+   ✓ matches baseline grouping, deep pages and immediate mutation reads through the REST route  3376ms
+   ✓ matches baseline full refreshes at 1k and 10k messages  7810ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/auth-rate-limit-do.test.ts (3 tests) 261ms
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ✓ test/migration-10-body-structure.test.ts (3 tests) 508ms
+
+ Test Files  35 passed (35)
+      Tests  619 passed (619)
+   Start at  20:27:33
+   Duration  633.13s (transform 13.01s, setup 102.98s, import 65.00s, tests 391.55s, environment 7ms)
