@@ -48,6 +48,11 @@ const tests = [
   assert.deepEqual(projected.urls,[]);
   assert.equal(projected.sourceComplete,false);
  }],
+ ['url_original_token_bound', 'intake.ts', s => s.replace('field(match[0], LIMITS.urlBytes)', 'match[0]'), async m => {
+  const projected=m.project({...parsed,text:'https://user@example.test/'+'.'.repeat(3000)});
+  assert.deepEqual(projected.urls,[]);
+  assert.equal(projected.sourceComplete,false);
+ }],
  ['manual_authority', 'feedback.ts', s => s.replace('authorities.has(authority)', 'true'), async m => {
   assert.equal(m.hasManualAuthority({mailboxId: 'a@example.test'}, 'a@example.test'), false);
  }],

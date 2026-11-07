@@ -90,7 +90,9 @@ field, capped at 100 tokens and 2048 UTF-8 bytes per token. The 32768-byte body
 ceiling bounds the linear line/token scans before URL parsing. Quote prefixes
 are checked with C0/C1/bidi controls removed; quoted lines and the remainder
 after an original/forwarded-message divider are omitted. URL bytes retain their
-original spelling, with trailing prose punctuation removed. Oversized tokens,
+original spelling, with trailing prose punctuation removed by a linear scan.
+Original token bytes are checked before trimming, and balanced IPv6 authority
+brackets are retained. Oversized tokens,
 controls, count/work ceilings and quoted omissions mark `sourceComplete:false`.
 The scorer retains its bounded decoding, URL diagnostics and contribution caps.
 No HTML, URLs/anchors extracted from HTML, attachment data,
@@ -109,6 +111,8 @@ change fills only the missing plain-text projection, reusing the current wire
 contract, limits, reasons and family caps. Existing tests cover GTUBE, recovery,
 MIME, RPC failures and inert preview; added tests cover projection, omissions,
 ordinary-link negatives, exact combined contributions and removal/bound mutations.
+Run `node scripts/projection-growth.mjs` for the hostile within-budget token
+growth control; its original-token and IPv6 regressions are also in the joined suite.
 
 Existing routing is preserved: envelope first, then To candidates, allowlist,
 mailbox/alias/wildcard resolution, one mailbox per receive event. To-less mail

@@ -37,7 +37,7 @@ export function project(parsed: Email, envelopeFrom?: string): ScoreInputV1 {
   const subject = field(parsed.subject, 2048);
   const text = field(parsed.text, 32768);
   const urls: string[] = [];
-  // The body is already capped at 32 KiB; each line/token is visited once.
+  // The 32 KiB body cap bounds the linear line/token scans.
   for (const line of text.split(/\r\n|[\r\n]/)) {
     const prefix = line.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/g, '').replace(/^[ \t]+/, '').slice(0, 29).toLowerCase();
     if (prefix.startsWith('>')) { complete = false; continue; }
@@ -48,7 +48,21 @@ export function project(parsed: Email, envelopeFrom?: string): ScoreInputV1 {
     for (const match of line.matchAll(/https?(?::\/\/|%)[^\s<>"']+/gi)) {
       if (match.index > 0 && /[\p{L}\p{N}_%]/u.test(line[match.index - 1])) continue;
       if (urls.length === LIMITS.urls) { complete = false; break; }
-      const url = field(match[0].replace(/[.,;:!?)\]}]+$/, ''), LIMITS.urlBytes);
+      const token = field(match[0], LIMITS.urlBytes);
+      if (!token) continue;
+      let brackets = 0;
+      for (const char of token) {
+        if (char === '[') brackets++;
+        else if (char === ']') brackets--;
+      }
+      let end = token.length;
+      while (end > 0) {
+        const last = token[end - 1];
+        if (last === ']' && brackets < 0) brackets++;
+        else if (!'.,;:!?)}'.includes(last)) break;
+        end--;
+      }
+      const url = token.slice(0, end);
       // Keep raw URL controls from being stripped into new URL evidence downstream.
       if (/[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/u.test(url)) { complete = false; continue; }
       if (url) urls.push(url);

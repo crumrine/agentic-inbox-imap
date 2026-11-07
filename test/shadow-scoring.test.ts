@@ -341,6 +341,13 @@ describe('bounded plain-text URL projection', () => {
     parsed.text = `${'a'.repeat(32769)} https://user@example.test/`;
     expect(project(parsed)).toMatchObject({text:'', urls:[], sourceComplete:false});
   });
+
+  it('bounds the original URL token before trimming prose punctuation', async () => {
+    const parsed = await PostalMime.parse(bytes());
+    parsed.headers = [];
+    parsed.text = 'https://user@example.test/' + '.'.repeat(3000);
+    expect(project(parsed)).toMatchObject({urls:[], sourceComplete:false});
+  });
 });
 
 describe('joined plain-text URL symbols and capped composites', () => {
@@ -352,6 +359,10 @@ describe('joined plain-text URL symbols and capped composites', () => {
       ['Newsletter https://news.example.test/', ['List-Id: news.example.test'], [['marketing_headers',0]], 'inbox'],
       ['New contact HTTPS://person@example.test/path.', [], [['link_userinfo',15]], 'inbox'],
       ['https://user@例え.test/', [], [['link_userinfo',15]], 'inbox'],
+      ['https://user@[2001:db8::1]', [], [['link_userinfo',15]], 'inbox'],
+      ['https://user@[2001:db8::1]/path', [], [['link_userinfo',15]], 'inbox'],
+      ['[https://user@[2001:db8::1]]', [], [['link_userinfo',15]], 'inbox'],
+      ['(https://user@[2001:db8::1]).', [], [['link_userinfo',15]], 'inbox'],
       ['https%3A%2F%2Fuser%40example.test/', [], [['link_userinfo',15]], 'inbox'],
       ['> https://user@example.test/\nOrdinary reply', [], [], 'inbox'],
       ['-----Original Message-----\nhttps://user@example.test/', [], [], 'inbox'],
