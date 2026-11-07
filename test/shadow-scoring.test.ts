@@ -140,13 +140,16 @@ describe('automatic Spam routing for new arrivals', () => {
   });
   it('preserves delivery when sender preferences cannot be read',async()=>{
     await registered();
-    const b=bindings('filter',responseFor(suspiciousResult));const stub=mailbox(BOX);
+    const b=realBindings('filter');const stub=mailbox(BOX);
     b.e.MAILBOX={idFromName:env.MAILBOX.idFromName.bind(env.MAILBOX),get:()=>({
       findThreadBySubject:(...args:Parameters<typeof stub.findThreadBySubject>)=>stub.findThreadBySubject(...args),
       createEmail:(...args:Parameters<typeof stub.createEmail>)=>stub.createEmail(...args),
       getSenderPreference:async()=>{throw new Error('Synthetic preference lookup failure');},
     })} as unknown as Env['MAILBOX'];
-    expect((await deliver(b.e)).folder_id).toBe('inbox');
+    const row=await deliver(b.e,bytes(BOX,GTUBE_MARKER));
+    expect(row.folder_id).toBe('inbox');
+    expect((await stub.getSpamState(row.id))?.assessments[0].result?.heuristicScore).toBe(100);
+    expect(b.scoreV1).toHaveBeenCalledTimes(1);
   });
   it.each([0,5])('keeps uninspectable raw input in Inbox (padding %i)',async padding=>{
     await registered();const b=bindings('filter',responseFor(suspiciousResult));
@@ -316,6 +319,79 @@ function realBindings(mode: Env['MAIL_SCORING_MODE'] = 'filter', scorer = env.MA
     MAIL_SCORING_MODE:mode,MAIL_SCORER:{scoreV1},EMAIL:{send},AI:{run:ai},EMAIL_AGENT:{idFromName:ai,get:ai}} as unknown as Env;
   return {e,scoreV1,send,ai};
 }
+
+describe('suite delivery and quarantine conformance', () => {
+  it('keeps mixed quoted/broken markers and legitimate security/Unicode mail in Inbox with actual scoring', async () => {
+    await registered(); const b=realBindings('filter');
+    for (const control of ['\x00','\x85','\u202e']) {
+      const body=`${control}> ${GTUBE_MARKER}\n${GTUBE_MARKER.replace('GTUBE',`GT${control}UBE`)}`;
+      const row=await deliver(b.e,bytes(BOX,Buffer.from(body).toString('base64'),['Content-Transfer-Encoding: base64']));
+      expect(row.folder_id).toBe('inbox');
+      const assessment=(await mailbox(BOX).getSpamState(row.id))?.assessments[0];
+      expect(assessment).toMatchObject({status:'partial',result:{heuristicScore:0,reasons:[]}});
+      expect(assessment?.result?.limitsHit).toEqual(expect.arrayContaining(['control_chars','quoted_content']));
+    }
+    for (const body of ['Your sign-in verification code is 123456. Never share it.',
+      'Receipt for your order https://shop.example.test/order.', 'こんにちは。明日の会議は午後三時です。',
+      'مرحباً، شكراً على رسالتك.', 'Thank you.\n> Security team: send your password https://user@example.test/']) {
+      const row=await deliver(b.e,bytes(BOX,body));
+      expect(row.folder_id).toBe('inbox');
+      expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0].result).toMatchObject({heuristicScore:0,reasons:[]});
+    }
+    expect(b.ai).not.toHaveBeenCalled(); expect(b.send).not.toHaveBeenCalled();
+  });
+
+  it('routes an alias/Bcc arrival to exactly one mailbox before actual GTUBE scoring', async () => {
+    await registered(); const b=realBindings('filter');
+    await env.BUCKET.put('mailboxes/other@example.test.json','{}');
+    await mailbox('other@example.test').setSenderPreference({sender:'sender@example.test',preference:'allow',expectedRevision:0});
+    expect((await createAlias(b.e,ALIAS,BOX)).ok).toBe(true);
+    const raw=bytes('stranger@example.test, other@example.test',GTUBE_MARKER,[`Bcc: ${BOX}`]);
+    const row=await deliver(b.e,raw,ALIAS);
+    expect(row).toMatchObject({folder_id:'spam',delivered_to:ALIAS});
+    expect(await query(mailbox(BOX),'SELECT id FROM emails')).toHaveLength(1);
+    expect(await query(mailbox('other@example.test'),'SELECT id FROM emails')).toHaveLength(0);
+    expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0].result?.heuristicScore).toBe(100);
+    expect(b.scoreV1).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains accepted mail and recovery when optional assessment persistence fails', async () => {
+    await registered(); const b=realBindings('filter'); const stub=mailbox(BOX);
+    await runInDurableObject(stub,(_i,state)=>{state.storage.sql.exec("CREATE TRIGGER synthetic_assessment_failure BEFORE INSERT ON spam_assessments BEGIN SELECT RAISE(ABORT, 'synthetic'); END");});
+    const warn=vi.spyOn(console,'warn').mockImplementation(()=>{});
+    try {
+      const raw=bytes(BOX,GTUBE_MARKER); const row=await deliver(b.e,raw);
+      expect(row.folder_id).toBe('spam');
+      expect((await stub.getSpamState(row.id))?.assessments).toEqual([]);
+      expect(new Uint8Array(await (await env.BUCKET.get(row.raw_key))!.arrayBuffer())).toEqual(raw);
+      expect((await request(b.e,`${base}/spam-feedback`,{emailId:row.id,disposition:'not_spam',expectedRevision:0})).status).toBe(200);
+      expect(await stub.getEmail(row.id)).toMatchObject({folder_id:'inbox',uid:1});
+      expect(b.scoreV1).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls).toEqual([['Optional assessment storage unavailable']]);
+    } finally {
+      warn.mockRestore();
+      await runInDurableObject(stub,(_i,state)=>{state.storage.sql.exec('DROP TRIGGER synthetic_assessment_failure');});
+    }
+  });
+
+  it('keeps the stored body and IMAP fallback when raw persistence fails with real scoring', async () => {
+    await registered(); const b=realBindings('filter');
+    const put=vi.fn(async()=>{throw new Error('synthetic_raw_storage_failure');});
+    b.e.BUCKET=new Proxy(env.BUCKET,{get(target,key){if(key==='put')return put;const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+    const error=vi.spyOn(console,'error').mockImplementation(()=>{});
+    try {
+      const row=await deliver(b.e,bytes(BOX,GTUBE_MARKER));
+      expect(row).toMatchObject({folder_id:'spam',raw_key:null});
+      expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0].result?.heuristicScore).toBe(100);
+      const raw=await request(b.e,`/api/imap/v1/${BOX}/messages/${row.uid}/raw?folder=spam`);
+      expect(raw.status).toBe(200);
+      expect(new TextDecoder().decode(await raw.arrayBuffer())).toContain(GTUBE_MARKER);
+      expect(put).toHaveBeenCalledTimes(1); expect(b.scoreV1).toHaveBeenCalledTimes(1);
+      expect(error.mock.calls).toEqual([['raw_mime_storage_failed']]);
+      expect(b.ai).not.toHaveBeenCalled(); expect(b.send).not.toHaveBeenCalled();
+    } finally {error.mockRestore();}
+  });
+});
 
 describe('bounded plain-text URL projection', () => {
   it('projects literal and encoded URLs with bounded original tokens and quote exclusions', async () => {
