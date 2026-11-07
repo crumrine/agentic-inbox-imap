@@ -1,0 +1,15 @@
+
+> test
+> vitest run test/shadow-scoring.test.ts -t suite delivery|sender preferences cannot --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000
+
+
+ RUN  v4.1.11 /Users/brian/projects/agentic-inbox-dev-994
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+
+ Test Files  1 passed (1)
+      Tests  5 passed | 59 skipped (64)
+   Start at  15:37:02
+   Duration  1.80s (transform 451ms, setup 465ms, import 549ms, tests 398ms, environment 0ms)

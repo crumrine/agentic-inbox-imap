@@ -1,0 +1,35 @@
+{
+  "ticket": "DEV-994",
+  "consumerSource": "cd6dcb76aff5b687a7bec5ebe9c5289aa9b055f5",
+  "consumerBase": "e3124d9bbf104315639cc2630f7cdd42bf2e700a",
+  "scorerRuntime": "faa15bea06db52f2dc240257d5335a66a933f909",
+  "runtime": "v24.13.0",
+  "checks": {
+    "full": "628/628 in35files, including strengthened registered-other-mailbox preference isolation",
+    "focused": "Initial5/5 conformance groups passed before strengthening other-mailbox fixture; final full suite includes that stronger fixture",
+    "typecheck": "passed",
+    "build": "client/SSR passed",
+    "browser": "Chrome157 at1440/390; actual components with syntheticHTTP bridge; zero externalrequests/pageerrors; screenshots visually inspected"
+  },
+  "sourceHashes": {
+    "test/shadow-scoring.test.ts": "6edbc9596bb0896d1292c70baaf3b22a339ffc82405542da1cd1b69f534656d2",
+    "workers/lib/mail-scoring/intake.ts": "1b5c3cda6954e1ee30c43b3228398c46ed0cf5b8c654aff4983a77be26ae166c",
+    "workers/durableObject/index.ts": "fa50561b78879909d4dd7b918cc56dd36b8ae04f2f830b7c032db252ae18dc86",
+    "workers/routes/imap-api.ts": "ed9d5fc769189ced3952e10c1609c1382e9415a703945de587ba6aca816d9173",
+    "build/server/index.js": "006db605aa98d9f7d01cecbbba46384897e66a5caff06243a354d03ce8323210"
+  },
+  "evidenceHashes": {
+    "browser-server.log": "1fbc17864d188987eecb23d3f72e05060eb15d0e0ca66cc178928f33e6e9f61c",
+    "browser.json": "ca95c2fcd7bf01a6229f4ebe9ebb2282f956d170ae20e0e94392b1e6c0e2449b",
+    "browser.log": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "build.log": "f371f6bc7ef903558b7a391582982109b8554b722f3731d0720a52ac3730436e",
+    "focused.log": "f08d20ce61668ddef7e06fd52be1f9eea1eed45cba20d14603bc8e6e7b540e75",
+    "full-tests.log": "36a28a0eef98c3b270dae9ea66bffa36eb8b4d8fa3cee094fdd55832ee817123",
+    "gtube-1440.png": "4465fba8968efe138e78539d230c0556677595988f0cb383fa88365bc4a6b3a3",
+    "gtube-390.png": "0e3181802fb66f4e224354507d2583fbf02ab4d52d6eda29c1db9f7af7fc3ed0",
+    "spam-1440.png": "f22cf0ebba7242e765b2a33c03e062d9272e7e9808cd3ce744a45eb05808ba47",
+    "spam-390.png": "2f443ec37cb683ce89b5fffc616e1adb1d3dc18e38f9b94f9ca7739565ed89bf",
+    "typecheck.log": "228c44a76c06d1f04e603035b8fb3ce45b1ff92893e6a0efc93b82e8a277e093"
+  },
+  "scope": "Only consumer tests changed. Real MIME/scorer/R2/SQLite/REST/IMAP backend tests; browser component fixture separate. Existing recovery/UID transaction tests reused. No deployment/provider-level delivery or current-mailbox efficacy claim."
+}
