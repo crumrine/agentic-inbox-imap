@@ -1,0 +1,41 @@
+{
+  "ticket": "DEV-993",
+  "sourceSha": "07c4aa8f40a03702466dc59e53baa81e6e82552c",
+  "baseSha": "6969f9cee3964f0b20b5a0c76f3f0e05e7b5e1f6",
+  "scorerSha": "faa15bea06db52f2dc240257d5335a66a933f909",
+  "runtime": "v24.13.0",
+  "verification": {
+    "focused": "4 passed",
+    "full": "623 passed in 35 files",
+    "typecheck": "passed",
+    "build": "passed",
+    "mutations": 16
+  },
+  "sourceHashes": {
+    "workers/lib/mail-scoring/intake.ts": "6ae640138d831bf5110c8275158e19c01a558bce297a18fe5e6ca93c8a75a5e6",
+    "test/shadow-scoring.test.ts": "1d592380b575787f767a5d916e65fc3e5ae191e8f53dccecab3ba883b413958b",
+    "scripts/scoring-mutations.mjs": "c43c66f8c09cde653df0d6ec9df4f21453c72e8dd9a17262a677c1729bdf31d4",
+    "build/server/index.js": "7f966269340bc9d7e7fb2116ce5939af21f473471df3be52df2ec847ed32ec63"
+  },
+  "evidenceHashes": {
+    "build.log": "f1af1d19278b6853eba7115ef3223e766b1a0dd3b640887f8929072e882837f8",
+    "full-tests.log": "352e8b0232a5ff5d680a6a1d185e5cbd32dc60d9876390dd6a702040efc1ba61",
+    "mutation-concurrency.log": "746ba5efd50430ae1af7920158e2cc03b6b851624c844059745ed782dcc62c51",
+    "mutation-gtube_detection_workerd-restored.log": "facfa5f1496dec957f2ada808411e23be394f36fe3f3a48fc83fd8f84dbb7c9e",
+    "mutation-gtube_detection_workerd.log": "43b9543dfe42e921bcfa78018c175d7684568cb65e06226e14a5796fde92e641",
+    "mutation-gtube_detection_workerd.patch": "7ecca66a61c4ec213280968403a9e48e24a2c6621ae95f652a5eec20f8f840da",
+    "mutation-gtube_routing_workerd-restored.log": "7eb9adaaa4886508366b021491db471de60ae3483e7076f1542858eb18ffb4b9",
+    "mutation-gtube_routing_workerd.log": "8cfd62892fb5d1f97a3e351578f83dd1d3d5d59d188cecac161f1dc38fb0f264",
+    "mutation-gtube_routing_workerd.patch": "2796491bb9354e0b54b5ed6c5492d0605413ef1dd58bfcd510374d35472cac52",
+    "mutation-gtube_version_rejection_workerd.log": "50728671984a221e748bb178c62fb0457b0d4cba681e174cb162b12e78afce30",
+    "mutation-mailbox_message_id.log": "25fbb1039fcd27277ad4c5001bc091ef7f9680513b56805f6e9bc737d08a6f8f",
+    "mutation-url_projection_workerd-restored.log": "49c03d21f0376924c8ef8566f4671e7a5f00fd98934dfa91d6607f9de12aecb0",
+    "mutation-url_projection_workerd.log": "a656be0707157aeec1eb1a7f0d6c094a298b487e3011a4956c7bd1cc91287772",
+    "mutation-url_projection_workerd.patch": "b6a895a0394c3c2690770b24ffc5f66354eafb0f8e0be0ad20b74bbc1d634d74",
+    "mutations.log": "ad9aa8333fac9af710c97a13881fcbfa5e97b4b4fcd27c298caa5e5e43239e7d",
+    "scoring-mutations.json": "f5a78de22b6cc7648050d89d4b7a790ffa8771b21d92bc6fc83d6d1460d8264d",
+    "typecheck.log": "5052c4941d18f0684526957d75d6a879847892985cefbbc71e7d2410f8d10a43",
+    "urls-focused.log": "236725ea4ff7d5c34ed0f7e359cfe05bfbafc72f0af9c77a025df407fb02889e"
+  },
+  "scope": "Synthetic local MIME -> actual separate scorer RPC -> R2/DO/REST/IMAP. No production deployment or provider-mail accuracy claim."
+}
