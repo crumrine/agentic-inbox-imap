@@ -19,7 +19,7 @@
   },
   "evidenceHashes": {
     "build.log": "f1af1d19278b6853eba7115ef3223e766b1a0dd3b640887f8929072e882837f8",
-    "full-tests.log": "352e8b0232a5ff5d680a6a1d185e5cbd32dc60d9876390dd6a702040efc1ba61",
+    "full-tests.log": "4da5c609b802166406d683ed69cec5786086bb8f009ef7caf090a95b20f463e5",
     "mutation-concurrency.log": "746ba5efd50430ae1af7920158e2cc03b6b851624c844059745ed782dcc62c51",
     "mutation-gtube_detection_workerd-restored.log": "facfa5f1496dec957f2ada808411e23be394f36fe3f3a48fc83fd8f84dbb7c9e",
     "mutation-gtube_detection_workerd.log": "43b9543dfe42e921bcfa78018c175d7684568cb65e06226e14a5796fde92e641",
@@ -34,8 +34,8 @@
     "mutation-url_projection_workerd.patch": "b6a895a0394c3c2690770b24ffc5f66354eafb0f8e0be0ad20b74bbc1d634d74",
     "mutations.log": "ad9aa8333fac9af710c97a13881fcbfa5e97b4b4fcd27c298caa5e5e43239e7d",
     "scoring-mutations.json": "f5a78de22b6cc7648050d89d4b7a790ffa8771b21d92bc6fc83d6d1460d8264d",
-    "typecheck.log": "5052c4941d18f0684526957d75d6a879847892985cefbbc71e7d2410f8d10a43",
-    "urls-focused.log": "236725ea4ff7d5c34ed0f7e359cfe05bfbafc72f0af9c77a025df407fb02889e"
+    "typecheck.log": "228c44a76c06d1f04e603035b8fb3ce45b1ff92893e6a0efc93b82e8a277e093",
+    "urls-focused.log": "14f6ae660adb368a0143afa4b4e08b0efc4c6b0530947ed10ab4af0b2751bbd1"
   },
   "scope": "Synthetic local MIME -> actual separate scorer RPC -> R2/DO/REST/IMAP. No production deployment or provider-mail accuracy claim."
 }
