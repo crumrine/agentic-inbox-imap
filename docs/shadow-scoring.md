@@ -85,13 +85,34 @@ From/display name/first Reply-To/envelope From (512 each). It checks string
 length before bounded UTF-8 allocation and omits entire over-limit fields.
 At most 100 existing headers are considered; only List-Id, List-Unsubscribe
 and Precedence are forwarded (2048 bytes/value, conservative 8192-byte total).
-No HTML, URLs/anchors extracted from HTML, attachment data, body duplication,
+Plain-text HTTP(S) tokens and encoded HTTP(S) schemes use the existing `urls`
+field, capped at 100 tokens and 2048 UTF-8 bytes per token. The 32768-byte body
+ceiling bounds the linear line/token scans before URL parsing. Quote prefixes
+are checked with C0/C1/bidi controls removed; quoted lines and the remainder
+after an original/forwarded-message divider are omitted. URL bytes retain their
+original spelling, with trailing prose punctuation removed by a linear scan.
+Original token bytes are checked before trimming, and balanced IPv6 authority
+brackets are retained. Oversized tokens,
+controls, count/work ceilings and quoted omissions mark `sourceComplete:false`.
+The scorer retains its bounded decoding, URL diagnostics and contribution caps.
+No HTML, URLs/anchors extracted from HTML, attachment data,
 raw MIME, mailbox IDs, credentials or raw storage keys enter the scorer.
 Omissions, duplicates and truncation remain incomplete. Final serialization
 is bounded by the pinned 262144-byte wire ceiling. A 1000ms wait limit does
 not cancel an RPC or synchronous CPU. Static failures are stored without
 logging service errors or attacker strings. If optional assessment storage
 itself fails, delivery is retained and the read API reports unknown/unscored.
+
+DEV-993 adoption map uses original synthetic fixtures and implementation. The
+Rspamd composite-test approach inspired exact reason/contribution/disposition
+assertions; no Rspamd code, weights or corpus was copied. Existing Mailguard-derived
+`linkTarget` remains in the pinned scorer, with its existing MIT notices. This
+change fills only the missing plain-text projection, reusing the current wire
+contract, limits, reasons and family caps. Existing tests cover GTUBE, recovery,
+MIME, RPC failures and inert preview; added tests cover projection, omissions,
+ordinary-link negatives, exact combined contributions and removal/bound mutations.
+Run `node scripts/projection-growth.mjs` for the hostile within-budget token
+growth control; its original-token and IPv6 regressions are also in the joined suite.
 
 Existing routing is preserved: envelope first, then To candidates, allowlist,
 mailbox/alias/wildcard resolution, one mailbox per receive event. To-less mail

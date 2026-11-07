@@ -1,0 +1,71 @@
+
+> test
+> vitest run test/shadow-scoring.test.ts -t bounds the original URL token|projects URL evidence through real MIME --maxWorkers=1
+
+
+ RUN  v4.1.11 /Users/brian/projects/agentic-inbox-dev-993
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+ ❯ test/shadow-scoring.test.ts (60 tests | 2 failed | 58 skipped) 119ms
+     × bounds the original URL token before trimming prose punctuation 15ms
+     × projects URL evidence through real MIME/scorer RPC with exact composites and disposition 72ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/shadow-scoring.test.ts > bounded plain-text URL projection > bounds the original URL token before trimming prose punctuation
+AssertionError: expected { schemaVersion: '1', …(8) } to match object { urls: [], sourceComplete: false }
+(16 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "sourceComplete": false,
+-   "urls": [],
++   "sourceComplete": true,
++   "urls": [
++     "https://user@example.test/",
++   ],
+  }
+
+ ❯ test/shadow-scoring.test.ts:349:29
+    347|     parsed.headers = [];
+    348|     parsed.text = 'https://user@example.test/' + '.'.repeat(3000);
+    349|     expect(project(parsed)).toMatchObject({urls:[], sourceComplete:fal…
+       |                             ^
+    350|   });
+    351| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  test/shadow-scoring.test.ts > joined plain-text URL symbols and capped composites > projects URL evidence through real MIME/scorer RPC with exact composites and disposition
+AssertionError: https://user@[2001:db8::1]: expected [] to deeply equal [ [ 'link_userinfo', 15 ] ]
+
+- Expected
++ Received
+
+- [
+-   [
+-     "link_userinfo",
+-     15,
+-   ],
+- ]
++ []
+
+ ❯ test/shadow-scoring.test.ts:378:81
+    376|       const assessment = (await mailbox(BOX).getSpamState(row.id))?.as…
+    377|       expect(row.folder_id, body).toBe(folder);
+    378|       expect(assessment?.result?.reasons.map(r => [r.id,r.contribution…
+       |                                                                                 ^
+    379|       expect(assessment?.result?.heuristicScore, body).toBe(reasons.re…
+    380|       expect(assessment?.status).toBe('partial');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 58 skipped (60)
+   Start at  14:59:29
+   Duration  1.79s (transform 529ms, setup 560ms, import 620ms, tests 119ms, environment 0ms)

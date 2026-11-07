@@ -1,0 +1,53 @@
+{
+  "ticket": "DEV-993",
+  "sourceSha": "ce5bf4b11232f9609fc1a1bc181497c11af181bc",
+  "baseSha": "6969f9cee3964f0b20b5a0c76f3f0e05e7b5e1f6",
+  "scorerSha": "faa15bea06db52f2dc240257d5335a66a933f909",
+  "runtime": "v24.13.0",
+  "verification": {
+    "focused": "5 passed",
+    "full": "624 passed in 35 files",
+    "typecheck": "passed",
+    "build": "passed",
+    "mutations": 17,
+    "growth": "passed; each within-source-budget case below 250ms"
+  },
+  "sourceHashes": {
+    "workers/lib/mail-scoring/intake.ts": "1b5c3cda6954e1ee30c43b3228398c46ed0cf5b8c654aff4983a77be26ae166c",
+    "test/shadow-scoring.test.ts": "ac02280f682ec14535a526e747e60ad8efde88463d54c4273fe5b1522181f48d",
+    "scripts/scoring-mutations.mjs": "ccdec8a60bb00680a4477d7acadf80eb8b992bbd92f8e30e182ef496b5c48d5f",
+    "scripts/projection-growth.mjs": "ce0a5c5c020d275da0fd09efb185bb8068645f5a5052d22059e56abd7d87f8b2",
+    "build/server/index.js": "3f757d11a8a97695240f44ec1f07b09840be9e37c24ac9b5ab22e37fa7d66527"
+  },
+  "evidenceHashes": {
+    "build.log": "10d3f8a832e5b8cdecdee5586fbb84506adfef74a4c90a6985bf1c3b611a8d96",
+    "full-tests.log": "7333badf08d985687ec5730e683059929aa4c61142d895057355ae4ae1368d0a",
+    "growth-restored.log": "d0868e40bb35e8c47794be7bb7c4694197d05945c733b2caac473a598cc85ece",
+    "growth-unfixed.log": "d5a1f09069f8180a5d1aa8cce05c26399220910f2e89bbcdaf1e9dfaccde398e",
+    "mutation-concurrency.log": "a29ea53ec4ab589e1de1e7a23d2f6f49c9b9e117e29082c00cfff423800b7a4a",
+    "mutation-gtube_detection_workerd-restored.log": "e93f1ed9ba4fd9249cbe17892d3c63eb6ffd02c4643871304590d1f9c5714533",
+    "mutation-gtube_detection_workerd.log": "afa4250a426105b7404d0ff68cd92c13559fb35b08667d80824fdb88427c53f4",
+    "mutation-gtube_detection_workerd.patch": "7ecca66a61c4ec213280968403a9e48e24a2c6621ae95f652a5eec20f8f840da",
+    "mutation-gtube_routing_workerd-restored.log": "a903453a319e448b48d205110f30b6f8a8e8b511651c17d195ad131aca457803",
+    "mutation-gtube_routing_workerd.log": "1a9a52d1d9ce02fd839d6e9f149feae8201d0cdaee998b5b9ebde3b93be26f53",
+    "mutation-gtube_routing_workerd.patch": "7fa00bb01978e0a0d7befdde65c5a576b2dbb02d149e8abe794389d6ddf71eb2",
+    "mutation-gtube_version_rejection_workerd.log": "4605d85629dd61d1af2ebfe4d9a6ddf24e96331efc2d47dec47da88d5451e1a1",
+    "mutation-mailbox_message_id.log": "edebc3ceca391a5a2f1a8447afc10934243761ae3ff92bf095f5c610dc2ddf8f",
+    "mutation-url_projection_workerd-restored.log": "6c5447b401ee759e988c26a9db48b33c37dd900838acd6f543a02100761da198",
+    "mutation-url_projection_workerd.log": "a032a92042c1e236fc286ae68016765362d8b77435a8313b94b568b31eaa545d",
+    "mutation-url_projection_workerd.patch": "faca34378bd38bdea62916b648b14b080525f95c2b81fda82922755c3f1caa4a",
+    "mutations.log": "fa7e239b9a40f6a820c453dfd3e5771ea78f9653cc8065565050d2262863fd3d",
+    "projection-growth-unfixed.json": "cfaa32c01239399473271c125d60c9c367538556a0c9edc5e2c870fb783fcff6",
+    "projection-growth.json": "e87dadd7dbe9b1c74b56dca974afd7ab1d3aa75cd20d61e2ff3a7fa477e46349",
+    "review-regressions-unfixed.log": "27f9ef6f4a0431340ad10d99c9b52d65251c6117ecf8befb3712b0eebf5c3c58",
+    "scoring-mutations.json": "a56f8f5c840b545d597e3ec092e5b9dd600436bad2ffa733a58d6017941d8e4c",
+    "typecheck.log": "228c44a76c06d1f04e603035b8fb3ce45b1ff92893e6a0efc93b82e8a277e093",
+    "urls-focused.log": "e1b6759dd82d9bbd26fb795b517e2f924fc7135fcb91a3c03bcbaed133050b23"
+  },
+  "scope": "Synthetic local MIME -> actual separate scorer RPC -> R2/DO/REST/IMAP. No production deployment or provider-mail accuracy claim.",
+  "reviewRegression": {
+    "rejectedHead": "84fcf5930bfb006ba3e962bd6ac457d5c7eb478d",
+    "unfixed": "original-token-bound and IPv6 assertions fail; growth control fails at the largest case",
+    "restored": "all regressions pass, original bytes capped before linear cleanup"
+  }
+}
