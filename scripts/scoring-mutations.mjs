@@ -35,6 +35,19 @@ const tests = [
  ['auth_provenance', 'intake.ts', s => s.replace("provenance:'unknown'", "provenance:'upstream'"), async m => {
   assert.equal(m.project(parsed).transport.provenance, 'unknown');
  }],
+ ['url_projection', 'intake.ts', s => s.replace('subject, text, urls, addresses', 'subject, text, urls:[], addresses'), async m => {
+  assert.deepEqual(m.project({...parsed,text:'https://user@example.test/'}).urls, ['https://user@example.test/']);
+ }],
+ ['url_count_bound', 'intake.ts', s => s.replaceAll('urls.length === LIMITS.urls', 'false'), async m => {
+  const projected=m.project({...parsed,text:'https://user@example.test/ '.repeat(101)});
+  assert.equal(projected.urls.length,100);
+  assert.equal(projected.sourceComplete,false);
+ }],
+ ['url_source_bound', 'intake.ts', s => s.replace('field(parsed.text, 32768)', 'field(parsed.text, 327680)'), async m => {
+  const projected=m.project({...parsed,text:'a'.repeat(32769)+' https://user@example.test/'});
+  assert.deepEqual(projected.urls,[]);
+  assert.equal(projected.sourceComplete,false);
+ }],
  ['manual_authority', 'feedback.ts', s => s.replace('authorities.has(authority)', 'true'), async m => {
   assert.equal(m.hasManualAuthority({mailboxId: 'a@example.test'}, 'a@example.test'), false);
  }],
@@ -83,6 +96,15 @@ if (process.argv.includes('--workerd')) {
  assert.equal(execFileSync('git', ['-C', scorerRoot, 'status', '--porcelain'], {encoding: 'utf8'}).trim(), '');
 
  const workerdMutants = [
+  {
+   name: 'url_projection_workerd',
+   repo: 'agentic-inbox-imap',
+   file: 'workers/lib/mail-scoring/intake.ts',
+   mutate: s => s.replace('subject, text, urls, addresses', 'subject, text, urls:[], addresses'),
+   pattern: 'projects URL evidence through real MIME',
+   spamInboxRegression: false,
+   verifyRestored: true,
+  },
   {
    name: 'concurrency',
    repo: 'agentic-inbox-imap',

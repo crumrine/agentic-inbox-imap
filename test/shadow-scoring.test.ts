@@ -317,6 +317,72 @@ function realBindings(mode: Env['MAIL_SCORING_MODE'] = 'filter', scorer = env.MA
   return {e,scoreV1,send,ai};
 }
 
+describe('bounded plain-text URL projection', () => {
+  it('projects literal and encoded URLs with bounded original tokens and quote exclusions', async () => {
+    const parsed = await PostalMime.parse(bytes());
+    parsed.text = `Receipt (https://例え.test/order). HTTPS://user@example.test/path!\n` +
+      `https%3A%2F%2Fuser%40example.test/path\n> https://quoted@other.test/\n` +
+      `\u202e> https://hidden@other.test/\n-----Original\u202e Message-----\nhttps://forward@other.test/`;
+    const input = project(parsed);
+    expect(input.urls).toEqual(['https://例え.test/order', 'HTTPS://user@example.test/path', 'https%3A%2F%2Fuser%40example.test/path']);
+    expect(input.sourceComplete).toBe(false);
+    parsed.text = `xhttps://embedded@other.test/ https://broken\u202e@other.test/ https://ok.test/`;
+    expect(project(parsed).urls).toEqual(['https://ok.test/']);
+  });
+
+  it('limits URL count, UTF-8 token bytes and source work before projection', async () => {
+    const parsed = await PostalMime.parse(bytes());
+    parsed.text = ('https://user@example.test/ ').repeat(101);
+    expect(project(parsed).urls).toHaveLength(100);
+    expect(project(parsed).sourceComplete).toBe(false);
+    parsed.text = `https://example.test/${'界'.repeat(700)} https://ok.test/`;
+    expect(project(parsed).urls).toEqual(['https://ok.test/']);
+    expect(project(parsed).sourceComplete).toBe(false);
+    parsed.text = `${'a'.repeat(32769)} https://user@example.test/`;
+    expect(project(parsed)).toMatchObject({text:'', urls:[], sourceComplete:false});
+  });
+});
+
+describe('joined plain-text URL symbols and capped composites', () => {
+  it('projects URL evidence through real MIME/scorer RPC with exact composites and disposition', async () => {
+    await registered();
+    const b = realBindings('filter');
+    for (const [body, headers, reasons, folder] of [
+      ['Receipt https://shop.example.test/order.', [], [], 'inbox'],
+      ['Newsletter https://news.example.test/', ['List-Id: news.example.test'], [['marketing_headers',0]], 'inbox'],
+      ['New contact HTTPS://person@example.test/path.', [], [['link_userinfo',15]], 'inbox'],
+      ['https://user@例え.test/', [], [['link_userinfo',15]], 'inbox'],
+      ['https%3A%2F%2Fuser%40example.test/', [], [['link_userinfo',15]], 'inbox'],
+      ['> https://user@example.test/\nOrdinary reply', [], [], 'inbox'],
+      ['-----Original Message-----\nhttps://user@example.test/', [], [], 'inbox'],
+      ['https://[broken', [], [], 'inbox'],
+      ['verify your password https://person@example.test/', [], [['link_userinfo',15],['sensitive_request_combined',25]], 'inbox'],
+      ['verify your password https://person@example.test/', ['Reply-To: reply@other.test'], [['link_userinfo',15],['reply_to_mismatch',10],['sensitive_request_combined',25]], 'spam'],
+      ['Security team: verify your password ' + ('https://person@example.test/ ').repeat(20), ['Reply-To: reply@other.test'], [['link_userinfo',15],['reply_to_mismatch',10],['impersonation_combined',10],['sensitive_request_combined',25]], 'spam'],
+    ] as const) {
+      const raw = bytes(BOX, body, [...headers]);
+      const row = await deliver(b.e, raw);
+      const assessment = (await mailbox(BOX).getSpamState(row.id))?.assessments[0];
+      expect(row.folder_id, body).toBe(folder);
+      expect(assessment?.result?.reasons.map(r => [r.id,r.contribution]), body).toEqual(reasons);
+      expect(assessment?.result?.heuristicScore, body).toBe(reasons.reduce((total,reason) => total + reason[1], 0));
+      expect(assessment?.status).toBe('partial');
+      expect(new Uint8Array(await (await env.BUCKET.get(row.raw_key))!.arrayBuffer())).toEqual(raw);
+    }
+    expect(b.ai).not.toHaveBeenCalled(); expect(b.send).not.toHaveBeenCalled();
+  });
+
+  it('retains explicit allow precedence and shadow behavior for combined URL evidence', async () => {
+    await registered();
+    const body = 'verify your password https://person@example.test/';
+    const b = realBindings('shadow');
+    expect((await deliver(b.e, bytes(BOX, body, ['Reply-To: reply@other.test']))).folder_id).toBe('inbox');
+    await mailbox(BOX).setSenderPreference({sender:'sender@example.test',preference:'allow',expectedRevision:0});
+    const filter = realBindings('filter');
+    expect((await deliver(filter.e, bytes(BOX, body, ['Reply-To: reply@other.test']))).folder_id).toBe('inbox');
+  });
+});
+
 const gtubeBody = [
   'This is the GTUBE, the',
   '\tGeneric',
