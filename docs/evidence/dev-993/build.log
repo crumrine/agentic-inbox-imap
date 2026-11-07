@@ -42,7 +42,7 @@ build/client/assets/AgentPanel-DzOI6Jfk.js               177.80 kB │ gzip:  54
 build/client/assets/entry.client-DcbTlCX3.js             187.65 kB │ gzip:  59.32 kB
 build/client/assets/api-Arf_cSn6.js                      252.81 kB │ gzip:  82.60 kB
 build/client/assets/folders-Ce7IGrPr.js                  468.13 kB │ gzip: 146.13 kB
-✓ built in 4.49s
+✓ built in 3.94s
 vite v6.4.1 building SSR bundle for production...
 transforming...
 ✓ 5756 modules transformed.
@@ -51,14 +51,14 @@ build/server/wrangler.json                            1.80 kB
 build/server/.vite/manifest.json                      2.10 kB
 build/server/assets/server-build-Drq_gMeA.css       112.21 kB
 build/server/index.js                                 0.32 kB
-build/server/assets/react-9BSQbje_.js                32.96 kB
-build/server/assets/react-D8xy9hen.js                39.28 kB
-build/server/assets/mimetext.node.es-BMK-41Xu.js    223.62 kB
-build/server/assets/AgentPanel-s86e-A4Z.js          434.67 kB
-build/server/assets/server-build-XOdtuOcN.js      2,331.69 kB
-build/server/assets/worker-entry-DOpJlaD2.js      2,505.46 kB
+build/server/assets/react-BSfCzCej.js                32.96 kB
+build/server/assets/react-CXIL3XOQ.js                39.28 kB
+build/server/assets/mimetext.node.es-B_SlVAJd.js    223.62 kB
+build/server/assets/AgentPanel-B-M-v5BD.js          434.67 kB
+build/server/assets/server-build-DliwmXGg.js      2,331.69 kB
+build/server/assets/worker-entry-CoKioipw.js      2,505.86 kB
 
 ✓ 1 asset copied from React Router server build to client assets.
 build/client/assets/server-build-Drq_gMeA.css
 
-✓ built in 4.97s
+✓ built in 4.51s

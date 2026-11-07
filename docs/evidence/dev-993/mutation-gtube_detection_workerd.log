@@ -1,12 +1,12 @@
-RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-CJBzjs
+RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-SJkSKo
 
- ❯ test/shadow-scoring.test.ts (59 tests | 1 failed | 58 skipped) 130ms
+ ❯ test/shadow-scoring.test.ts (60 tests | 1 failed | 59 skipped) 113ms
      × routes positive GTUBE to Spam, isolates it from normal views/tools/agent epoch, and rescues via Not spam or ordinary/IMAP move with intact UIDs and assessment 40ms
 
  Test Files  1 failed (1)
-      Tests  1 failed | 58 skipped (59)
-   Start at  14:47:19
-   Duration  1.48s (transform 403ms, setup 468ms, import 581ms, tests 130ms, environment 0ms)
+      Tests  1 failed | 59 skipped (60)
+   Start at  15:02:13
+   Duration  1.43s (transform 397ms, setup 455ms, import 572ms, tests 113ms, environment 0ms)
 
 ▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
 
@@ -28,12 +28,12 @@ AssertionError: expected { …(5) } to match object { folder_id: 'spam', uid: 1 
 +   "uid": 2,
   }
 
- ❯ test/shadow-scoring.test.ts:435:17
-    433|     ].join('\r\n'));
-    434|     const row = await deliver(b.e, raw);
-    435|     expect(row).toMatchObject({folder_id:'spam', uid:1});
+ ❯ test/shadow-scoring.test.ts:446:17
+    444|     ].join('\r\n'));
+    445|     const row = await deliver(b.e, raw);
+    446|     expect(row).toMatchObject({folder_id:'spam', uid:1});
        |                 ^
-    436|     expect(await stub.getQuarantineEpoch()).toBeGreaterThan(epochBefor…
-    437|     // Existing mail and bytes remain untouched
+    447|     expect(await stub.getQuarantineEpoch()).toBeGreaterThan(epochBefor…
+    448|     // Existing mail and bytes remain untouched
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯

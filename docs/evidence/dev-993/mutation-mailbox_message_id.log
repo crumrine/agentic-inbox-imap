@@ -1,33 +1,33 @@
-RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-r3DPLN
+RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-NA24uA
 
 uncaught exception; source = Uncaught (in promise); stack = TypeError: Cannot read properties of undefined (reading 'folder')
-    at /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-r3DPLN/workers/durableObject/index.ts:1253:50
-    at MailboxDO.setSpamDisposition (/private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-r3DPLN/workers/durableObject/index.ts:1242:33)
+    at /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-NA24uA/workers/durableObject/index.ts:1253:50
+    at MailboxDO.setSpamDisposition (/private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-NA24uA/workers/durableObject/index.ts:1242:33)
     at Users/brian/projects/agentic-inbox-dev-993/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:365:47
- ❯ test/shadow-scoring.test.ts (59 tests | 1 failed | 58 skipped) 130ms
-     × authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs 67ms
+ ❯ test/shadow-scoring.test.ts (60 tests | 1 failed | 59 skipped) 82ms
+     × authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs 61ms
 
  Test Files  1 failed (1)
-      Tests  1 failed | 58 skipped (59)
+      Tests  1 failed | 59 skipped (60)
      Errors  1 error
-   Start at  14:47:09
-   Duration  1.62s (transform 430ms, setup 501ms, import 587ms, tests 130ms, environment 0ms)
+   Start at  15:02:03
+   Duration  1.43s (transform 410ms, setup 487ms, import 567ms, tests 82ms, environment 0ms)
 
 ▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
 
 
 stderr | test/shadow-scoring.test.ts > actual app email and authenticated REST in local workerd > authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs
 TypeError: Cannot read properties of undefined (reading 'folder')
-    at /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-r3DPLN/workers/index.ts:208:20
+    at /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-NA24uA/workers/index.ts:208:20
     at dispatch (/Users/brian/projects/agentic-inbox-dev-993/node_modules/hono/dist/compose.js:22:17)
-    at /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-r3DPLN/workers/lib/mailbox.ts:41:2
+    at /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-NA24uA/workers/lib/mailbox.ts:41:2
     at dispatch (/Users/brian/projects/agentic-inbox-dev-993/node_modules/hono/dist/compose.js:22:17)
     at cors2 (/Users/brian/projects/agentic-inbox-dev-993/node_modules/hono/dist/middleware/cors/index.js:79:5)
     at dispatch (/Users/brian/projects/agentic-inbox-dev-993/node_modules/hono/dist/compose.js:22:17)
     at dispatch (/Users/brian/projects/agentic-inbox-dev-993/node_modules/hono/dist/compose.js:22:17)
     at /Users/brian/projects/agentic-inbox-dev-993/node_modules/hono/dist/hono-base.js:301:25
-    at request (/private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-r3DPLN/test/shadow-scoring.test.ts:79:13)
-    at /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-r3DPLN/test/shadow-scoring.test.ts:263:13 {
+    at request (/private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-NA24uA/test/shadow-scoring.test.ts:79:13)
+    at /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-NA24uA/test/shadow-scoring.test.ts:263:13 {
   remote: true
 }
 

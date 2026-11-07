@@ -33,6 +33,11 @@
       "mutant": "assertion_failed"
     },
     {
+      "name": "url_original_token_bound",
+      "baseline": "passed",
+      "mutant": "assertion_failed"
+    },
+    {
       "name": "manual_authority",
       "baseline": "passed",
       "mutant": "assertion_failed"
@@ -56,12 +61,12 @@
       "name": "url_projection_workerd",
       "repo": "agentic-inbox-imap",
       "file": "workers/lib/mail-scoring/intake.ts",
-      "originalSha256": "6ae640138d831bf5110c8275158e19c01a558bce297a18fe5e6ca93c8a75a5e6",
-      "mutantSha256": "f1f59b21c4436c7b3057e9c25566e749a05995336e9e520a9960d7eb2546b4b4",
+      "originalSha256": "1b5c3cda6954e1ee30c43b3228398c46ed0cf5b8c654aff4983a77be26ae166c",
+      "mutantSha256": "4b6ad524f93f8c63f272d00d7f6933d2fbb51d245acec7cca43c2c35e5a6a4a6",
       "patch": "mutation-url_projection_workerd.patch",
       "mutant": "assertion_failed",
       "log": "mutation-url_projection_workerd.log",
-      "restoredSha256": "6ae640138d831bf5110c8275158e19c01a558bce297a18fe5e6ca93c8a75a5e6",
+      "restoredSha256": "1b5c3cda6954e1ee30c43b3228398c46ed0cf5b8c654aff4983a77be26ae166c",
       "restored": "passed",
       "restoredLog": "mutation-url_projection_workerd-restored.log"
     },
@@ -97,13 +102,13 @@
       "name": "gtube_routing_workerd",
       "repo": "agentic-inbox-imap",
       "file": "workers/lib/mail-scoring/intake.ts",
-      "originalSha256": "6ae640138d831bf5110c8275158e19c01a558bce297a18fe5e6ca93c8a75a5e6",
-      "mutantSha256": "59cc4fa9f64f0a8394bd40e4165ce83cea5bd76e8e097c84a43d5ce47c60538e",
+      "originalSha256": "1b5c3cda6954e1ee30c43b3228398c46ed0cf5b8c654aff4983a77be26ae166c",
+      "mutantSha256": "15b6d3bbde494db657b028bf427e2646c6f82556375af0312b929fd56dc82bb1",
       "patch": "mutation-gtube_routing_workerd.patch",
       "mutant": "assertion_failed",
       "regression": "folder_id spam -> inbox",
       "log": "mutation-gtube_routing_workerd.log",
-      "restoredSha256": "6ae640138d831bf5110c8275158e19c01a558bce297a18fe5e6ca93c8a75a5e6",
+      "restoredSha256": "1b5c3cda6954e1ee30c43b3228398c46ed0cf5b8c654aff4983a77be26ae166c",
       "restored": "passed",
       "restoredLog": "mutation-gtube_routing_workerd-restored.log"
     },

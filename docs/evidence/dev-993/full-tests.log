@@ -14,9 +14,6 @@
 ▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
 
 
-▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
-
-
 console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
 console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
 console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
@@ -31,22 +28,6 @@ console warning; message = Called .text() on an HTTP body which does not appear 
 console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
 console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
 console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
-▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
-
-
-▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
-
-
-▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
-
-
-▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
-
-
-console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
-▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
-
-
 ▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
 
 
@@ -81,25 +62,37 @@ console warning; message = Called .text() on an HTTP body which does not appear 
 ▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
 
 
-▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
-
-
-▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
-
-
-▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
-
-
-▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
-
-
-▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
-
-
-▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
-
-
 console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
 ▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
 
 
@@ -126,6 +119,13 @@ Sourcemap for "/Users/brian/projects/agentic-inbox-dev-993/node_modules/@modelco
 ▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
 
 
+console warning; message = Called .text() on an HTTP body which does not appear to be text. The body's Content-Type is "message/rfc822". The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
 ▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
 
 
@@ -137,6 +137,6 @@ Sourcemap for "/Users/brian/projects/agentic-inbox-dev-993/node_modules/@modelco
 
 
  Test Files  35 passed (35)
-      Tests  623 passed (623)
-   Start at  14:45:51
-   Duration  82.56s (transform 1.14s, setup 9.46s, import 5.54s, tests 59.09s, environment 1ms)
+      Tests  624 passed (624)
+   Start at  15:00:31
+   Duration  75.66s (transform 1.06s, setup 8.10s, import 4.84s, tests 55.42s, environment 2ms)

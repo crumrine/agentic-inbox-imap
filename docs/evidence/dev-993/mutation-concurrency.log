@@ -1,12 +1,12 @@
-RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-8eNeTK
+RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-qRtY0L
 
- ❯ test/shadow-scoring.test.ts (59 tests | 1 failed | 58 skipped) 159ms
-     × authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs 60ms
+ ❯ test/shadow-scoring.test.ts (60 tests | 1 failed | 59 skipped) 96ms
+     × authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs 43ms
 
  Test Files  1 failed (1)
-      Tests  1 failed | 58 skipped (59)
-   Start at  14:47:06
-   Duration  1.91s (transform 541ms, setup 638ms, import 702ms, tests 159ms, environment 0ms)
+      Tests  1 failed | 59 skipped (60)
+   Start at  15:02:01
+   Duration  1.42s (transform 399ms, setup 466ms, import 568ms, tests 96ms, environment 0ms)
 
 ▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
 

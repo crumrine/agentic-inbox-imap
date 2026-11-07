@@ -1,8 +1,8 @@
 diff --git a/workers/lib/mail-scoring/intake.ts b/workers/lib/mail-scoring/intake.ts
-index 4699b54..6e57525 100644
+index fd0eeca..455ce71 100644
 --- a/workers/lib/mail-scoring/intake.ts
 +++ b/workers/lib/mail-scoring/intake.ts
-@@ -79,7 +79,7 @@ export function project(parsed: Email, envelopeFrom?: string): ScoreInputV1 {
+@@ -93,7 +93,7 @@ export function project(parsed: Email, envelopeFrom?: string): ScoreInputV1 {
    // HTML, attachments and remaining headers are intentionally uninspected.
    // Keep omissions explicit even when the upstream service says complete.
    if (parsed.html || parsed.attachments.length || parsed.headers.length !== headers.length || (parsed.replyTo?.length ?? 0) > 1) complete = false;

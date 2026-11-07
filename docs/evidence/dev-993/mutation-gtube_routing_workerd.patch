@@ -1,8 +1,8 @@
 diff --git a/workers/lib/mail-scoring/intake.ts b/workers/lib/mail-scoring/intake.ts
-index 4699b54..48dd228 100644
+index fd0eeca..79077b3 100644
 --- a/workers/lib/mail-scoring/intake.ts
 +++ b/workers/lib/mail-scoring/intake.ts
-@@ -116,8 +116,6 @@ export function shouldQuarantine(assessment: Assessment | undefined, preference:
+@@ -130,8 +130,6 @@ export function shouldQuarantine(assessment: Assessment | undefined, preference:
    if (!result || assessment.status === 'unavailable' || result.status === 'unavailable' ||
        preference === undefined || preference === 'allow') return false;
    if (preference === 'block') return true;
