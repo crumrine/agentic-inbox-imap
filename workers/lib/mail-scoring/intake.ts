@@ -5,11 +5,11 @@ import type { Env } from '../../types';
 import { decodeResponse, encodeBoundedJson, type ScoreInputV1, type ScoreResultV1 } from './protocol';
 import { LIMITS } from './contract';
 
-export const POLICY_VERSION = 'inbox-scoring-7';
+export const POLICY_VERSION = 'inbox-scoring-8';
 
 export interface Assessment {
   version: 1;
-  policyVersion: 'inbox-shadow-1' | 'inbox-scoring-2' | 'inbox-scoring-3' | 'inbox-scoring-4' | 'inbox-scoring-5' | 'inbox-scoring-6' | typeof POLICY_VERSION;
+  policyVersion: 'inbox-shadow-1' | 'inbox-scoring-2' | 'inbox-scoring-3' | 'inbox-scoring-4' | 'inbox-scoring-5' | 'inbox-scoring-6' | 'inbox-scoring-7' | typeof POLICY_VERSION;
   status: 'partial' | 'unavailable';
   inputIncomplete: boolean;
   result: ScoreResultV1 | null;
@@ -142,12 +142,12 @@ export function shouldQuarantine(assessment: Assessment | undefined, preference:
   if (!result || assessment.status === 'unavailable' || result.status === 'unavailable' ||
       preference === undefined || preference === 'allow') return false;
   if (preference === 'block') return true;
-  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3' || result.ruleSetVersion === 'rules-4' || result.ruleSetVersion === 'rules-5' || result.ruleSetVersion === 'rules-6' || result.ruleSetVersion === 'rules-7' || result.ruleSetVersion === 'rules-8') && result.signals.spam === 'present' &&
+  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3' || result.ruleSetVersion === 'rules-4' || result.ruleSetVersion === 'rules-5' || result.ruleSetVersion === 'rules-6' || result.ruleSetVersion === 'rules-7' || result.ruleSetVersion === 'rules-8' || result.ruleSetVersion === 'rules-9') && result.signals.spam === 'present' &&
       result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;
   // Only the current model enables content routing; historical assessments remain readable.
-  if (result.ruleSetVersion === 'rules-8' && result.heuristicScore >= 60 && result.signals.spam === 'present' &&
+  if (result.ruleSetVersion === 'rules-9' && result.heuristicScore >= 60 && result.signals.spam === 'present' &&
       result.limitsHit.every(limit => ['auth_unknown', 'source_incomplete', 'html_uninspected', 'identity_uninspected'].includes(limit)) &&
-      result.reasons.some(reason => reason.id === 'statistical_refit_spam' && reason.contribution > 0)) return true;
+      result.reasons.some(reason => reason.id === 'statistical_word_pair_spam' && reason.contribution > 0)) return true;
   // shortcut: conservative rules-1 policy, recalibrate with privately labelled mail before broadening.
   return result.heuristicScore >= 45 &&
     result.limitsHit.every(limit => limit === 'auth_unknown' || limit === 'source_incomplete') &&

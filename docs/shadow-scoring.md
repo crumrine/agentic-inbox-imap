@@ -10,45 +10,44 @@ through the private `MAIL_SCORER` service binding, then applies the recoverable
 policy in [quarantine.md](quarantine.md). Reads, refreshes, IMAP and ordinary moves
 do not score again. Failures retain Inbox delivery; there is no historical scan.
 
-## Source pins and compatibility (DEV-1015)
+## Source pins and compatibility (DEV-1018)
 
-The current contract and protocol copies come from merged `mail-scoring` PR #17,
-`62919bc8f939bc94c0552fc6a3917c03a3373646`, with only the protocol import path
+The current contract and protocol copies come from merged `mail-scoring` PR #19,
+`453cc3423e222b0e853bf3d8e9d590ee01e44bf7`, with only the protocol import path
 changed. The engine remains `0.1.0`, schema/RPC remain `1`, and the rules are
-`rules-8`. No scanner package or new dependency is imported into Inbox. The
+`rules-9`. No scanner package or new dependency is imported into Inbox. The
 independent scorer contains the bounded parser and frozen public-corpus model;
-see that repository's `docs/robust-refit.md` for provenance and limitations.
+see that repository's `docs/contextual-precision.md` for provenance and limitations.
 
-The strict decoder accepts `rules-1 | rules-2 | rules-3 | rules-4 | rules-5 | rules-6 | rules-7 | rules-8`, rejects GTUBE under
+The strict decoder accepts `rules-1 | rules-2 | rules-3 | rules-4 | rules-5 | rules-6 | rules-7 | rules-8 | rules-9`, rejects GTUBE under
 rules-1, and rejects statistical reasons/new HTML or statistics limits under
 older rule sets. Unknown versions/reasons, altered static text, inconsistent or
 nonfinite contributions, JSON depth over 6 and output over 4096 UTF-8 bytes are
 rejected. Invented authentication or preferences are also rejected.
 
-The arrival policy is now `inbox-scoring-7`. Storage also accepts historical
-`inbox-shadow-1`, `inbox-scoring-2`, `inbox-scoring-3`, `inbox-scoring-4`, `inbox-scoring-5` and `inbox-scoring-6` assessments without rewriting their policy or rule version.
+The arrival policy is now `inbox-scoring-8`. Storage also accepts historical
+`inbox-shadow-1`, `inbox-scoring-2`, `inbox-scoring-3`, `inbox-scoring-4`, `inbox-scoring-5`, `inbox-scoring-6` and `inbox-scoring-7` assessments without rewriting their policy or rule version.
 There is no schema migration or old-mail re-evaluation.
 
 `node scripts/check-scoring-contract.mjs /path/to/mail-scoring` requires the exact
-current pin. `evidence/dev-1015/contract.json` records contract digests, current
+current pin. `evidence/dev-1018/contract.json` records contract digests, current
 plain/HTML general-spam results, and actual previous rules-2
 (`faa15bea06db52f2dc240257d5335a66a933f909`) and legacy rules-1
 (`2fab406320ae3b3596345d2c76e0ef8a08593211`) compatibility.
-Historical general-1/2/3/4/5 statistical evidence remains readable but does not trigger automatic generic routing. GTUBE remains supported under rules-2–8. Statistical reasons are accepted only under their exact rule version; the new `statistical_refit_spam` reason is valid only under rules-8. Tests run eight actual private Worker versions, including the deployed rules-5 scorer.
+Historical general-1/2/3/4/5/6 statistical evidence remains readable but does not trigger automatic generic routing. GTUBE remains supported under rules-2–9. Statistical reasons are accepted only under their exact rule version; new `statistical_word_pair_spam` is valid only under rules-9. Tests run nine actual private Worker versions, including the deployed rules-5 scorer and failed rules-8 scorer62919bc8f939bc94c0552fc6a3917c03a3373646. Historical policy7/refit8 survives restart, REST Not spam and IMAP rescue with unchanged assessments and no scorer calls.
 Historical rules-7/robust evidence (archived scorer143e24e938365c31f2669fd5f9e918408383dc7e) and policy6 remain strictly readable and recoverable; they never activate generic routing. Historical evidence remains unchanged in its original directories.
 
 ### Manual rollout and rollback
 
 OPS-615 requires reviewed merged source, DEV-1009 paired held-out acceptance,
 independent review of the exact artifacts/plan, and fresh production config
-receipts. Deploy this caller before the rules-8 private scorer. The caller works
+receipts. Deploy this caller before the rules-9 private scorer. The caller works
 with either older scorer while the transition happens. No public scorer route,
 preview, new binding, gateway change or automatic workflow is needed.
 
 To stop future automatic routing, use this compatible caller with mode `shadow`
 or `off`; stored mail, folders, UIDs, preferences and assessments remain intact.
-To roll the scorer back to rules-5 or an older compatible version, retain this caller. Roll back an
-older caller only after its compatible scorer is restored (or scoring is off).
+To roll the scorer back, use only the approved rules-5 artifact and retain this caller so stored rules-9/policy8 assessments remain readable. Failed rules-6/7/8 are never rollback targets. Keep this caller in shadow/off mode when stopping routing.
 A source merge alone does not prove any of these operations occurred.
 
 ## Inspection bounds and inherited limits

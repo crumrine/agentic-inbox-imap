@@ -1,6 +1,6 @@
 # Recoverable Spam (DEV-879)
 
-Current source behavior includes DEV-1015 refit content integration and the
+Current source behavior includes DEV-1018 word-pair content integration and the
 DEV-1001 inline-forward safeguard. OPS-615 owns the separately verified manual
 rollout after independent source review and DEV-1009 paired acceptance. Historical
 source/build evidence does not establish the current deployment. Actions and
@@ -14,24 +14,24 @@ default; shadow still records evidence without moving mail. Owner-authorized
 `MAIL_SCORING_MODE=filter` routes **new arrivals only** directly to Spam when:
 
 - The sender has an explicit mailbox-local block preference and scoring succeeded;
-- The validated `rules-2`, `rules-3`, `rules-4`, `rules-5`, `rules-6`, `rules-7` or `rules-8` result carries `signals.spam === "present"` and the
+- The validated `rules-2`, `rules-3`, `rules-4`, `rules-5`, `rules-6`, `rules-7`, `rules-8` or `rules-9` result carries `signals.spam === "present"` and the
   `gtube` reason with positive contribution (the exact 68-byte uppercase ASCII
   standard GTUBE test marker on an unquoted plain-text line), without requiring
   unrelated identity, sensitive-request or transport-auth evidence; or
-- The validated `rules-8` score is at least 60, spam is present and a positive
-  `statistical_refit_spam` contribution is present. Only `auth_unknown`,
+- The validated `rules-9` score is at least 60, spam is present and a positive
+  `statistical_word_pair_spam` contribution is present. Only `auth_unknown`,
   `source_incomplete`, `html_uninspected` and `identity_uninspected` limits are
   tolerated on this path; quoted, over-budget or otherwise uninspected evidence
-  does not cause automatic statistical routing. The two correlated fixed classifiers each require five distinct positive body words, at least 50% known eligible body features and supported normalized letters. Both base margins must pass; the primary also requires the same fixed cutoff after subtracting its two strongest positive contributions while retaining the original norm and all negative evidence. Its internal 0.99 cutoff is not a calibrated confidence for this mailbox. DEV-1009 measures the complete caller path; or
-- The validated `rules-1`, `rules-2`, `rules-3`, `rules-4`, `rules-5`, `rules-6`, `rules-7` or `rules-8` score is at least 45, with a full sensitive-request
+  does not cause automatic statistical routing. The fixed word/adjacent-pair model requires five distinct positive unigram body words, at least50%known body words and supported normalized letters. After discounting positive clues incident to the two strongest words, the remaining positive dot product divided by the full original norm must clear the same fixed cutoff. Negative context remains in the score. This bounds loss of existing incident features, not edited text creating new pairs; its internal0.99cutoff is not calibrated mailbox confidence. DEV-1009 measures the complete caller path; or
+- The validated `rules-1`, `rules-2`, `rules-3`, `rules-4`, `rules-5`, `rules-6`, `rules-7`, `rules-8` or `rules-9` score is at least 45, with a full sensitive-request
   contribution and independent suspicious identity evidence. Only `auth_unknown`
   and `source_incomplete` inspection limits are tolerated for this ordinary
   heuristic path. Other inspection limits retain Inbox delivery. This conservative
   policy is not a calibrated probability.
 
-Historical rules-3/4/5/6/7 statistical evidence remains readable without automatic generic routing. Current rules-8 uses the reviewed fixed general-6 model; unsupported text and resource-limit cases abstain rather than being declared safe.
+Historical rules-3/4/5/6/7/8 statistical evidence remains readable without automatic generic routing. Current rules-9 uses the reviewed fixed general-7 word/pair model; unsupported text and resource-limit cases abstain rather than being declared safe.
 
-The first rules-6 candidate failed independent acceptance by catching one legitimate message and must never be deployed or used for rollback. Rules-7 also failed its unchanged50%recall gate and must never be deployed or used for rollback. Rules-8 adds TRAIN-selected coefficients plus fixed-reference agreement and a stronger two-word margin bound. DEV-1009 requires the untouched third cohort plus all earlier regressions before OPS-615. Use shadow/off or the previously approved rules-5 scorer for rollback.
+Rules-6 and rules-8 each failed independent acceptance by catching legitimate mail; rules-7 failed the unchanged50%recall gate. None may be deployed or used for rollback. Rules-9 uses a TRAIN-selected word/pair model with a conservative two-word incident-positive discount, retaining negative context and all earlier safety guards. DEV-1009 requires all five observed corpora followed by the frozen fourth cohort under unchanged50%recall/+20absolute-point gain/zeroHAM gates before OPS-615 manual release. Use the same caller in shadow/off mode or the previously approved rules-5 scorer while retaining this caller for rollback.
 
 An explicit allow preference overrides automatic routing — including for a
 validated `gtube` test-marker message — keeping the message in Inbox while

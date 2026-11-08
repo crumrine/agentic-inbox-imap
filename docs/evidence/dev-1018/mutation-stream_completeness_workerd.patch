@@ -1,0 +1,13 @@
+diff --git a/workers/index.ts b/workers/index.ts
+index 8347e7d..1d463a2 100644
+--- a/workers/index.ts
++++ b/workers/index.ts
+@@ -647,7 +647,7 @@ async function streamToArrayBuffer(stream: ReadableStream, streamSize: number) {
+ 		result.set(value, bytesRead);
+ 		bytesRead += value.length;
+ 	}
+-	return {raw:result, complete:bytesRead === streamSize};
++	return {raw:result, complete:true};
+ }
+
+ /**

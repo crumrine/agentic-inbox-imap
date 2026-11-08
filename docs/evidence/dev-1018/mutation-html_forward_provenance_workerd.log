@@ -1,0 +1,38 @@
+RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-mWkpUb
+
+ ❯ test/shadow-scoring.test.ts (82 tests | 1 failed | 81 skipped) 41ms
+     × keeps inline forwarded HTML reports quoted even with a copied phishing subject 19ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 81 skipped (82)
+   Start at  15:13:38
+   Duration  1.26s (transform 316ms, setup 338ms, import 481ms, tests 41ms, environment 0ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/shadow-scoring.test.ts > joined rules-9 general spam detection > keeps inline forwarded HTML reports quoted even with a copied phishing subject
+AssertionError: expected { schemaVersion: '1', …(9) } to match object { text: '>', sourceComplete: false }
+(17 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "sourceComplete": false,
+-   "text": ">",
++   "text": "",
+  }
+
+ ❯ test/shadow-scoring.test.ts:1260:29
+    1258|     ].join('\r\n'));
+    1259|     const parsed=await PostalMime.parse(raw);expect(parsed.html).toCon…
+    1260|     expect(project(parsed)).toMatchObject({text:'>',sourceComplete:fal…
+       |                             ^
+    1261|     const row=await deliver(b.e,raw);expect(row).toMatchObject({folder…
+    1262|     expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0].r…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯

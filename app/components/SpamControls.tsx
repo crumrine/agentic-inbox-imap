@@ -6,6 +6,9 @@ import api from '~/services/api';
 import { useInvalidateEmailData } from '~/queries/emails';
 import type { Email } from '~/types';
 import { suspiciousText } from 'shared/mail-scope';
+import { REASONS } from '../../workers/lib/mail-scoring/contract';
+
+const reasonTexts = new Set<string>(Object.values(REASONS));
 
 export default function SpamControls({mailboxId, email, onMoved}: {mailboxId:string; email:Email; onMoved:()=>void}) {
   const invalidate = useInvalidateEmailData();
@@ -32,7 +35,11 @@ export default function SpamControls({mailboxId, email, onMoved}: {mailboxId:str
   return <section aria-label="Spam controls" className="p-4 border-b border-kumo-line space-y-2 text-sm max-h-72 overflow-y-auto shrink-0">
     <p>Sender: {suspiciousText(email.sender,512)}</p>
     <p>Inspection: {status}. {typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= 100 ? `Heuristic score: ${score} / 100.` : 'No score available.'} Scores are signals, not confidence percentages or proof of safety. {data ? data.automaticQuarantine ? 'Automatic Spam routing is enabled for new mail. Messages are kept and can be rescued to Inbox.' : 'Automatic quarantine is disabled.' : 'Loading Spam routing status.'}</p>
-    <ul>{reasons.map((reason,i)=><li key={i}>{suspiciousText(reason?.reason,160)}</li>)}</ul>
+    <ul>{reasons.map((reason,i)=>{
+      // Only exact local static reasons can exceed the untrusted-text preview limit.
+      const limit = typeof reason?.reason === 'string' && reason.reason.length <= 256 && reasonTexts.has(reason.reason) ? 256 : 160;
+      return <li key={i}>{suspiciousText(reason?.reason,limit)}</li>;
+    })}</ul>
     <p>Manual disposition: {suspiciousText(data?.disposition,32) || 'unknown'}.</p>
     <div className="flex flex-wrap gap-3">
       <button disabled={!canFeedback} onClick={()=>act(()=>api.manualAction(mailboxId,'spam-feedback',{emailId:email.id, disposition:spam?'not_spam':'spam',expectedRevision:data!.revision}),true)}>{spam?'Not spam — move to Inbox':'Mark as spam'}</button>
