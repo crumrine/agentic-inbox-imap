@@ -320,6 +320,92 @@ function realBindings(mode: Env['MAIL_SCORING_MODE'] = 'filter', scorer = env.MA
   return {e,scoreV1,send,ai};
 }
 
+const reportedPhishing = 'Security team alert: please verify your password immediately.';
+function inlinePhishingReport(nestedHeaders: string[]) {
+  return new TextEncoder().encode([
+    'From: Security Team <sender@example.test>',
+    'Reply-To: helpdesk@other.example.org',
+    `To: ${BOX}`,
+    'Subject: Forwarded security report',
+    'MIME-Version: 1.0',
+    'Content-Type: multipart/mixed; boundary=inline-report',
+    '', '--inline-report', 'Content-Type: text/plain', '',
+    'Please investigate the attached phishing report.',
+    '--inline-report', 'Content-Type: message/rfc822', 'Content-Disposition: inline', '',
+    ...nestedHeaders, 'MIME-Version: 1.0', 'Content-Type: text/plain', '',
+    reportedPhishing, '--inline-report--', '',
+  ].join('\r\n'));
+}
+
+describe('inline forwarded MIME inspection provenance', () => {
+  it('keeps inline forwarded phishing reports in Inbox with intact raw mail and assessments', async () => {
+    await registered();
+    const b = realBindings('filter');
+    const ids: string[] = [];
+    for (const headers of [
+      ['From: Reported Sender <reported@example.test>', 'To: reporter@example.test', 'Subject: Reported message', 'Date: Thu, 1 Oct 2026 12:00:00 +0000'],
+      ['To: reporter@example.test', 'Subject: Reported message'],
+      ['From: reported@example.test'],
+      ['Subject: Reported message'],
+    ]) {
+      const raw = inlinePhishingReport(headers);
+      const parsed = await PostalMime.parse(raw);
+      expect(parsed.attachments).toEqual([]);
+      expect(parsed.text).toContain(reportedPhishing);
+      const row = await deliver(b.e, raw);
+      expect(row).toMatchObject({folder_id:'inbox', uid:ids.length + 1});
+      ids.push(row.id);
+      expect(new Uint8Array(await (await env.BUCKET.get(row.raw_key))!.arrayBuffer())).toEqual(raw);
+      expect((await mailbox(BOX).getEmail(row.id))?.body).toContain('verify your password');
+      expect(await mailbox(BOX).getSpamState(row.id)).toMatchObject({
+        disposition:'unknown', revision:0,
+        assessments:[{policyVersion:'inbox-shadow-1', status:'partial', inputIncomplete:true,
+          result:{ruleSetVersion:'rules-2', heuristicScore:20, reasons:[
+            {id:'reply_to_mismatch', contribution:10},
+            {id:'impersonation_combined', contribution:10},
+          ]}}],
+      });
+      expect((await request(b.e, `${base}/emails/${row.id}`)).status).toBe(200);
+      const imap = await request(b.e, `/api/imap/v1/${BOX}/inbox/messages`);
+      expect(imap.status).toBe(200);
+      expect(await imap.json()).toMatchObject({messages:ids.map((_id, index) => ({uid:index + 1, hasRaw:true})), uidNext:ids.length + 1});
+      const fetchedRaw = await request(b.e, `/api/imap/v1/${BOX}/messages/${row.uid}/raw?folder=inbox`);
+      expect(fetchedRaw.status).toBe(200);
+      expect(new Uint8Array(await fetchedRaw.arrayBuffer())).toEqual(raw);
+    }
+    const restarted = await restart(BOX);
+    for (const id of ids) expect((await restarted.getSpamState(id))?.assessments[0].result?.heuristicScore).toBe(20);
+    expect(b.scoreV1).toHaveBeenCalledTimes(ids.length);
+    expect(b.send).not.toHaveBeenCalled();
+    expect(b.ai).not.toHaveBeenCalled();
+  });
+
+  it('still quarantines a direct current-body phishing request', async () => {
+    await registered();
+    const b = realBindings('filter');
+    const raw = new TextEncoder().encode([
+      'From: Security Team <sender@example.test>', 'Reply-To: helpdesk@other.example.org',
+      `To: ${BOX}`, 'Subject: Account notice', 'MIME-Version: 1.0',
+      'Content-Type: text/plain', '', reportedPhishing,
+    ].join('\r\n'));
+    const row = await deliver(b.e, raw);
+    expect(row.folder_id).toBe('spam');
+    expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0].result).toMatchObject({heuristicScore:45});
+  });
+
+  it('keeps ordinary separator/header-like bodies inspectable and bounds forwarded body omission', async () => {
+    for (const text of ['Meeting notes\n---\nStatus: complete', 'From: Operations\nPlease review the schedule.', '-'.repeat(32000) + '\nFroX: ordinary near-match']) {
+      const parsed = await PostalMime.parse(bytes(BOX, text));
+      expect(project(parsed).text).toBe(parsed.text);
+    }
+    for (const text of ['Report\n---\nFrom: reported@example.test\n' + reportedPhishing,
+      '-'.repeat(32000) + '\nSubject: Report\n' + reportedPhishing,
+      'é'.repeat(16384) + '\n---\nFrom: reported@example.test']) {
+      expect(project(await PostalMime.parse(bytes(BOX, text)))).toMatchObject({text:'', urls:[], sourceComplete:false});
+    }
+  });
+});
+
 describe('suite delivery and quarantine conformance', () => {
   it('keeps mixed quoted/broken markers and legitimate security/Unicode mail in Inbox with actual scoring', async () => {
     await registered(); const b=realBindings('filter');

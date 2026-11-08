@@ -25,7 +25,13 @@ const gtubeWire = JSON.stringify({rpcVersion: '1', ok: true, result: gtubeResult
 const gtubeAssessment = {version: 1, policyVersion: 'inbox-shadow-1', status: 'partial', inputIncomplete: false, result: gtubeResult};
 const parsed = {subject: 'Synthetic', text: 'hello', headers: [], headerLines: [], attachments: []};
 
+const removeInlineForwardGuard = source => source.replace("  if (/(?:^|[\\r\\n])-{3,}[\\r\\n]+(?:From|Subject|Date|To|Cc|Bcc):[ \\t]/.test(text)) {\n    text = '';\n    complete = false;\n  }\n", '');
+
 const tests = [
+ ['inline_forward_omission', 'intake.ts', removeInlineForwardGuard, async m => {
+  const input=m.project({...parsed,text:'Please investigate.\n----\nFrom: reported@example.test\nVerify your password.'});
+  assert.equal(input.text,'');assert.equal(input.sourceComplete,false);
+ }],
  ['off', 'intake.ts', s => s.replace("if (env.MAIL_SCORING_MODE !== 'shadow' && env.MAIL_SCORING_MODE !== 'filter') return undefined;", ''), async m => {
   let calls = 0; await m.assessArrival({MAIL_SCORING_MODE: 'off', MAIL_SCORER: {scoreV1: async () => {calls++; return wire;}}}, parsed, true); assert.equal(calls, 0);
  }],
@@ -101,6 +107,15 @@ if (process.argv.includes('--workerd')) {
  assert.equal(execFileSync('git', ['-C', scorerRoot, 'status', '--porcelain'], {encoding: 'utf8'}).trim(), '');
 
  const workerdMutants = [
+  {
+   name: 'inline_forward_omission_workerd',
+   repo: 'agentic-inbox-imap',
+   file: 'workers/lib/mail-scoring/intake.ts',
+   mutate: removeInlineForwardGuard,
+   pattern: 'keeps inline forwarded phishing reports',
+   spamInboxRegression: false,
+   verifyRestored: true,
+  },
   {
    name: 'url_projection_workerd',
    repo: 'agentic-inbox-imap',
@@ -210,6 +225,10 @@ if (process.argv.includes('--workerd')) {
     assert.match(log, /-\s*"folder_id":\s*"spam"[\s\S]*\+\s*"folder_id":\s*"inbox"/, `${name}: expected Spam-versus-Inbox regression`);
    }
 
+   if (name === 'inline_forward_omission_workerd') {
+    assert.match(log, /-\s*"folder_id":\s*"inbox"[\s\S]*\+\s*"folder_id":\s*"spam"/, 'expected legitimate report Inbox-to-Spam regression');
+   }
+
    const record = {
     name,
     repo,
@@ -220,6 +239,7 @@ if (process.argv.includes('--workerd')) {
     ...(patchFile ? {patch: patchFile} : {}),
     mutant: 'assertion_failed',
     ...(spamInboxRegression ? {regression: 'folder_id spam -> inbox'} : {}),
+    ...(name === 'inline_forward_omission_workerd' ? {regression: 'folder_id inbox -> spam'} : {}),
     log: `mutation-${name}.log`,
    };
 

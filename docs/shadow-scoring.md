@@ -103,6 +103,32 @@ not cancel an RPC or synchronous CPU. Static failures are stored without
 logging service errors or attacker strings. If optional assessment storage
 itself fails, delivery is retained and the read API reports unknown/unscored.
 
+### Inline forwarded MIME reports (DEV-1001)
+
+PostalMime 2.7.3 can flatten an inline `message/rfc822` into the parsed body,
+including a generated separator and From/Subject/Date/recipient header block.
+After the existing 32 KiB field preflight, the scoring projection recognizes
+that generated plain-text header pattern, omits the whole scoring body and
+marks the input incomplete. Raw MIME, stored display content and attachments
+remain intact. Explicit sender preferences and other bounded metadata remain
+available; normal current-body phishing and GTUBE controls are unchanged.
+
+This is conservative recognition of a known formatter pattern, not complete
+nested-MIME provenance. Omitting the entire scoring body can miss direct spam
+in a message that also forwards another message. It does not classify the
+retained report as safe. No MIME parser option, schema or gateway changes were
+made. The actual rules-2 scorer stays pinned at `faa15bea06db52f2dc240257d5335a66a933f909`.
+OPS-614 owns the separately gated manual rollout.
+
+The authored legitimate inline report fails as Inbox-to-Spam on the unfixed
+code. Joined tests check four nested-header variants, stored partial evidence,
+unchanged raw/display, restart, REST and IMAP UID/raw retrieval, with one score
+per arrival. Removal/restored mutations prove that regression; ordinary
+separator/header-like controls and 15 within-budget growth cases retain the
+existing URL regressions. Set `EVIDENCE_DIR=docs/evidence/dev-1001` when running
+the contract, scoring-mutation and projection-growth scripts to preserve older
+receipts.
+
 DEV-993 adoption map uses original synthetic fixtures and implementation. The
 Rspamd composite-test approach inspired exact reason/contribution/disposition
 assertions; no Rspamd code, weights or corpus was copied. Existing Mailguard-derived

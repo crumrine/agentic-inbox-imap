@@ -11,6 +11,7 @@ import {build} from 'esbuild';
 const dependency=resolve(process.argv[2] ?? '../mail-scoring');
 const pin='faa15bea06db52f2dc240257d5335a66a933f909';
 const legacyPin='2fab406320ae3b3596345d2c76e0ef8a08593211';
+const outDir=resolve(process.env.EVIDENCE_DIR ?? 'docs/evidence/dev-989');
 assert.equal(execFileSync('git',['-C',dependency,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),pin);
 assert.equal(execFileSync('git',['-C',dependency,'cat-file','-t',legacyPin],{encoding:'utf8'}).trim(),'commit');
 const hashes={};
@@ -96,8 +97,8 @@ try{
  assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"rules-2"','"rules-1"')),null);
  assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"rules-2"','"rules-3"')),null);
  assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"gtube"','"unknown_reason"')),null);
- mkdirSync('docs/evidence/dev-989',{recursive:true});
- writeFileSync('docs/evidence/dev-989/contract.json',JSON.stringify({
+ mkdirSync(outDir,{recursive:true});
+ writeFileSync(join(outDir,'contract.json'),JSON.stringify({
   dependency:pin,
   legacyDependency:legacyPin,
   hashes,
