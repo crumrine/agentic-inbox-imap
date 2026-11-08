@@ -1,0 +1,39 @@
+RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-8o2RZY
+
+ ❯ test/shadow-scoring.test.ts (81 tests | 1 failed | 80 skipped) 103ms
+     × routes actual plain and HTML statistical spam, preserves raw/assessment and rescues with correct UIDs without rescoring 52ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 80 skipped (81)
+   Start at  11:47:15
+   Duration  1.45s (transform 382ms, setup 411ms, import 564ms, tests 103ms, environment 0ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/shadow-scoring.test.ts > joined rules-7 general spam detection > routes actual plain and HTML statistical spam, preserves raw/assessment and rescues with correct UIDs without rescoring
+AssertionError: expected { …(5) } to match object { folder_id: 'spam', uid: 2 }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "folder_id": "spam",
+-   "uid": 2,
++   "folder_id": "inbox",
++   "uid": 3,
+  }
+
+ ❯ test/shadow-scoring.test.ts:1095:19
+    1093|     for (const [index, raw] of [bytes(BOX, STATISTICAL_SPAM), htmlByte…
+    1094|       const row=await deliver(b.e,raw);
+    1095|       expect(row).toMatchObject({folder_id:'spam',uid:index+1});
+       |                   ^
+    1096|       const assessment=(await stub.getSpamState(row.id))!.assessments[…
+    1097|       expect(assessment).toMatchObject({policyVersion:POLICY_VERSION,s…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯

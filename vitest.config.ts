@@ -10,7 +10,8 @@ import { buildSync } from "esbuild";
 import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
 
-const SCORER_PIN = "0041d47f20d2565dc8725a3c11f0ed1af113ca74";
+const SCORER_PIN = "143e24e938365c31f2669fd5f9e918408383dc7e";
+const LINEAR_SCORER_PIN = "0041d47f20d2565dc8725a3c11f0ed1af113ca74";
 const GENERALIZED_SCORER_PIN = "5ed110e5cdfc9905fc5ee2940a4a39cd9e4864b0";
 const CONTEXT_SCORER_PIN = "cf588bf2870964f691e420f5e5249aa3255806f8";
 const GENERAL1_SCORER_PIN = "041e79c5f56880b8eff0e210968569461cb95fc0";
@@ -47,6 +48,7 @@ function buildScorerWorkers() {
 	let general1: string;
 	let context: string;
 	let generalized: string;
+	let linear: string;
 	try {
 		const archive = execFileSync("git", ["-C", dir, "archive", LEGACY_SCORER_PIN, "tsconfig.json", "packages/core", "workers/private"], { maxBuffer: 8 * 1024 * 1024 });
 		execFileSync("tar", ["-x", "-C", temp], { input: archive });
@@ -63,6 +65,9 @@ function buildScorerWorkers() {
 		const g3=execFileSync("git",["-C",dir,"archive",GENERALIZED_SCORER_PIN,"tsconfig.json","packages/core","workers/private"],{maxBuffer:8*1024*1024});
 		execFileSync("tar",["-x","-C",temp],{input:g3});
 		generalized=bundle(join(temp,"workers/private/index.ts"));
+		const g4=execFileSync("git",["-C",dir,"archive",LINEAR_SCORER_PIN,"tsconfig.json","packages/core","workers/private"],{maxBuffer:8*1024*1024});
+		execFileSync("tar",["-x","-C",temp],{input:g4});
+		linear=bundle(join(temp,"workers/private/index.ts"));
 	} finally {
 		rmSync(temp, { recursive: true, force: true });
 	}
@@ -74,8 +79,10 @@ function buildScorerWorkers() {
 			MAIL_SCORER_GENERAL1: "mail-scoring-general1",
 			MAIL_SCORER_CONTEXT: "mail-scoring-context",
 			MAIL_SCORER_GENERALIZED: "mail-scoring-generalized",
+			MAIL_SCORER_LINEAR: "mail-scoring-linear",
 		},
 		workers: [
+			{ name:"mail-scoring-linear",compatibilityDate:"2025-11-28",modules:[{type:"ESModule" as const,path:"index.mjs",contents:linear}] },
 			{ name:"mail-scoring-generalized",compatibilityDate:"2025-11-28",modules:[{type:"ESModule" as const,path:"index.mjs",contents:generalized}] },
 			{ name:"mail-scoring-context",compatibilityDate:"2025-11-28",modules:[{type:"ESModule" as const,path:"index.mjs",contents:context}] },
 			{ name:"mail-scoring-general1", compatibilityDate:"2025-11-28", modules:[{type:"ESModule" as const,path:"index.mjs",contents:general1}] },

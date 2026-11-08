@@ -1,0 +1,74 @@
+[
+  {
+    "check": "typecheck",
+    "command": [
+      "npm",
+      "exec",
+      "--yes",
+      "--package=npm@11.12.1",
+      "--",
+      "npm",
+      "run",
+      "typecheck"
+    ],
+    "exitCode": 0,
+    "seconds": 11.46
+  },
+  {
+    "check": "tests",
+    "command": [
+      "node",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "--maxWorkers=1",
+      "--testTimeout=30000",
+      "--hookTimeout=30000"
+    ],
+    "exitCode": 0,
+    "seconds": 79.5
+  },
+  {
+    "check": "build",
+    "command": [
+      "npm",
+      "exec",
+      "--yes",
+      "--package=npm@11.12.1",
+      "--",
+      "npm",
+      "run",
+      "build"
+    ],
+    "exitCode": 0,
+    "seconds": 9.35
+  },
+  {
+    "check": "contract",
+    "command": [
+      "node",
+      "scripts/check-scoring-contract.mjs",
+      "/Users/brian/projects/mail-scoring-rules-7"
+    ],
+    "exitCode": 0,
+    "seconds": 0.47
+  },
+  {
+    "check": "mutations",
+    "command": [
+      "node",
+      "scripts/scoring-mutations.mjs",
+      "--workerd"
+    ],
+    "exitCode": 0,
+    "seconds": 90.28
+  },
+  {
+    "check": "growth",
+    "command": [
+      "node",
+      "scripts/projection-growth.mjs"
+    ],
+    "exitCode": 0,
+    "seconds": 0.04
+  }
+]

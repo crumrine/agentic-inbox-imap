@@ -1,0 +1,59 @@
+RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-YC5Yoj
+
+ ❯ test/shadow-scoring.test.ts (81 tests | 1 failed | 80 skipped) 91ms
+     × bounds selected HTML and rejects omitted bodies without replacing oversized plain text 48ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 80 skipped (81)
+   Start at  11:47:26
+   Duration  1.50s (transform 404ms, setup 413ms, import 618ms, tests 91ms, environment 0ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/shadow-scoring.test.ts > joined rules-7 general spam detection > bounds selected HTML and rejects omitted bodies without replacing oversized plain text
+AssertionError: expected { version: 1, …(4) } to match object { status: 'unavailable', result: null }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "result": null,
+-   "status": "unavailable",
++   "result": {
++     "engineVersion": "0.1.0",
++     "error": null,
++     "heuristicScore": 0,
++     "limitsHit": [
++       "html_uninspected",
++       "source_incomplete",
++       "auth_unknown",
++       "identity_uninspected",
++       "html_limit",
++     ],
++     "reasons": [],
++     "ruleSetVersion": "rules-7",
++     "schemaVersion": "1",
++     "signals": {
++       "marketing": "unknown",
++       "phishing": "unknown",
++       "spam": "unknown",
++     },
++     "status": "partial",
++   },
++   "status": "partial",
+  }
+
+ ❯ test/shadow-scoring.test.ts:1185:73
+    1183|       htmlBytes(`<p>${STATISTICAL_SPAM}</p>`,'x'.repeat(32769))]) {
+    1184|       const row=await deliver(b.e,raw);expect(row.folder_id).toBe('inb…
+    1185|       expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0]…
+       |                                                                         ^
+    1186|       expect(new Uint8Array(await (await env.BUCKET.get(row.raw_key))!…
+    1187|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯

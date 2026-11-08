@@ -1,0 +1,9 @@
+RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-kTAcic
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 80 skipped (81)
+   Start at  11:47:12
+   Duration  1.51s (transform 404ms, setup 489ms, import 530ms, tests 116ms, environment 1ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.

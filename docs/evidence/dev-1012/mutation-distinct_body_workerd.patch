@@ -1,0 +1,13 @@
+diff --git a/packages/core/src/linear.ts b/packages/core/src/linear.ts
+index 16c5ffb..3e8888b 100644
+--- a/packages/core/src/linear.ts
++++ b/packages/core/src/linear.ts
+@@ -11,7 +11,7 @@ export function linearSpam(features:readonly ContextFeature[],bodyWords:readonly
+   // Ignoring most unfamiliar words can make a sparse vector look confidently positive.
+   if(body.length>=5 && body.filter(hash=>weights.has(hash)).length*100<body.length*MODEL_MIN_KNOWN_BODY_PERCENT)return undefined;
+   // A strong subject cannot turn an unknown body into supported spam evidence.
+-  if(body.filter(hash=>(weights.get(hash)?.weight??0)>0).length<5)return false;
++  if(false)return false;
+   const words=[...new Set(features.filter(feature=>feature.second===-1).map(feature=>feature.first))].sort((a,b)=>a-b);
+   let dot=0,norm=0;
+   for(const hash of words){
