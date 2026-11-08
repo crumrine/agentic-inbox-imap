@@ -321,12 +321,12 @@ function realBindings(mode: Env['MAIL_SCORING_MODE'] = 'filter', scorer = env.MA
 }
 
 const reportedPhishing = 'Security team alert: please verify your password immediately.';
-function inlinePhishingReport(nestedHeaders: string[]) {
+function inlinePhishingReport(nestedHeaders: string[], subject = 'Forwarded security report') {
   return new TextEncoder().encode([
     'From: Security Team <sender@example.test>',
     'Reply-To: helpdesk@other.example.org',
     `To: ${BOX}`,
-    'Subject: Forwarded security report',
+    `Subject: ${subject}`,
     'MIME-Version: 1.0',
     'Content-Type: multipart/mixed; boundary=inline-report',
     '', '--inline-report', 'Content-Type: text/plain', '',
@@ -360,7 +360,7 @@ describe('inline forwarded MIME inspection provenance', () => {
       expect(await mailbox(BOX).getSpamState(row.id)).toMatchObject({
         disposition:'unknown', revision:0,
         assessments:[{policyVersion:'inbox-shadow-1', status:'partial', inputIncomplete:true,
-          result:{ruleSetVersion:'rules-2', heuristicScore:20, reasons:[
+          result:{ruleSetVersion:'rules-2', heuristicScore:20, limitsHit:expect.arrayContaining(['quoted_content']), reasons:[
             {id:'reply_to_mismatch', contribution:10},
             {id:'impersonation_combined', contribution:10},
           ]}}],
@@ -393,16 +393,31 @@ describe('inline forwarded MIME inspection provenance', () => {
     expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0].result).toMatchObject({heuristicScore:45});
   });
 
+  it('keeps copied phishing subjects on inline reports in Inbox with explicit quoted inspection', async () => {
+    await registered();
+    const raw = inlinePhishingReport(['From: reported@example.test', 'Subject: Reported message'], 'Fwd: verify your password');
+    expect(project(await PostalMime.parse(raw)).subject).toBe('Fwd: verify your password');
+    for (const [scorer, ruleSetVersion] of [[env.MAIL_SCORER, 'rules-2'], [env.MAIL_SCORER_LEGACY, 'rules-1']] as const) {
+      const b = realBindings('filter', scorer);
+      const row = await deliver(b.e, raw);
+      expect(row).toMatchObject({folder_id:'inbox'});
+      expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0]).toMatchObject({
+        status:'partial', inputIncomplete:true,
+        result:{ruleSetVersion, heuristicScore:45, limitsHit:expect.arrayContaining(['quoted_content'])},
+      });
+    }
+  });
+
   it('keeps ordinary separator/header-like bodies inspectable and bounds forwarded body omission', async () => {
     for (const text of ['Meeting notes\n---\nStatus: complete', 'From: Operations\nPlease review the schedule.', '-'.repeat(32000) + '\nFroX: ordinary near-match']) {
       const parsed = await PostalMime.parse(bytes(BOX, text));
       expect(project(parsed).text).toBe(parsed.text);
     }
     for (const text of ['Report\n---\nFrom: reported@example.test\n' + reportedPhishing,
-      '-'.repeat(32000) + '\nSubject: Report\n' + reportedPhishing,
-      'é'.repeat(16384) + '\n---\nFrom: reported@example.test']) {
-      expect(project(await PostalMime.parse(bytes(BOX, text)))).toMatchObject({text:'', urls:[], sourceComplete:false});
+      '-'.repeat(32000) + '\nSubject: Report\n' + reportedPhishing]) {
+      expect(project(await PostalMime.parse(bytes(BOX, text)))).toMatchObject({text:'>', urls:[], sourceComplete:false});
     }
+    expect(project(await PostalMime.parse(bytes(BOX, 'é'.repeat(16384) + '\n---\nFrom: reported@example.test')))).toMatchObject({text:'', urls:[], sourceComplete:false});
   });
 });
 

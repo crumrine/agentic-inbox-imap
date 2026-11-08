@@ -108,8 +108,10 @@ itself fails, delivery is retained and the read API reports unknown/unscored.
 PostalMime 2.7.3 can flatten an inline `message/rfc822` into the parsed body,
 including a generated separator and From/Subject/Date/recipient header block.
 After the existing 32 KiB field preflight, the scoring projection recognizes
-that generated plain-text header pattern, omits the whole scoring body and
-marks the input incomplete. Raw MIME, stored display content and attachments
+that generated plain-text header pattern, replaces the whole scoring body with
+a redacted `>` quote marker and marks the input incomplete. The marker retains
+the existing `quoted_content` limit, so copied phishing subjects or display
+labels cannot bypass the ordinary partial-inspection guard. Raw MIME, stored display content and attachments
 remain intact. Explicit sender preferences and other bounded metadata remain
 available; normal current-body phishing and GTUBE controls are unchanged.
 
@@ -123,7 +125,10 @@ OPS-614 owns the separately gated manual rollout.
 The authored legitimate inline report fails as Inbox-to-Spam on the unfixed
 code. Joined tests check four nested-header variants, stored partial evidence,
 unchanged raw/display, restart, REST and IMAP UID/raw retrieval, with one score
-per arrival. Removal/restored mutations prove that regression; ordinary
+per arrival. A copied phishing subject still scores 45 but remains in Inbox
+with explicit quoted inspection, while direct current-body phishing at 45 still
+routes to Spam. Removal/restored mutations prove both omission and quote-state
+regressions; ordinary
 separator/header-like controls and 15 within-budget growth cases retain the
 existing URL regressions. Set `EVIDENCE_DIR=docs/evidence/dev-1001` when running
 the contract, scoring-mutation and projection-growth scripts to preserve older

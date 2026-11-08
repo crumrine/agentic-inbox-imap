@@ -39,7 +39,8 @@ export function project(parsed: Email, envelopeFrom?: string): ScoreInputV1 {
   // PostalMime flattens inline message/rfc822 bodies beneath these generated headers.
   // shortcut: omit the whole scoring body; split current/forwarded provenance if mixed-mail recall requires it.
   if (/(?:^|[\r\n])-{3,}[\r\n]+(?:From|Subject|Date|To|Cc|Bcc):[ \t]/.test(text)) {
-    text = '';
+    // Preserve quote status so copied subject/name clues cannot cause automatic routing.
+    text = '>';
     complete = false;
   }
   const urls: string[] = [];

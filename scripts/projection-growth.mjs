@@ -26,7 +26,7 @@ try {
     await writeFile(join(out, 'projection-growth.json'), JSON.stringify({node:process.version, samples,
       scope:'Synthetic local synchronous projection wall time; not hosted CPU or billing. A wide 250ms ceiling checks original-token suffixes and inline-forward markers/near-matches within the source budget.'}, null, 2) + '\n');
     assert.deepEqual(input.urls, []);
-    assert.equal(input.text, omitted ? '' : text);
+    assert.equal(input.text, omitted ? '>' : text);
     assert.equal(input.sourceComplete, complete);
     assert.ok(elapsedMs < 250, 'bounded scoring projection exceeded 250ms');
    }
