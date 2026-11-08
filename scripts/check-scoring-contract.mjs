@@ -9,11 +9,12 @@ import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 const dependency=resolve(process.argv[2] ?? '../mail-scoring');
-const pin='cf588bf2870964f691e420f5e5249aa3255806f8';
+const pin='5ed110e5cdfc9905fc5ee2940a4a39cd9e4864b0';
+const contextPin='cf588bf2870964f691e420f5e5249aa3255806f8';
 const general1Pin='041e79c5f56880b8eff0e210968569461cb95fc0';
 const previousPin='faa15bea06db52f2dc240257d5335a66a933f909';
 const legacyPin='2fab406320ae3b3596345d2c76e0ef8a08593211';
-const outDir=resolve(process.env.EVIDENCE_DIR ?? 'docs/evidence/dev-1003');
+const outDir=resolve(process.env.EVIDENCE_DIR ?? 'docs/evidence/dev-1005');
 assert.equal(execFileSync('git',['-C',dependency,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),pin);
 assert.equal(execFileSync('git',['-C',dependency,'cat-file','-t',legacyPin],{encoding:'utf8'}).trim(),'commit');
 const hashes={};
@@ -35,9 +36,12 @@ try{
  const general1Dir=join(temp,'general1-src');
  mkdirSync(general1Dir);
  execFileSync('tar',['-x','-C',general1Dir],{input:execFileSync('git',['-C',dependency,'archive',general1Pin,'tsconfig.json','packages/core','workers/private'],{maxBuffer:8*1024*1024})});
+ const contextDir=join(temp,'context-src');mkdirSync(contextDir);
+ execFileSync('tar',['-x','-C',contextDir],{input:execFileSync('git',['-C',dependency,'archive',contextPin,'tsconfig.json','packages/core','workers/private'],{maxBuffer:8*1024*1024})});
  const modules={};
  for(const [name,path] of [
   ['scorer',join(dependency,'workers/private/adapter.ts')],
+  ['contextScorer',join(contextDir,'workers/private/adapter.ts')],
   ['general1Scorer',join(general1Dir,'workers/private/adapter.ts')],
   ['previousScorer',join(previousDir,'workers/private/adapter.ts')],
   ['authored',resolve('test/statistical-fixture.ts')],
@@ -56,7 +60,7 @@ try{
   calls.push(args);return modules.scorer.scoreRpc(...args);
  }}},parsed,true,'bounce@example.test');
  assert.equal(calls.length,1);assert.equal(assessment.status,'partial');
- assert.equal(assessment.result.schemaVersion,'1');assert.equal(assessment.result.ruleSetVersion,'rules-4');
+ assert.equal(assessment.result.schemaVersion,'1');assert.equal(assessment.result.ruleSetVersion,'rules-5');
  assert.ok(assessment.result.limitsHit.includes('auth_unknown'));
  assert.equal(assessment.result.heuristicScore,0);
  assert.equal(modules.caller.shouldQuarantine(assessment,'none'),false);
@@ -78,7 +82,7 @@ try{
  for(const preference of ['none','allow','block']){
   const value=await modules.caller.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async(...args)=>modules.scorer.scoreRpc(...args)}},gtubeParsed,true,'bounce@example.test',preference);
   assert.equal(value.status,'partial');assert.ok(value.result);
-  assert.equal(value.result.ruleSetVersion,'rules-4');
+  assert.equal(value.result.ruleSetVersion,'rules-5');
   assert.equal(value.result.heuristicScore,100);
   assert.equal(value.result.signals.spam,'present');
   const ids=value.result.reasons.map(r=>r.id);
@@ -105,8 +109,8 @@ try{
  assert.equal(modules.caller.shouldQuarantine(legacyAssessment,'none'),false);
  // Reject gtube reason under rules-1 and reject unknown ruleSetVersion / reason IDs
  const gtubeWire=JSON.stringify({rpcVersion:'1',ok:true,result:gtubePreferenceResults.none.result});
- assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"rules-4"','"rules-1"')),null);
- assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"rules-4"','"rules-5"')),null);
+ assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"rules-5"','"rules-1"')),null);
+ assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"rules-5"','"rules-6"')),null);
  assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"gtube"','"unknown_reason"')),null);
  const previous=await modules.caller.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async(...args)=>modules.previousScorer.scoreRpc(...args)}},gtubeParsed,true,'bounce@example.test','none');
  assert.equal(previous.result.ruleSetVersion,'rules-2');assert.equal(modules.caller.shouldQuarantine(previous,'none'),true);
@@ -116,21 +120,32 @@ try{
  assert.equal(general1.result.heuristicScore,60);assert.equal(general1.result.ruleSetVersion,'rules-3');
  assert.ok(modules.protocol.decodeResponse(JSON.stringify({rpcVersion:'1',ok:true,result:general1.result})));
  assert.equal(modules.caller.shouldQuarantine(general1,'none'),false);
+ const contextGtube=await modules.caller.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async(...args)=>modules.contextScorer.scoreRpc(...args)}},gtubeParsed,true,'bounce@example.test','none');
+ assert.equal(contextGtube.result.ruleSetVersion,'rules-4');assert.equal(modules.caller.shouldQuarantine(contextGtube,'none'),true);
+ const context=await modules.caller.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async(...args)=>modules.contextScorer.scoreRpc(...args)}},{...parsed,text:modules.authored.STATISTICAL_SPAM},true,'bounce@example.test','none');
+ assert.equal(context.result.heuristicScore,60);assert.equal(context.result.ruleSetVersion,'rules-4');assert.equal(modules.caller.shouldQuarantine(context,'none'),false);
+ assert.ok(modules.protocol.decodeResponse(JSON.stringify({rpcVersion:'1',ok:true,result:context.result})));
+ const oldPharmacy=await modules.caller.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async(...args)=>modules.contextScorer.scoreRpc(...args)}},{...parsed,text:modules.authored.PHARMACY_SPAM},true,'bounce@example.test','none');
+ assert.equal(oldPharmacy.result.heuristicScore,0);assert.equal(modules.caller.shouldQuarantine(oldPharmacy,'none'),false);
  const generalResults={};
- for(const kind of ['plain','html']) {
-  const body=modules.authored.STATISTICAL_SPAM;
+ for(const [kind,body,isHtml] of [['plain',modules.authored.STATISTICAL_SPAM,false],['html',modules.authored.STATISTICAL_SPAM,true],['pharmacyPlain',modules.authored.PHARMACY_SPAM,false],['pharmacyHtml',modules.authored.PHARMACY_SPAM,true]]) {
   const value=await modules.caller.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async(...args)=>modules.scorer.scoreRpc(...args)}},
-   {...parsed,text:kind==='plain'?body:'',html:kind==='html'?`<p>${body}</p>`:undefined},true,'bounce@example.test','none');
+   {...parsed,text:isHtml?'':body,html:isHtml?`<p>${body}</p>`:undefined},true,'bounce@example.test','none');
   assert.equal(value.result.heuristicScore,60);assert.equal(modules.caller.shouldQuarantine(value,'none'),true);
   const generalWire=JSON.stringify({rpcVersion:'1',ok:true,result:value.result});
-  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-4"','"rules-2"')),null);
-  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-4"','"rules-1"')),null);
-  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-4"','"rules-3"')),null);
+  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-5"','"rules-2"')),null);
+  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-5"','"rules-1"')),null);
+  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-5"','"rules-3"')),null);
+  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-5"','"rules-4"')),null);
   generalResults[kind]=value;
  }
  mkdirSync(outDir,{recursive:true});
  writeFileSync(join(outDir,'contract.json'),JSON.stringify({
   dependency:pin,
+  contextDependency:contextPin,
+  contextResult:context,
+  contextGtubeResult:contextGtube.result,
+  oldPharmacyResult:oldPharmacy.result,
   general1Dependency:general1Pin,
   general1Result:general1,
   general1GtubeResult:general1Gtube.result,
