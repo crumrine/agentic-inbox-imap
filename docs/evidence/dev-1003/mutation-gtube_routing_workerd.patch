@@ -1,0 +1,13 @@
+diff --git a/workers/lib/mail-scoring/intake.ts b/workers/lib/mail-scoring/intake.ts
+index 3d2642e..e64d74d 100644
+--- a/workers/lib/mail-scoring/intake.ts
++++ b/workers/lib/mail-scoring/intake.ts
+@@ -145,8 +145,6 @@ export function shouldQuarantine(assessment: Assessment | undefined, preference:
+   if (!result || assessment.status === 'unavailable' || result.status === 'unavailable' ||
+       preference === undefined || preference === 'allow') return false;
+   if (preference === 'block') return true;
+-  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3' || result.ruleSetVersion === 'rules-4') && result.signals.spam === 'present' &&
+-      result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;
+   // The failed general-1 signal remains readable, but never enables automatic routing.
+   if (result.ruleSetVersion === 'rules-4' && result.heuristicScore >= 60 && result.signals.spam === 'present' &&
+       result.limitsHit.every(limit => ['auth_unknown', 'source_incomplete', 'html_uninspected', 'identity_uninspected'].includes(limit)) &&

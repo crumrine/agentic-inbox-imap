@@ -10,7 +10,8 @@ import { buildSync } from "esbuild";
 import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
 
-const SCORER_PIN = "041e79c5f56880b8eff0e210968569461cb95fc0";
+const SCORER_PIN = "cf588bf2870964f691e420f5e5249aa3255806f8";
+const GENERAL1_SCORER_PIN = "041e79c5f56880b8eff0e210968569461cb95fc0";
 const PREVIOUS_SCORER_PIN = "faa15bea06db52f2dc240257d5335a66a933f909";
 const LEGACY_SCORER_PIN = "2fab406320ae3b3596345d2c76e0ef8a08593211";
 
@@ -32,6 +33,7 @@ function buildScorerWorkers() {
 			entryPoints: [entry],
 			bundle: true,
 			write: false,
+			nodePaths:[join(dir,"node_modules")],
 			format: "esm",
 			platform: "neutral",
 			external: ["cloudflare:workers"],
@@ -40,6 +42,7 @@ function buildScorerWorkers() {
 	const temp = mkdtempSync(join(tmpdir(), "mail-scoring-legacy-"));
 	let legacy: string;
 	let previous: string;
+	let general1: string;
 	try {
 		const archive = execFileSync("git", ["-C", dir, "archive", LEGACY_SCORER_PIN, "tsconfig.json", "packages/core", "workers/private"], { maxBuffer: 8 * 1024 * 1024 });
 		execFileSync("tar", ["-x", "-C", temp], { input: archive });
@@ -47,6 +50,9 @@ function buildScorerWorkers() {
 		const old = execFileSync("git", ["-C", dir, "archive", PREVIOUS_SCORER_PIN, "tsconfig.json", "packages/core", "workers/private"], {maxBuffer:8*1024*1024});
 		execFileSync("tar", ["-x", "-C", temp], {input:old});
 		previous = bundle(join(temp, "workers/private/index.ts"));
+		const general = execFileSync("git", ["-C", dir, "archive", GENERAL1_SCORER_PIN, "tsconfig.json", "packages/core", "workers/private"], {maxBuffer:8*1024*1024});
+		execFileSync("tar", ["-x", "-C", temp], {input:general});
+		general1 = bundle(join(temp,"workers/private/index.ts"));
 	} finally {
 		rmSync(temp, { recursive: true, force: true });
 	}
@@ -55,8 +61,10 @@ function buildScorerWorkers() {
 			MAIL_SCORER: "mail-scoring-private",
 			MAIL_SCORER_LEGACY: "mail-scoring-legacy",
 			MAIL_SCORER_PREVIOUS: "mail-scoring-previous",
+			MAIL_SCORER_GENERAL1: "mail-scoring-general1",
 		},
 		workers: [
+			{ name:"mail-scoring-general1", compatibilityDate:"2025-11-28", modules:[{type:"ESModule" as const,path:"index.mjs",contents:general1}] },
 			{ name:"mail-scoring-previous", compatibilityDate:"2025-11-28", modules:[{type:"ESModule" as const, path:"index.mjs", contents:previous}] },
 			{
 				name: "mail-scoring-private",
