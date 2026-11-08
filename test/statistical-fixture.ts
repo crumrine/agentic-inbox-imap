@@ -6,4 +6,7 @@ export const STATISTICAL_SPAM = "Congratulations! You have been specially select
 // Original authored pharmacy-ad control, not a corpus message.
 export const PHARMACY_SPAM = 'Online pharmacy sale. Generic medications, prescription tablets, pharmaceutical products and brand medicines at discount prices. Viagra, Cialis, Levitra, Valium and Xanax available. Treatments for erectile dysfunction, impotence, anxiety, depression and weight loss.';
 
-// Copied from mail-scoring 0041d47f20d2565dc8725a3c11f0ed1af113ca74; authored controls, not corpus mail.
+// Original synthetic prefix with insufficient stable evidence; not a legitimate-mail accuracy control.
+export const FRAGILE_SPAM = "Congratulations! You have been specially selected for an exclusive opportunity to earn extra money";
+
+// Copied from reviewed merged mail-scoring 143e24e938365c31f2669fd5f9e918408383dc7e; authored controls only.

@@ -10,38 +10,38 @@ through the private `MAIL_SCORER` service binding, then applies the recoverable
 policy in [quarantine.md](quarantine.md). Reads, refreshes, IMAP and ordinary moves
 do not score again. Failures retain Inbox delivery; there is no historical scan.
 
-## Source pins and compatibility (DEV-1008)
+## Source pins and compatibility (DEV-1012)
 
-The current contract and protocol copies come from merged `mail-scoring` PR #13,
-`0041d47f20d2565dc8725a3c11f0ed1af113ca74`, with only the protocol import path
+The current contract and protocol copies come from merged `mail-scoring` PR #15,
+`143e24e938365c31f2669fd5f9e918408383dc7e`, with only the protocol import path
 changed. The engine remains `0.1.0`, schema/RPC remain `1`, and the rules are
-`rules-6`. No scanner package or new dependency is imported into Inbox. The
+`rules-7`. No scanner package or new dependency is imported into Inbox. The
 independent scorer contains the bounded parser and frozen public-corpus model;
-see that repository's `docs/recall-correction.md` for provenance and limitations.
+see that repository's `docs/precision-guard.md` for provenance and limitations.
 
-The strict decoder accepts `rules-1 | rules-2 | rules-3 | rules-4 | rules-5 | rules-6`, rejects GTUBE under
+The strict decoder accepts `rules-1 | rules-2 | rules-3 | rules-4 | rules-5 | rules-6 | rules-7`, rejects GTUBE under
 rules-1, and rejects statistical reasons/new HTML or statistics limits under
 older rule sets. Unknown versions/reasons, altered static text, inconsistent or
 nonfinite contributions, JSON depth over 6 and output over 4096 UTF-8 bytes are
 rejected. Invented authentication or preferences are also rejected.
 
-The arrival policy is now `inbox-scoring-5`. Storage also accepts historical
-`inbox-shadow-1`, `inbox-scoring-2` `inbox-scoring-3` and `inbox-scoring-4` assessments without rewriting their policy or rule version.
+The arrival policy is now `inbox-scoring-6`. Storage also accepts historical
+`inbox-shadow-1`, `inbox-scoring-2`, `inbox-scoring-3`, `inbox-scoring-4` and `inbox-scoring-5` assessments without rewriting their policy or rule version.
 There is no schema migration or old-mail re-evaluation.
 
 `node scripts/check-scoring-contract.mjs /path/to/mail-scoring` requires the exact
-current pin. `evidence/dev-1008/contract.json` records contract digests, current
+current pin. `evidence/dev-1012/contract.json` records contract digests, current
 plain/HTML general-spam results, and actual previous rules-2
 (`faa15bea06db52f2dc240257d5335a66a933f909`) and legacy rules-1
 (`2fab406320ae3b3596345d2c76e0ef8a08593211`) compatibility.
-Historical general-1/2/3 statistical evidence remains readable but does not trigger automatic generic routing. GTUBE remains supported under rules-2–6. Statistical reasons are accepted only under their exact rule version; the new `statistical_linear_spam` reason is valid only under rules-6. Tests run six actual private Worker versions, including the deployed rules-5 scorer.
+Historical general-1/2/3/4 statistical evidence remains readable but does not trigger automatic generic routing. GTUBE remains supported under rules-2–7. Statistical reasons are accepted only under their exact rule version; the new `statistical_robust_spam` reason is valid only under rules-7. Tests run seven actual private Worker versions, including the deployed rules-5 scorer.
 Historical evidence remains unchanged in its original directories.
 
 ### Manual rollout and rollback
 
 OPS-615 requires reviewed merged source, DEV-1009 paired held-out acceptance,
 independent review of the exact artifacts/plan, and fresh production config
-receipts. Deploy this caller before the rules-6 private scorer. The caller works
+receipts. Deploy this caller before the rules-7 private scorer. The caller works
 with either older scorer while the transition happens. No public scorer route,
 preview, new binding, gateway change or automatic workflow is needed.
 

@@ -1,0 +1,9 @@
+# DEV-1012 compatible precision-guard routing
+
+Source-only caller integration against reviewed merged scorer `143e24e938365c31f2669fd5f9e918408383dc7e` (PR15). Policy6 accepts exact rules7 robust evidence; historic linear6/policy5 is readable but never generic-auto-routed. GTUBE2–7 remains supported. No schema, dependency, gateway, raw-byte or preference changes.
+
+Local locked Node24.15.0/ICU78.2: all645 tests/35files, typecheck/build, seven-version contract,39 mutations (21 direct checks +18 actual Worker,15 restored),25 growth samples pass. Desktop1440/mobile390 preview/recovery pass; mobile screenshot inspected. Browser is the existing actual SPA with synthetic HTTP bridge; Worker/email/DO paths separately run under local workerd. All37 fixed legitimate notices pass plain and HTML with valid scored rules7; no production mailbox data used.
+
+The new original fragile-spam prefix is an abstention test, not HAM accuracy data. Its subject is blank, matching the approved core fixture; a nonempty synthetic subject initially masked the old-model margin, and was corrected without changing fixture content or weakening assertions. The old6 result is60/Inbox under the new caller; new7 is0/Inbox. Removing core stability causes actual Inbox-to-Spam failure; restoration passes. Historical6 stored policy5 survives restart, REST and Not spam with original assessment unchanged.
+
+`checks.json`, `contract.json`, `scoring-mutations.json`, patches/logs, `projection-growth.json` and `browser.json` preserve receipts. All log/fixture content is original synthetic. Model training/grid/public corpus/fresh fd22 predictions were not repeated in this caller change. Core dependency already passed independent exact-head review. Independent caller review and normal merge remain required; DEV1009 second untouched paired acceptance and OPS615 manual release separately gate production. The failed6 candidate is never a rollback target.

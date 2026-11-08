@@ -1,0 +1,13 @@
+diff --git a/workers/lib/mail-scoring/intake.ts b/workers/lib/mail-scoring/intake.ts
+index eb255b6..9f1d69b 100644
+--- a/workers/lib/mail-scoring/intake.ts
++++ b/workers/lib/mail-scoring/intake.ts
+@@ -40,7 +40,7 @@ export function project(parsed: Email, envelopeFrom?: string): ScoreInputV1 {
+   let html = plainOmitted || text.trim() ? undefined : field(parsed.html, 32768) || undefined;
+   // PostalMime flattens inline message/rfc822 bodies beneath these generated headers.
+   // shortcut: omit the whole scoring body; split current/forwarded provenance if mixed-mail recall requires it.
+-  if (/(?:^|[\r\n])-{3,}[\r\n]+(?:From|Subject|Date|To|Cc|Bcc):[ \t]/.test(text) || html?.includes('class="postal-email-header"')) {
++  if (/(?:^|[\r\n])-{3,}[\r\n]+(?:From|Subject|Date|To|Cc|Bcc):[ \t]/.test(text)) {
+     // Preserve quote status so copied subject/name clues cannot cause automatic routing.
+     text = '>';
+     html = undefined;

@@ -1,0 +1,13 @@
+diff --git a/workers/lib/mail-scoring/intake.ts b/workers/lib/mail-scoring/intake.ts
+index eb255b6..2dd1a6f 100644
+--- a/workers/lib/mail-scoring/intake.ts
++++ b/workers/lib/mail-scoring/intake.ts
+@@ -142,8 +142,6 @@ export function shouldQuarantine(assessment: Assessment | undefined, preference:
+   if (!result || assessment.status === 'unavailable' || result.status === 'unavailable' ||
+       preference === undefined || preference === 'allow') return false;
+   if (preference === 'block') return true;
+-  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3' || result.ruleSetVersion === 'rules-4' || result.ruleSetVersion === 'rules-5' || result.ruleSetVersion === 'rules-6' || result.ruleSetVersion === 'rules-7') && result.signals.spam === 'present' &&
+-      result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;
+   // Only the current model enables content routing; historical assessments remain readable.
+   if (result.ruleSetVersion === 'rules-7' && result.heuristicScore >= 60 && result.signals.spam === 'present' &&
+       result.limitsHit.every(limit => ['auth_unknown', 'source_incomplete', 'html_uninspected', 'identity_uninspected'].includes(limit)) &&
