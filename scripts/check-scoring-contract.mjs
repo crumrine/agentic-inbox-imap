@@ -9,9 +9,10 @@ import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 const dependency=resolve(process.argv[2] ?? '../mail-scoring');
-const pin='faa15bea06db52f2dc240257d5335a66a933f909';
+const pin='041e79c5f56880b8eff0e210968569461cb95fc0';
+const previousPin='faa15bea06db52f2dc240257d5335a66a933f909';
 const legacyPin='2fab406320ae3b3596345d2c76e0ef8a08593211';
-const outDir=resolve(process.env.EVIDENCE_DIR ?? 'docs/evidence/dev-989');
+const outDir=resolve(process.env.EVIDENCE_DIR ?? 'docs/evidence/dev-998');
 assert.equal(execFileSync('git',['-C',dependency,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),pin);
 assert.equal(execFileSync('git',['-C',dependency,'cat-file','-t',legacyPin],{encoding:'utf8'}).trim(),'commit');
 const hashes={};
@@ -27,9 +28,14 @@ try{
  mkdirSync(legacyDir,{recursive:true});
  const archive=execFileSync('git',['-C',dependency,'archive',legacyPin,'tsconfig.json','packages/core','workers/private'],{maxBuffer:8*1024*1024});
  execFileSync('tar',['-x','-C',legacyDir],{input:archive});
+ const previousDir=join(temp,'previous-src');
+ mkdirSync(previousDir);
+ execFileSync('tar',['-x','-C',previousDir],{input:execFileSync('git',['-C',dependency,'archive',previousPin,'tsconfig.json','packages/core','workers/private'],{maxBuffer:8*1024*1024})});
  const modules={};
  for(const [name,path] of [
   ['scorer',join(dependency,'workers/private/adapter.ts')],
+  ['previousScorer',join(previousDir,'workers/private/adapter.ts')],
+  ['authored',resolve('test/statistical-fixture.ts')],
   ['legacyScorer',join(legacyDir,'workers/private/adapter.ts')],
   ['caller',resolve('workers/lib/mail-scoring/intake.ts')],
   ['protocol',resolve('workers/lib/mail-scoring/protocol.ts')],
@@ -45,7 +51,7 @@ try{
   calls.push(args);return modules.scorer.scoreRpc(...args);
  }}},parsed,true,'bounce@example.test');
  assert.equal(calls.length,1);assert.equal(assessment.status,'partial');
- assert.equal(assessment.result.schemaVersion,'1');assert.equal(assessment.result.ruleSetVersion,'rules-2');
+ assert.equal(assessment.result.schemaVersion,'1');assert.equal(assessment.result.ruleSetVersion,'rules-3');
  assert.ok(assessment.result.limitsHit.includes('auth_unknown'));
  assert.equal(assessment.result.heuristicScore,0);
  assert.equal(modules.caller.shouldQuarantine(assessment,'none'),false);
@@ -67,7 +73,7 @@ try{
  for(const preference of ['none','allow','block']){
   const value=await modules.caller.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async(...args)=>modules.scorer.scoreRpc(...args)}},gtubeParsed,true,'bounce@example.test',preference);
   assert.equal(value.status,'partial');assert.ok(value.result);
-  assert.equal(value.result.ruleSetVersion,'rules-2');
+  assert.equal(value.result.ruleSetVersion,'rules-3');
   assert.equal(value.result.heuristicScore,100);
   assert.equal(value.result.signals.spam,'present');
   const ids=value.result.reasons.map(r=>r.id);
@@ -94,12 +100,28 @@ try{
  assert.equal(modules.caller.shouldQuarantine(legacyAssessment,'none'),false);
  // Reject gtube reason under rules-1 and reject unknown ruleSetVersion / reason IDs
  const gtubeWire=JSON.stringify({rpcVersion:'1',ok:true,result:gtubePreferenceResults.none.result});
- assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"rules-2"','"rules-1"')),null);
- assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"rules-2"','"rules-3"')),null);
+ assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"rules-3"','"rules-1"')),null);
+ assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"rules-3"','"rules-4"')),null);
  assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"gtube"','"unknown_reason"')),null);
+ const previous=await modules.caller.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async(...args)=>modules.previousScorer.scoreRpc(...args)}},gtubeParsed,true,'bounce@example.test','none');
+ assert.equal(previous.result.ruleSetVersion,'rules-2');assert.equal(modules.caller.shouldQuarantine(previous,'none'),true);
+ const generalResults={};
+ for(const kind of ['plain','html']) {
+  const body=modules.authored.STATISTICAL_SPAM;
+  const value=await modules.caller.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async(...args)=>modules.scorer.scoreRpc(...args)}},
+   {...parsed,text:kind==='plain'?body:'',html:kind==='html'?`<p>${body}</p>`:undefined},true,'bounce@example.test','none');
+  assert.equal(value.result.heuristicScore,60);assert.equal(modules.caller.shouldQuarantine(value,'none'),true);
+  const generalWire=JSON.stringify({rpcVersion:'1',ok:true,result:value.result});
+  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-3"','"rules-2"')),null);
+  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-3"','"rules-1"')),null);
+  generalResults[kind]=value;
+ }
  mkdirSync(outDir,{recursive:true});
  writeFileSync(join(outDir,'contract.json'),JSON.stringify({
   dependency:pin,
+  previousDependency:previousPin,
+  previousGtubeResult:previous.result,
+  generalResults,
   legacyDependency:legacyPin,
   hashes,
   fixture,

@@ -1,73 +1,54 @@
 # Shadow scoring and manual feedback (DEV-878)
 
-Source-only integration. No deployment or activation is authorized by this PR.
-Missing `MAIL_SCORING_MODE` (or `off`) makes zero scoring calls and performs no
-scoring-only projection. An operator may later configure `shadow` and a private
-service binding named `MAIL_SCORER` after separately authorizing release. No
-production binding or mode change is included here. Example binding only:
+This document describes source behavior. OPS-614 owns the manual deployment and
+live receipts; merging source does not establish production activation. GitHub
+Actions and automatic Cloudflare Builds remain paused.
 
-```json
-{"services":[{"binding":"MAIL_SCORER","service":"mail-scoring-private"}],"vars":{"MAIL_SCORING_MODE":"shadow"}}
-```
+Missing `MAIL_SCORING_MODE` or `off` makes no scoring calls. `shadow` records an
+assessment without moving mail. `filter` scores once per new resolved arrival
+through the private `MAIL_SCORER` service binding, then applies the recoverable
+policy in [quarantine.md](quarantine.md). Reads, refreshes, IMAP and ordinary moves
+do not score again. Failures retain Inbox delivery; there is no historical scan.
 
-Use the actual approved scorer's configured Worker name at release time; this
-example does not provision a Worker. Score once per resolved incoming arrival.
-Reads, UI's 30-second refresh, IMAP and routine moves never call the scorer.
-There is no historical scan or re-evaluation endpoint. Shadow never moves mail.
-The later owner-authorized `filter` mode uses the same scoring path with the
-recoverable new-arrival routing policy in `quarantine.md`. Scoring failures keep
-delivery in Inbox. Returning to `shadow` disables automatic routing.
+## Source pins and compatibility (DEV-998)
 
-## Source pins and compatibility
+The current contract and protocol copies come from merged `mail-scoring` PR #9,
+`041e79c5f56880b8eff0e210968569461cb95fc0`, with only the protocol import path
+changed. The engine remains `0.1.0`, schema/RPC remain `1`, and the rules are
+`rules-3`. No scanner package or new dependency is imported into Inbox. The
+independent scorer contains the bounded parser and frozen public-corpus model;
+see that repository's `docs/general-spam.md` for provenance and limitations.
 
-Inbox base: `d01da09e26adf76ef8fe60e2a5f76226426a167b` (initial `DEV-878`);
-updated in `DEV-989` on Inbox `main` `08b92457015b3615e325cf4b57954daa12a628c2`.
-Scorer (`DEV-988` merged PR #6): https://github.com/crumrine/mail-scoring at
-`faa15bea06db52f2dc240257d5335a66a933f909` (`rules-2`, advancing from `rules-1`
-main baseline `2fab406320ae3b3596345d2c76e0ef8a08593211` and historical PR #3
-pin `bb02819e4662e1d680805435dd886e3dc4728906`).
-`workers/lib/mail-scoring/{contract,protocol}.ts` are Apache-2.0 copies from
-`packages/core/src/contract.ts` and `workers/private/protocol.ts` at that pin;
-only the protocol import path changes. No Mailguard source or scanner package
-is imported into Inbox. Digests and real pinned scorer responses are in
-`evidence/dev-989/contract.json` (preserving historical `evidence/dev-878/contract.json`).
-Reproduce with `node scripts/check-scoring-contract.mjs ../mail-scoring` at the exact pin.
+The strict decoder accepts `rules-1 | rules-2 | rules-3`, rejects GTUBE under
+rules-1, and rejects statistical reasons/new HTML or statistics limits under
+older rule sets. Unknown versions/reasons, altered static text, inconsistent or
+nonfinite contributions, JSON depth over 6 and output over 4096 UTF-8 bytes are
+rejected. Invented authentication or preferences are also rejected.
 
-RPC: `scoreV1('1', Uint8Array UTF-8 JSON, context JSON)` returns bounded JSON.
-Supported results: schema `1`, engine `0.1.0`, rules `rules-1` or `rules-2`.
-`decodeResponse` accepts both `rules-1` and `rules-2` for caller-first rollout
-and stored-assessment readability, rejects `id === "gtube"` when
-`ruleSetVersion === "rules-1"`, and rejects unknown versions/rules/reasons,
-inconsistent/nonfinite contributions, malformed JSON, depth >6 and >4096-byte
-output. Unknown remains distinct from safe. Responses inventing trusted
-authentication or preferences not supplied by this mailbox are rejected.
+The arrival policy is now `inbox-scoring-2`. Storage also accepts historical
+`inbox-shadow-1` assessments without rewriting their policy or rule version.
+There is no schema migration or old-mail re-evaluation.
 
-### Rollout and rollback order (`rules-1` ↔ `rules-2`)
+`node scripts/check-scoring-contract.mjs /path/to/mail-scoring` requires the exact
+current pin. `evidence/dev-998/contract.json` records contract digests, current
+plain/HTML general-spam results, and actual previous rules-2
+(`faa15bea06db52f2dc240257d5335a66a933f909`) and legacy rules-1
+(`2fab406320ae3b3596345d2c76e0ef8a08593211`) compatibility.
+Historical evidence remains unchanged in its original directories.
 
-1. **Caller-first rollout**: Deploy the updated Agentic Inbox caller (`DEV-989`,
-   accepting `rules-1 | rules-2`) **before** deploying the `rules-2` `mail-scoring`
-   Worker (`faa15bea06db52f2dc240257d5335a66a933f909`). While the caller is on
-   `DEV-989` and the deployed scorer is still on `2fab406320ae3b3596345d2c76e0ef8a08593211`
-   (`rules-1`), `rules-1` assessments continue validating and routing normally.
-   Once the `rules-2` scorer is deployed (`OPS-599`), validated `gtube` arrivals
-   route to Spam in `filter` mode (unless overridden by an explicit sender `allow`
-   preference), and existing stored `rules-1` rows remain readable.
-2. **Rollback**:
-   - To disable automatic Spam routing immediately without redeploying scorer code,
-     set `MAIL_SCORING_MODE=shadow` (or `off`). Stored mail, UIDs, preferences and
-     prior `rules-1`/`rules-2` assessments remain intact.
-   - To roll back the scorer Worker to `2fab406320ae3b3596345d2c76e0ef8a08593211`
-     (`rules-1`), keep the `DEV-989` caller deployed; it accepts `rules-1` RPC
-     responses and continues reading stored `rules-2` assessments.
-   - Only roll the Inbox caller back to `08b92457015b3615e325cf4b57954daa12a628c2`
-     (`rules-1`-only) after the scorer has been rolled back to `rules-1` or
-     `MAIL_SCORING_MODE` is `off`.
+### Manual rollout and rollback
 
-Eventual merge order, only after separate authorization: mail-scoring #1
-(`ce6d9afedf607584c150d457f0e078a307047f8a`) → #2
-(`8456996596af6446f533cacb90ff9ce2ecd1a4ab`) → #3 → Inbox DEV-878 → DEV-879.
-Inbox targets its own main; it cannot share Git ancestry with the scorer.
-Old unmerged Inbox performance PRs #5 and #6 are not included.
+OPS-614 requires reviewed merged source, DEV-999 paired held-out acceptance,
+independent review of the exact artifacts/plan, and fresh production config
+receipts. Deploy this caller before the rules-3 private scorer. The caller works
+with either older scorer while the transition happens. No public scorer route,
+preview, new binding, gateway change or automatic workflow is needed.
+
+To stop future automatic routing, use this compatible caller with mode `shadow`
+or `off`; stored mail, folders, UIDs, preferences and assessments remain intact.
+To roll the scorer back to rules-2 or rules-1, retain this caller. Roll back an
+older caller only after its compatible scorer is restored (or scoring is off).
+A source merge alone does not prove any of these operations occurred.
 
 ## Inspection bounds and inherited limits
 
@@ -95,7 +76,12 @@ Original token bytes are checked before trimming, and balanced IPv6 authority
 brackets are retained. Oversized tokens,
 controls, count/work ceilings and quoted omissions mark `sourceComplete:false`.
 The scorer retains its bounded decoding, URL diagnostics and contribution caps.
-No HTML, URLs/anchors extracted from HTML, attachment data,
+When meaningful bounded plain text is absent, a bounded HTML field (32768 UTF-8
+bytes) is supplied to the scorer's inert text parser. A present oversized plain
+body is never replaced with HTML. Omitted plain or selected HTML bodies make
+inspection unavailable before RPC. HTML visibility remains incomplete; no HTML
+anchors/URLs are extracted by Inbox and no mail URLs are fetched. Hidden/quoted
+and parser work-limit handling is documented in the scorer. No attachment data,
 raw MIME, mailbox IDs, credentials or raw storage keys enter the scorer.
 Omissions, duplicates and truncation remain incomplete. Final serialization
 is bounded by the pinned 262144-byte wire ceiling. A 1000ms wait limit does
@@ -119,7 +105,9 @@ This is conservative recognition of a known formatter pattern, not complete
 nested-MIME provenance. Omitting the entire scoring body can miss direct spam
 in a message that also forwards another message. It does not classify the
 retained report as safe. No MIME parser option, schema or gateway changes were
-made. The actual rules-2 scorer stays pinned at `faa15bea06db52f2dc240257d5335a66a933f909`.
+made by DEV-1001. DEV-998 also recognizes PostalMime's generated HTML
+`class="postal-email-header"` wrapper on selected HTML and preserves the same
+redacted quote marker. Recognition is bounded and specific to this formatter.
 OPS-614 owns the separately gated manual rollout.
 
 The authored legitimate inline report fails as Inbox-to-Spam on the unfixed

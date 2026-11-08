@@ -5,6 +5,7 @@
 declare namespace Cloudflare {
 	interface Env {
 		MAIL_SCORER?: import("../workers/lib/mail-scoring/protocol").ScorerBinding;
+		MAIL_SCORER_PREVIOUS?: import("../workers/lib/mail-scoring/protocol").ScorerBinding;
 		MAIL_SCORER_LEGACY?: import("../workers/lib/mail-scoring/protocol").ScorerBinding;
 	}
 }

@@ -3,13 +3,16 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-const out=process.env.EVIDENCE_DIR || 'docs/evidence/dev-989';
+const out=process.env.EVIDENCE_DIR || 'docs/evidence/dev-998';
 await fs.mkdir(out,{recursive:true});
 const browser=await chromium.launch({headless:true,...(process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}:{})});
 const hostile=`<script>window.previewExecuted=1</script><img src="https://tracker.invalid/pixel" onerror="window.previewExecuted=2"><img srcset="https://tracker.invalid/2x 2x"><style>@import 'https://tracker.invalid/css';body{background:url(https://tracker.invalid/bg)}</style><svg onload="window.previewExecuted=3"></svg><iframe src="https://tracker.invalid/frame"></iframe><form action="https://tracker.invalid/form"><input autofocus></form><meta http-equiv="refresh" content="0;url=https://tracker.invalid/refresh"><a href="https://tracker.invalid/link">click</a>`;
 const gtubeMarker='XJS*C4JDBQADN1.NSBN3*2IDNEN*GTUBE-STANDARD-ANTI-UBE-TEST-EMAIL*C.34X';
 const gtubeReason='The plain-text body contains the standard GTUBE test marker (intentional test trigger, not a calibrated spam probability).';
 const gtubeBody=`This is the GTUBE, the Generic Test for Unsolicited Bulk Email.\n\n${gtubeMarker}\n`;
+const generalEvidence=JSON.parse(await fs.readFile('docs/evidence/dev-998/contract.json','utf8'));
+const generalResult=generalEvidence.generalResults.html.result;
+const generalReason=generalResult.reasons.find(r=>r.id==='statistical_spam').reason;
 const results=[];
 const oversizedBody=hostile+'x'.repeat(20000);
 try {
@@ -18,11 +21,13 @@ try {
   const rows=[
    {id:'evil',subject:'Synthetic suspicious message',sender:'sender@example.test',recipient:'ui@example.test',folder_id:'spam',date:'2026-10-21T10:00:00Z',read:true,body:oversizedBody,thread_id:'shared',snippet:hostile,attachments:[{id:'image',filename:'track.png',mimetype:'image/png',size:10}]},
    {id:'gtube',subject:'Test spam mail (GTUBE)',sender:'sender@example.test',recipient:'ui@example.test',folder_id:'spam',date:'2026-10-21T09:30:00Z',read:true,body:gtubeBody,thread_id:'gtube-thread',snippet:gtubeMarker,attachments:[]},
+   {id:'general',subject:'Synthetic general spam',sender:'sender@example.test',recipient:'ui@example.test',folder_id:'spam',date:'2026-10-21T09:15:00Z',read:true,body:'<p>Original authored synthetic spam</p>'+hostile,thread_id:'general-thread',snippet:'Synthetic',attachments:[]},
    {id:'trusted',subject:'Trusted conversation',sender:'friend@example.test',recipient:'ui@example.test',folder_id:'inbox',date:'2026-10-21T09:00:00Z',read:true,body:'<p>Normal</p>',thread_id:'shared',snippet:'Normal',attachments:[]},
   ];
   const spamState={
    evil:{revision:0,disposition:'unknown'},
    gtube:{revision:0,disposition:'unknown'},
+   general:{revision:0,disposition:'unknown'},
   };
   let pref='none',prefRevision=0;
   page.on('pageerror',e=>errors.push(e.message));
@@ -59,6 +64,7 @@ try {
    else if(path==='emails') {const folder=url.searchParams.get('folder');data={emails:rows.filter(e=>e.folder_id===folder),totalCount:rows.filter(e=>e.folder_id===folder).length};}
    else if(path==='emails/evil/spam') data={...spamState.evil,automaticQuarantine:true,assessments:[{status:'partial',result:{heuristicScore:42,reasons:[{reason:hostile}]}}]};
    else if(path==='emails/gtube/spam') data={...spamState.gtube,automaticQuarantine:true,assessments:[{status:'partial',result:{ruleSetVersion:'rules-2',heuristicScore:100,reasons:[{id:'gtube',contribution:100,reason:gtubeReason}]}}]};
+   else if(path==='emails/general/spam') data={...spamState.general,automaticQuarantine:true,assessments:[{status:'partial',result:generalResult}]};
    else if(path==='emails/trusted/spam') data={revision:0,disposition:'unknown',assessments:[]};
    else if(path==='sender-preference') data={preference:pref,revision:prefRevision};
    else if(path.startsWith('threads/')) {const tid=decodeURIComponent(path.split('/')[1]);data=rows.filter(e=>e.thread_id===tid && (e.folder_id==='spam')===(url.searchParams.get('scope')==='spam'));}
@@ -96,11 +102,20 @@ try {
   assert.ok((await page.locator('section[aria-label="Safe Spam preview"] pre').textContent()).includes(gtubeMarker));
   await page.screenshot({path:`${out}/gtube-${width}.png`,fullPage:true});
   await page.getByRole('button',{name:'Not spam — move to Inbox',exact:true}).click();
+  await page.getByText('Synthetic general spam',{exact:true}).click();
+  await page.getByRole('region',{name:'Safe Spam preview'}).waitFor();
+  await page.getByText('Heuristic score: 60 / 100.',{exact:false}).waitFor();
+  assert.equal(await page.locator('section[aria-label="Spam controls"] li').textContent(),generalReason);
+  assert.equal(await page.locator('section[aria-label="Safe Spam preview"] img,section[aria-label="Safe Spam preview"] script,iframe').count(),0);
+  assert.equal(await page.evaluate(()=>window.previewExecuted),undefined);
+  await page.screenshot({path:`${out}/general-${width}.png`,fullPage:true});
+  await page.getByRole('button',{name:'Not spam — move to Inbox',exact:true}).click();
+  assert.equal(spamState.general.disposition,'not_spam');
   await page.getByText('No spam',{exact:true}).waitFor();
   assert.equal(spamState.gtube.disposition,'not_spam');
   assert.equal(pref,'none');
   assert.equal(network.length,0,JSON.stringify(network));assert.deepEqual(errors,[]);
-  results.push({width,blockedExternalRequests:network.length,errors,actions:actions.map(({path,body})=>({path,body})),escapedReason:true,inertPreview:true,gtubePreviewVerified:true,gtubeReasonVerified:true,gtubeRescued:true,inputBodyCharacters:oversizedBody.length,renderedBodyCharacters:16384,renderedReasonCharacters:160});
+  results.push({width,blockedExternalRequests:network.length,errors,actions:actions.map(({path,body})=>({path,body})),escapedReason:true,inertPreview:true,gtubePreviewVerified:true,gtubeReasonVerified:true,gtubeRescued:true,generalPreviewVerified:true,generalReasonVerified:true,generalRescued:true,inputBodyCharacters:oversizedBody.length,renderedBodyCharacters:16384,renderedReasonCharacters:160});
   await page.close();
  }
  await fs.writeFile(`${out}/browser.json`,JSON.stringify({browser:browser.version(),results},null,2)+'\n');

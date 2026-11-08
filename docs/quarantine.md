@@ -1,17 +1,10 @@
 # Recoverable Spam (DEV-879)
 
-Source-only change, stacked on Inbox PR #7 at
-`2838cfb45b870054297fd09e7b88a0c1545801f1`, the reviewed successor to the
-original `7cc31772b0ca17ec28ea4d78367e41e0a24e5ce5` prerequisite. The source-branch
-merge at `43889e5c0ba7fd43090e830fbeac048a9551ffc8` incorporates its static error
-diagnostics and clean-install lock repair; prior quarantine implementation and
-historical evidence are unchanged. Scorer PR #3 remains pinned at
-`bb02819e4662e1d680805435dd886e3dc4728906`; no scorer or gateway code changes.
-Future authorized merge order: mail-scoring #1 (`ce6d9afedf607584c150d457f0e078a307047f8a`),
-#2 (`8456996596af6446f533cacb90ff9ce2ecd1a4ab`), #3, Inbox #7, this PR.
-No merge, release, deployment, live mail or provider testing is authorized here.
-See `diagnostics-validation.md` for the corrected automatic-build history;
-source CI must not be interpreted as proof of current production state.
+Current source behavior includes DEV-998 general-spam integration and the
+DEV-1001 inline-forward safeguard. OPS-614 owns the separately verified manual
+rollout after independent source review and DEV-999 paired acceptance. Historical
+source/build evidence does not establish the current deployment. Actions and
+automatic Builds remain paused.
 
 ## Policy and recovery
 
@@ -21,11 +14,18 @@ default; shadow still records evidence without moving mail. Owner-authorized
 `MAIL_SCORING_MODE=filter` routes **new arrivals only** directly to Spam when:
 
 - The sender has an explicit mailbox-local block preference and scoring succeeded;
-- The validated `rules-2` result carries `signals.spam === "present"` and the
+- The validated `rules-2` or `rules-3` result carries `signals.spam === "present"` and the
   `gtube` reason with positive contribution (the exact 68-byte uppercase ASCII
   standard GTUBE test marker on an unquoted plain-text line), without requiring
   unrelated identity, sensitive-request or transport-auth evidence; or
-- The validated `rules-1` or `rules-2` score is at least 45, with a full sensitive-request
+- The validated `rules-3` score is at least 60, spam is present and a positive
+  `statistical_spam` contribution is present. Only `auth_unknown`,
+  `source_incomplete`, `html_uninspected` and `identity_uninspected` limits are
+  tolerated on this path; quoted, over-budget or otherwise uninspected evidence
+  does not cause automatic statistical routing. The fixed model's internal
+  cutoff is 0.99 with at least 20 informative clues; neither value is a calibrated
+  probability for this mailbox. DEV-999 measures the complete caller path; or
+- The validated `rules-1`, `rules-2` or `rules-3` score is at least 45, with a full sensitive-request
   contribution and independent suspicious identity evidence. Only `auth_unknown`
   and `source_incomplete` inspection limits are tolerated for this ordinary
   heuristic path. Other inspection limits retain Inbox delivery. This conservative
@@ -33,17 +33,19 @@ default; shadow still records evidence without moving mail. Owner-authorized
 
 An explicit allow preference overrides automatic routing — including for a
 validated `gtube` test-marker message — keeping the message in Inbox while
-preserving the stored `rules-2` heuristic score (`100`) and both `sender_allowed`
+preserving the stored heuristic score (`100`) and both `sender_allowed`
 (`0`) and `gtube` (`100`) reasons. An explicit block preference routes to Spam
 when scoring succeeds (`sender_blocked` contributes `40`, and if `gtube` also
 fires its contribution is clipped to the remaining `60` under the `100` total cap).
 Missing/failed preference lookup or unavailable/failed scoring retains
 Inbox delivery. Forged `X-Spam-Flag`, `X-Spam-Status` or authentication headers,
-quoted/forwarded GTUBE lines, near-matches, HTML-only bodies, oversized raw inputs
+quoted/forwarded GTUBE lines, GTUBE near-matches, oversized raw inputs
 (`> 131,072` bytes) or over-limit text fields (`> 32,768` bytes), `gtube` claimed
 under `rules-1`, and unknown versions or reason IDs never trigger quarantine.
 Partial inspection alone never triggers routing; transport
-provenance remains unknown, and HTML/attachment content remains uninspected.
+provenance remains unknown, HTML visibility remains incomplete and attachment
+bytes remain uninspected. HTML-only general spam can route through the bounded
+statistical path; an HTML-only GTUBE marker alone is not a trigger.
 The original body, raw MIME, attachments and assessment remain stored. No Spam
 expiry/emptying job is added. A mail client's own deletion rules are independent.
 Manual Not spam or ordinary moves rescue messages using existing UID allocation.

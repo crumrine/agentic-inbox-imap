@@ -5,14 +5,16 @@ import type { Env } from '../../types';
 import { decodeResponse, encodeBoundedJson, type ScoreInputV1, type ScoreResultV1 } from './protocol';
 import { LIMITS } from './contract';
 
+export const POLICY_VERSION = 'inbox-scoring-2';
+
 export interface Assessment {
   version: 1;
-  policyVersion: 'inbox-shadow-1';
+  policyVersion: 'inbox-shadow-1' | typeof POLICY_VERSION;
   status: 'partial' | 'unavailable';
   inputIncomplete: boolean;
   result: ScoreResultV1 | null;
 }
-export const unavailable = (): Assessment => ({version:1, policyVersion:'inbox-shadow-1', status:'unavailable', inputIncomplete:true, result:null});
+export const unavailable = (): Assessment => ({version:1, policyVersion:POLICY_VERSION, status:'unavailable', inputIncomplete:true, result:null});
 export const RAW_INSPECTION_BYTES = 131072;
 
 /** Scoring-only preflight; it does not make the inherited MIME parser safe. */
@@ -36,11 +38,15 @@ export function project(parsed: Email, envelopeFrom?: string): ScoreInputV1 {
   };
   const subject = field(parsed.subject, 2048);
   let text = field(parsed.text, 32768);
+  // Do not replace a present over-budget plain body with a different HTML body.
+  const plainOmitted = Boolean(parsed.text) && !text;
+  let html = plainOmitted || text.trim() ? undefined : field(parsed.html, 32768) || undefined;
   // PostalMime flattens inline message/rfc822 bodies beneath these generated headers.
   // shortcut: omit the whole scoring body; split current/forwarded provenance if mixed-mail recall requires it.
-  if (/(?:^|[\r\n])-{3,}[\r\n]+(?:From|Subject|Date|To|Cc|Bcc):[ \t]/.test(text)) {
+  if (/(?:^|[\r\n])-{3,}[\r\n]+(?:From|Subject|Date|To|Cc|Bcc):[ \t]/.test(text) || html?.includes('class="postal-email-header"')) {
     // Preserve quote status so copied subject/name clues cannot cause automatic routing.
     text = '>';
+    html = undefined;
     complete = false;
   }
   const urls: string[] = [];
@@ -97,10 +103,10 @@ export function project(parsed: Email, envelopeFrom?: string): ScoreInputV1 {
     if (headerBytes > 8192) { complete = false; break; }
     headers.push({name:h.key.toLowerCase(), value});
   }
-  // HTML, attachments and remaining headers are intentionally uninspected.
+  // HTML visibility, attachments and remaining headers are not completely inspected.
   // Keep omissions explicit even when the upstream service says complete.
   if (parsed.html || parsed.attachments.length || parsed.headers.length !== headers.length || (parsed.replyTo?.length ?? 0) > 1) complete = false;
-  return {schemaVersion:'1', policyVersion:'inbox-shadow-1', subject, text, urls, addresses, headers,
+  return {schemaVersion:'1', policyVersion:POLICY_VERSION, subject, text, urls, addresses, headers, ...(html ? {html} : {}),
     sourceComplete:complete, transport:{provenance:'unknown',complete:false,spf:'unknown',dkim:'unknown',dmarc:'unknown'}};
 }
 
@@ -111,7 +117,7 @@ export async function assessArrival(env: Env, parsed: Email, rawInspectable: boo
     if (!rawInspectable || !env.MAIL_SCORER) return unavailable();
     const input = project(parsed, envelopeFrom);
     // A body omitted by the inspection budget must not become a subject-only verdict.
-    if (parsed.text && !input.text) return unavailable();
+    if ((parsed.text && !input.text) || (!input.text.trim() && parsed.html && !input.html)) return unavailable();
     if (preference) input.preferences = {senderAllowed:preference === 'allow',senderBlocked:preference === 'block'};
     const bytes = encodeBoundedJson(JSON.stringify(input));
     if (!bytes) return unavailable();
@@ -129,7 +135,7 @@ export async function assessArrival(env: Env, parsed: Email, rawInspectable: boo
         (r.id === 'sender_allowed' && preference !== 'allow') ||
         (r.id === 'sender_blocked' && preference !== 'block'))) return unavailable();
     // Unverified transport always leaves this intake assessment partial.
-    return {version:1, policyVersion:'inbox-shadow-1', status:'partial', inputIncomplete:!input.sourceComplete, result:decoded.result};
+    return {version:1, policyVersion:POLICY_VERSION, status:'partial', inputIncomplete:!input.sourceComplete, result:decoded.result};
   } catch { return unavailable(); }
   finally { if (timer !== undefined) clearTimeout(timer); }
 }
@@ -139,8 +145,11 @@ export function shouldQuarantine(assessment: Assessment | undefined, preference:
   if (!result || assessment.status === 'unavailable' || result.status === 'unavailable' ||
       preference === undefined || preference === 'allow') return false;
   if (preference === 'block') return true;
-  if (result.ruleSetVersion === 'rules-2' && result.signals.spam === 'present' &&
+  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3') && result.signals.spam === 'present' &&
       result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;
+  if (result.ruleSetVersion === 'rules-3' && result.heuristicScore >= 60 && result.signals.spam === 'present' &&
+      result.limitsHit.every(limit => ['auth_unknown', 'source_incomplete', 'html_uninspected', 'identity_uninspected'].includes(limit)) &&
+      result.reasons.some(reason => reason.id === 'statistical_spam' && reason.contribution > 0)) return true;
   // shortcut: conservative rules-1 policy, recalibrate with privately labelled mail before broadening.
   return result.heuristicScore >= 45 &&
     result.limitsHit.every(limit => limit === 'auth_unknown' || limit === 'source_incomplete') &&

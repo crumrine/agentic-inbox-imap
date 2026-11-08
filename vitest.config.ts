@@ -10,7 +10,8 @@ import { buildSync } from "esbuild";
 import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
 
-const SCORER_PIN = "faa15bea06db52f2dc240257d5335a66a933f909";
+const SCORER_PIN = "041e79c5f56880b8eff0e210968569461cb95fc0";
+const PREVIOUS_SCORER_PIN = "faa15bea06db52f2dc240257d5335a66a933f909";
 const LEGACY_SCORER_PIN = "2fab406320ae3b3596345d2c76e0ef8a08593211";
 
 function buildScorerWorkers() {
@@ -38,10 +39,14 @@ function buildScorerWorkers() {
 	const current = bundle(join(dir, "workers/private/index.ts"));
 	const temp = mkdtempSync(join(tmpdir(), "mail-scoring-legacy-"));
 	let legacy: string;
+	let previous: string;
 	try {
 		const archive = execFileSync("git", ["-C", dir, "archive", LEGACY_SCORER_PIN, "tsconfig.json", "packages/core", "workers/private"], { maxBuffer: 8 * 1024 * 1024 });
 		execFileSync("tar", ["-x", "-C", temp], { input: archive });
 		legacy = bundle(join(temp, "workers/private/index.ts"));
+		const old = execFileSync("git", ["-C", dir, "archive", PREVIOUS_SCORER_PIN, "tsconfig.json", "packages/core", "workers/private"], {maxBuffer:8*1024*1024});
+		execFileSync("tar", ["-x", "-C", temp], {input:old});
+		previous = bundle(join(temp, "workers/private/index.ts"));
 	} finally {
 		rmSync(temp, { recursive: true, force: true });
 	}
@@ -49,8 +54,10 @@ function buildScorerWorkers() {
 		serviceBindings: {
 			MAIL_SCORER: "mail-scoring-private",
 			MAIL_SCORER_LEGACY: "mail-scoring-legacy",
+			MAIL_SCORER_PREVIOUS: "mail-scoring-previous",
 		},
 		workers: [
+			{ name:"mail-scoring-previous", compatibilityDate:"2025-11-28", modules:[{type:"ESModule" as const, path:"index.mjs", contents:previous}] },
 			{
 				name: "mail-scoring-private",
 				compatibilityDate: "2025-11-28",
