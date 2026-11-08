@@ -1,0 +1,77 @@
+RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-HTLlO9
+
+uncaught exception; source = Uncaught (in promise); stack = TypeError: Cannot read properties of undefined (reading 'folder')
+    at /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-HTLlO9/workers/durableObject/index.ts:1253:50
+    at MailboxDO.setSpamDisposition (/private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-HTLlO9/workers/durableObject/index.ts:1242:33)
+    at Users/brian/projects/agentic-inbox-dev-993/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:365:47
+ ❯ test/shadow-scoring.test.ts (67 tests | 1 failed | 66 skipped) 96ms
+     × authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs 45ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 66 skipped (67)
+     Errors  1 error
+   Start at  18:33:29
+   Duration  1.16s (transform 314ms, setup 358ms, import 462ms, tests 96ms, environment 0ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+stderr | test/shadow-scoring.test.ts > actual app email and authenticated REST in local workerd > authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs
+TypeError: Cannot read properties of undefined (reading 'folder')
+    at /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-HTLlO9/workers/index.ts:208:20
+    at dispatch (/Users/brian/projects/agentic-inbox-dev-993/node_modules/hono/dist/compose.js:22:17)
+    at /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-HTLlO9/workers/lib/mailbox.ts:41:2
+    at dispatch (/Users/brian/projects/agentic-inbox-dev-993/node_modules/hono/dist/compose.js:22:17)
+    at cors2 (/Users/brian/projects/agentic-inbox-dev-993/node_modules/hono/dist/middleware/cors/index.js:79:5)
+    at dispatch (/Users/brian/projects/agentic-inbox-dev-993/node_modules/hono/dist/compose.js:22:17)
+    at dispatch (/Users/brian/projects/agentic-inbox-dev-993/node_modules/hono/dist/compose.js:22:17)
+    at /Users/brian/projects/agentic-inbox-dev-993/node_modules/hono/dist/hono-base.js:301:25
+    at request (/private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-HTLlO9/test/shadow-scoring.test.ts:79:13)
+    at /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-HTLlO9/test/shadow-scoring.test.ts:266:13 {
+  remote: true
+}
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/shadow-scoring.test.ts > actual app email and authenticated REST in local workerd > authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs
+AssertionError: expected 500 to be 404 // Object.is equality
+
+- Expected
++ Received
+
+- 404
++ 500
+
+ ❯ test/shadow-scoring.test.ts:266:98
+    264|     expect(await query(mailbox(BOX),'SELECT * FROM sender_preferences'…
+    265|     await env.BUCKET.put('mailboxes/other@example.com.json','{}');
+    266|     expect((await request(b.e,'/api/v1/mailboxes/other@example.com/spa…
+       |                                                                                                  ^
+    267|     expect((await request(b.e,`${base}/spam-feedback`,{...body,emailId…
+    268|     expect((await request(b.e,`${base}/spam-feedback`,{...body,emailId…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+TypeError: Cannot read properties of undefined (reading 'folder')
+ ❯ workers/durableObject/index.ts:1253:50
+    1251|             if ((old?.revision ?? 0) !== expectedRevision) return {ok:…
+    1252|             const revision = expectedRevision + 1;
+    1253|             if ((disposition === 'spam' && email.folder !== Folders.SP…
+       |                                                  ^
+    1254|             this.db.insert(schema.spamDispositions).values({email_id:e…
+    1255|             return {ok:true, revision};
+ ❯ MailboxDO.setSpamDisposition workers/durableObject/index.ts:1242:33
+ ❯ Users/brian/projects/agentic-inbox-dev-993/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:365:47
+
+This error originated in "test/shadow-scoring.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
