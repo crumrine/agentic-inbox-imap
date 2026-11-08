@@ -110,6 +110,8 @@ export async function assessArrival(env: Env, parsed: Email, rawInspectable: boo
   try {
     if (!rawInspectable || !env.MAIL_SCORER) return unavailable();
     const input = project(parsed, envelopeFrom);
+    // A body omitted by the inspection budget must not become a subject-only verdict.
+    if (parsed.text && !input.text) return unavailable();
     if (preference) input.preferences = {senderAllowed:preference === 'allow',senderBlocked:preference === 'block'};
     const bytes = encodeBoundedJson(JSON.stringify(input));
     if (!bytes) return unavailable();

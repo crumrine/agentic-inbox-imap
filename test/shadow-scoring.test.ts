@@ -227,15 +227,18 @@ describe('actual app email and authenticated REST in local workerd', () => {
       error.mockRestore();warn.mockRestore();
     });
   });
-  it('oversized/truncated raw skips optional RPC, oversized fields and HTML remain incomplete',async()=>{
+  it('oversized/truncated raw and bodies skip optional RPC while HTML omissions remain incomplete',async()=>{
     await registered();const b=bindings();
     for(const [raw,padding] of [[bytes(BOX,'x'.repeat(131073)),0],[bytes(),5]] as const){
       const row=await deliver(b.e,raw,BOX,padding);
       expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0].status).toBe('unavailable');
     }
     expect(b.scoreV1).not.toHaveBeenCalled();
-    await deliver(b.e,bytes(BOX,'界'.repeat(12000)));
-    const input=JSON.parse(new TextDecoder().decode(b.scoreV1.mock.calls[0][1]));
+    const oversized = bytes(BOX,'界'.repeat(12000));
+    const row = await deliver(b.e,oversized);
+    expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0]).toMatchObject({status:'unavailable', result:null});
+    expect(b.scoreV1).not.toHaveBeenCalled();
+    const input = project(await PostalMime.parse(oversized));
     expect(input.text).toBe('');expect(input.sourceComplete).toBe(false);
     const parsed=await PostalMime.parse(bytes()); parsed.html='<img src="https://never-fetch.invalid">';
     expect(project(parsed).sourceComplete).toBe(false);expect(project(parsed)).not.toHaveProperty('html');
@@ -321,7 +324,7 @@ function realBindings(mode: Env['MAIL_SCORING_MODE'] = 'filter', scorer = env.MA
 }
 
 const reportedPhishing = 'Security team alert: please verify your password immediately.';
-function inlinePhishingReport(nestedHeaders: string[], subject = 'Forwarded security report') {
+function inlinePhishingReport(nestedHeaders: string[], subject = 'Forwarded security report', body = reportedPhishing) {
   return new TextEncoder().encode([
     'From: Security Team <sender@example.test>',
     'Reply-To: helpdesk@other.example.org',
@@ -333,7 +336,7 @@ function inlinePhishingReport(nestedHeaders: string[], subject = 'Forwarded secu
     'Please investigate the attached phishing report.',
     '--inline-report', 'Content-Type: message/rfc822', 'Content-Disposition: inline', '',
     ...nestedHeaders, 'MIME-Version: 1.0', 'Content-Type: text/plain', '',
-    reportedPhishing, '--inline-report--', '',
+    body, '--inline-report--', '',
   ].join('\r\n'));
 }
 
@@ -406,6 +409,20 @@ describe('inline forwarded MIME inspection provenance', () => {
         result:{ruleSetVersion, heuristicScore:45, limitsHit:expect.arrayContaining(['quoted_content'])},
       });
     }
+  });
+
+  it('keeps oversized inline reports in Inbox with unavailable inspection rather than subject-only quarantine', async () => {
+    await registered();
+    const b = realBindings('filter');
+    const raw = inlinePhishingReport(['From: reported@example.test'], 'Fwd: verify your password', reportedPhishing + 'x'.repeat(32768));
+    expect(raw.length).toBeLessThan(131072);
+    const row = await deliver(b.e, raw);
+    expect(row).toMatchObject({folder_id:'inbox'});
+    expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0]).toMatchObject({
+      status:'unavailable', inputIncomplete:true, result:null,
+    });
+    expect(new Uint8Array(await (await env.BUCKET.get(row.raw_key))!.arrayBuffer())).toEqual(raw);
+    expect(b.scoreV1).not.toHaveBeenCalled();
   });
 
   it('keeps ordinary separator/header-like bodies inspectable and bounds forwarded body omission', async () => {
@@ -746,16 +763,17 @@ describe('joined local workerd GTUBE integration with separate actual scorer RPC
       inputIncomplete:true,
       result:{ruleSetVersion:'rules-2', heuristicScore:0, reasons:[]},
     });
-    // Oversized text field (>32768 bytes) omits text, marks sourceIncomplete, stays in Inbox
+    // An oversized text field skips optional RPC and records unavailable inspection.
+    const callsBeforeFieldLimit = b.scoreV1.mock.calls.length;
     const overFieldRow = await deliver(b.e, bytes(BOX, `${'a'.repeat(32769)}\r\n${GTUBE_MARKER}`));
     expect(overFieldRow.folder_id).toBe('inbox');
     const overFieldState = await mailbox(BOX).getSpamState(overFieldRow.id);
     expect(overFieldState?.assessments[0]).toMatchObject({
-      status:'partial',
+      status:'unavailable',
       inputIncomplete:true,
-      result:{ruleSetVersion:'rules-2', heuristicScore:0, reasons:[]},
+      result:null,
     });
-    expect(overFieldState?.assessments[0].result?.limitsHit).toContain('source_incomplete');
+    expect(b.scoreV1).toHaveBeenCalledTimes(callsBeforeFieldLimit);
     // Oversized raw (>131072 bytes) and zero-padded raw skip RPC and stay in Inbox
     const callsBeforeRawLimits = b.scoreV1.mock.calls.length;
     for (const [raw, padding] of [

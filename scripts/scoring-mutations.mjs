@@ -28,6 +28,10 @@ const parsed = {subject: 'Synthetic', text: 'hello', headers: [], headerLines: [
 const removeInlineForwardGuard = source => source.replace("  if (/(?:^|[\\r\\n])-{3,}[\\r\\n]+(?:From|Subject|Date|To|Cc|Bcc):[ \\t]/.test(text)) {\n    // Preserve quote status so copied subject/name clues cannot cause automatic routing.\n    text = '>';\n    complete = false;\n  }\n", '');
 
 const tests = [
+ ['omitted_body_failure', 'intake.ts', source => source.replace('    if (parsed.text && !input.text) return unavailable();\n', ''), async m => {
+  let calls=0;const assessment=await m.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async()=>{calls++;return wire;}}},{...parsed,text:'x'.repeat(32769)},true);
+  assert.equal(assessment.status,'unavailable');assert.equal(calls,0);
+ }],
  ['inline_quote_provenance', 'intake.ts', source => source.replace("text = '>';", "text = '';"), async m => {
   assert.equal(m.project({...parsed,text:'Report\n----\nFrom: reported@example.test\nVerify your password.'}).text,'>');
  }],
@@ -110,6 +114,15 @@ if (process.argv.includes('--workerd')) {
  assert.equal(execFileSync('git', ['-C', scorerRoot, 'status', '--porcelain'], {encoding: 'utf8'}).trim(), '');
 
  const workerdMutants = [
+  {
+   name: 'omitted_body_failure_workerd',
+   repo: 'agentic-inbox-imap',
+   file: 'workers/lib/mail-scoring/intake.ts',
+   mutate: source => source.replace('    if (parsed.text && !input.text) return unavailable();\n', ''),
+   pattern: 'keeps oversized inline reports',
+   spamInboxRegression: false,
+   verifyRestored: true,
+  },
   {
    name: 'inline_quote_provenance_workerd',
    repo: 'agentic-inbox-imap',
@@ -237,7 +250,7 @@ if (process.argv.includes('--workerd')) {
     assert.match(log, /-\s*"folder_id":\s*"spam"[\s\S]*\+\s*"folder_id":\s*"inbox"/, `${name}: expected Spam-versus-Inbox regression`);
    }
 
-   const inlineRegression = ['inline_forward_omission_workerd', 'inline_quote_provenance_workerd'].includes(name);
+   const inlineRegression = ['inline_forward_omission_workerd', 'inline_quote_provenance_workerd', 'omitted_body_failure_workerd'].includes(name);
    if (inlineRegression) {
     assert.match(log, /-\s*"folder_id":\s*"inbox"[\s\S]*\+\s*"folder_id":\s*"spam"/, 'expected legitimate report Inbox-to-Spam regression');
    }

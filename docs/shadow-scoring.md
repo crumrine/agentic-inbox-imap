@@ -134,6 +134,13 @@ existing URL regressions. Set `EVIDENCE_DIR=docs/evidence/dev-1001` when running
 the contract, scoring-mutation and projection-growth scripts to preserve older
 receipts.
 
+If the plain body exceeds the existing field budget, optional inspection is
+unavailable and no RPC runs. That also protects large forwarded reports whose
+generated header marker was omitted with the body: subject-only clues cannot
+route them automatically. Raw delivery is retained; unavailable inspection is
+distinct from a scored zero. Explicit block routing still requires successful
+inspection, as it does for other inspection failures.
+
 DEV-993 adoption map uses original synthetic fixtures and implementation. The
 Rspamd composite-test approach inspired exact reason/contribution/disposition
 assertions; no Rspamd code, weights or corpus was copied. Existing Mailguard-derived
