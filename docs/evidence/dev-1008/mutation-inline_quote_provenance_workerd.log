@@ -1,0 +1,37 @@
+RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-lidoCD
+
+ ❯ test/shadow-scoring.test.ts (80 tests | 1 failed | 79 skipped) 136ms
+     × preserves explicit sender block on inspectable inline reports 88ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 79 skipped (80)
+   Start at  10:26:02
+   Duration  2.82s (transform 871ms, setup 1.14s, import 822ms, tests 136ms, environment 0ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/shadow-scoring.test.ts > inline forwarded MIME inspection provenance > preserves explicit sender block on inspectable inline reports
+AssertionError: expected { …(5) } to match object { folder_id: 'spam' }
+(4 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "folder_id": "spam",
++   "folder_id": "inbox",
+  }
+
+ ❯ test/shadow-scoring.test.ts:435:17
+    433|     expect((await request(b.e, `${base}/sender-preference`, {sender:'s…
+    434|     const row = await deliver(b.e, inlinePhishingReport(['From: report…
+    435|     expect(row).toMatchObject({folder_id:'spam'});
+       |                 ^
+    436|     expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0]).…
+    437|       status:'partial', result:{heuristicScore:85, limitsHit:expect.ar…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯

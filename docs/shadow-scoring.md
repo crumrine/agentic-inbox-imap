@@ -1,6 +1,6 @@
 # Shadow scoring and manual feedback (DEV-878)
 
-This document describes source behavior. OPS-614 owns the manual deployment and
+This document describes source behavior. OPS-615 owns the manual deployment and
 live receipts; merging source does not establish production activation. GitHub
 Actions and automatic Cloudflare Builds remain paused.
 
@@ -10,51 +10,51 @@ through the private `MAIL_SCORER` service binding, then applies the recoverable
 policy in [quarantine.md](quarantine.md). Reads, refreshes, IMAP and ordinary moves
 do not score again. Failures retain Inbox delivery; there is no historical scan.
 
-## Source pins and compatibility (DEV-1005)
+## Source pins and compatibility (DEV-1008)
 
-The current contract and protocol copies come from merged `mail-scoring` PR #11,
-`5ed110e5cdfc9905fc5ee2940a4a39cd9e4864b0`, with only the protocol import path
+The current contract and protocol copies come from merged `mail-scoring` PR #13,
+`0041d47f20d2565dc8725a3c11f0ed1af113ca74`, with only the protocol import path
 changed. The engine remains `0.1.0`, schema/RPC remain `1`, and the rules are
-`rules-5`. No scanner package or new dependency is imported into Inbox. The
+`rules-6`. No scanner package or new dependency is imported into Inbox. The
 independent scorer contains the bounded parser and frozen public-corpus model;
-see that repository's `docs/generalization.md` for provenance and limitations.
+see that repository's `docs/recall-correction.md` for provenance and limitations.
 
-The strict decoder accepts `rules-1 | rules-2 | rules-3 | rules-4 | rules-5`, rejects GTUBE under
+The strict decoder accepts `rules-1 | rules-2 | rules-3 | rules-4 | rules-5 | rules-6`, rejects GTUBE under
 rules-1, and rejects statistical reasons/new HTML or statistics limits under
 older rule sets. Unknown versions/reasons, altered static text, inconsistent or
 nonfinite contributions, JSON depth over 6 and output over 4096 UTF-8 bytes are
 rejected. Invented authentication or preferences are also rejected.
 
-The arrival policy is now `inbox-scoring-4`. Storage also accepts historical
-`inbox-shadow-1`, `inbox-scoring-2` and `inbox-scoring-3` assessments without rewriting their policy or rule version.
+The arrival policy is now `inbox-scoring-5`. Storage also accepts historical
+`inbox-shadow-1`, `inbox-scoring-2` `inbox-scoring-3` and `inbox-scoring-4` assessments without rewriting their policy or rule version.
 There is no schema migration or old-mail re-evaluation.
 
 `node scripts/check-scoring-contract.mjs /path/to/mail-scoring` requires the exact
-current pin. `evidence/dev-1005/contract.json` records contract digests, current
+current pin. `evidence/dev-1008/contract.json` records contract digests, current
 plain/HTML general-spam results, and actual previous rules-2
 (`faa15bea06db52f2dc240257d5335a66a933f909`) and legacy rules-1
 (`2fab406320ae3b3596345d2c76e0ef8a08593211`) compatibility.
-Historical rules-3 general-1 scores remain readable but never automatically route; its first paired acceptance failed on legitimate mail. Historical rules-4 general-2 also remains readable without automatic content routing. GTUBE still works under rules-2/3/4/5. The rules-4 context reason remains version-specific; the new rules-5 generalized reason is rejected under every older version.
+Historical general-1/2/3 statistical evidence remains readable but does not trigger automatic generic routing. GTUBE remains supported under rules-2–6. Statistical reasons are accepted only under their exact rule version; the new `statistical_linear_spam` reason is valid only under rules-6. Tests run six actual private Worker versions, including the deployed rules-5 scorer.
 Historical evidence remains unchanged in its original directories.
 
 ### Manual rollout and rollback
 
-OPS-614 requires reviewed merged source, DEV-999 paired held-out acceptance,
+OPS-615 requires reviewed merged source, DEV-1009 paired held-out acceptance,
 independent review of the exact artifacts/plan, and fresh production config
-receipts. Deploy this caller before the rules-5 private scorer. The caller works
+receipts. Deploy this caller before the rules-6 private scorer. The caller works
 with either older scorer while the transition happens. No public scorer route,
 preview, new binding, gateway change or automatic workflow is needed.
 
 To stop future automatic routing, use this compatible caller with mode `shadow`
 or `off`; stored mail, folders, UIDs, preferences and assessments remain intact.
-To roll the scorer back to rules-2 or rules-1, retain this caller. Roll back an
+To roll the scorer back to rules-5 or an older compatible version, retain this caller. Roll back an
 older caller only after its compatible scorer is restored (or scoring is off).
 A source merge alone does not prove any of these operations occurred.
 
 ## Inspection bounds and inherited limits
 
 Before scoring extraction, inspect only raw buffers up to 131072 bytes and
-skip scoring for larger buffers or zero padding. This is a scoring limit,
+skip scoring for larger buffers or a stream whose actual byte count differs from its declared size. A complete MIME message containing NUL bytes remains eligible; binary attachment bytes are never projected. The stream reader explicitly supplies byte completeness, and missing/false completeness always skips scoring. This is a scoring limit,
 not a mail acceptance limit. Off skips this inspection altogether. The current
 intake still buffers and parses accepted mail up to its inherited 25 MiB
 limit with PostalMime 2.7.3, before mailbox resolution. Raw storage also derives

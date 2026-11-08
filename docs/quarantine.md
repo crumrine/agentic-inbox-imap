@@ -1,8 +1,8 @@
 # Recoverable Spam (DEV-879)
 
-Current source behavior includes DEV-1005 generalized content integration and the
-DEV-1001 inline-forward safeguard. OPS-614 owns the separately verified manual
-rollout after independent source review and DEV-999 paired acceptance. Historical
+Current source behavior includes DEV-1008 linear content integration and the
+DEV-1001 inline-forward safeguard. OPS-615 owns the separately verified manual
+rollout after independent source review and DEV-1009 paired acceptance. Historical
 source/build evidence does not establish the current deployment. Actions and
 automatic Builds remain paused.
 
@@ -14,24 +14,22 @@ default; shadow still records evidence without moving mail. Owner-authorized
 `MAIL_SCORING_MODE=filter` routes **new arrivals only** directly to Spam when:
 
 - The sender has an explicit mailbox-local block preference and scoring succeeded;
-- The validated `rules-2`, `rules-3`, `rules-4` or `rules-5` result carries `signals.spam === "present"` and the
+- The validated `rules-2`, `rules-3`, `rules-4`, `rules-5` or `rules-6` result carries `signals.spam === "present"` and the
   `gtube` reason with positive contribution (the exact 68-byte uppercase ASCII
   standard GTUBE test marker on an unquoted plain-text line), without requiring
   unrelated identity, sensitive-request or transport-auth evidence; or
-- The validated `rules-5` score is at least 60, spam is present and a positive
-  `statistical_generalized_spam` contribution is present. Only `auth_unknown`,
+- The validated `rules-6` score is at least 60, spam is present and a positive
+  `statistical_linear_spam` contribution is present. Only `auth_unknown`,
   `source_incomplete`, `html_uninspected` and `identity_uninspected` limits are
   tolerated on this path; quoted, over-budget or otherwise uninspected evidence
-  does not cause automatic statistical routing. The fixed model's internal
-  cutoff is 0.99 with at least 20 informative clues; neither value is a calibrated
-  probability for this mailbox. DEV-999 measures the complete caller path; or
-- The validated `rules-1`, `rules-2`, `rules-3`, `rules-4` or `rules-5` score is at least 45, with a full sensitive-request
+  does not cause automatic statistical routing. The fixed model requires five distinct positive body words, at least 50% known eligible body features and supported normalized letters. Its internal 0.99 cutoff is not a calibrated confidence for this mailbox. DEV-1009 measures the complete caller path; or
+- The validated `rules-1`, `rules-2`, `rules-3`, `rules-4`, `rules-5` or `rules-6` score is at least 45, with a full sensitive-request
   contribution and independent suspicious identity evidence. Only `auth_unknown`
   and `source_incomplete` inspection limits are tolerated for this ordinary
   heuristic path. Other inspection limits retain Inbox delivery. This conservative
   policy is not a calibrated probability.
 
-Historical rules-3 general-1 evidence is readable but cannot automatically route on its statistical reason. Its failed acceptance is retained; historical rules-4 content evidence is also readable without automatic generic routing. Current rules-5 uses the generalized model.
+Historical rules-3/4/5 statistical evidence remains readable without automatic generic routing. Current rules-6 uses the reviewed fixed general-4 model; unsupported text and resource-limit cases abstain rather than being declared safe.
 
 An explicit allow preference overrides automatic routing — including for a
 validated `gtube` test-marker message — keeping the message in Inbox while
