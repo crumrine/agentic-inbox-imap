@@ -3,16 +3,16 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-const out=process.env.EVIDENCE_DIR || 'docs/evidence/dev-1005';
+const out=process.env.EVIDENCE_DIR || 'docs/evidence/dev-1008';
 await fs.mkdir(out,{recursive:true});
 const browser=await chromium.launch({headless:true,...(process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}:{})});
 const hostile=`<script>window.previewExecuted=1</script><img src="https://tracker.invalid/pixel" onerror="window.previewExecuted=2"><img srcset="https://tracker.invalid/2x 2x"><style>@import 'https://tracker.invalid/css';body{background:url(https://tracker.invalid/bg)}</style><svg onload="window.previewExecuted=3"></svg><iframe src="https://tracker.invalid/frame"></iframe><form action="https://tracker.invalid/form"><input autofocus></form><meta http-equiv="refresh" content="0;url=https://tracker.invalid/refresh"><a href="https://tracker.invalid/link">click</a>`;
 const gtubeMarker='XJS*C4JDBQADN1.NSBN3*2IDNEN*GTUBE-STANDARD-ANTI-UBE-TEST-EMAIL*C.34X';
 const gtubeReason='The plain-text body contains the standard GTUBE test marker (intentional test trigger, not a calibrated spam probability).';
 const gtubeBody=`This is the GTUBE, the Generic Test for Unsolicited Bulk Email.\n\n${gtubeMarker}\n`;
-const generalEvidence=JSON.parse(await fs.readFile('docs/evidence/dev-1005/contract.json','utf8'));
+const generalEvidence=JSON.parse(await fs.readFile(out+'/contract.json','utf8'));
 const generalResult=generalEvidence.generalResults.html.result;
-const generalReason=generalResult.reasons.find(r=>r.id==='statistical_generalized_spam').reason;
+const generalReason=generalResult.reasons.find(r=>r.id==='statistical_linear_spam').reason;
 const results=[];
 const oversizedBody=hostile+'x'.repeat(20000);
 try {

@@ -28,10 +28,11 @@ function resultValid(r:unknown):r is ScoreResultV1 {
     if(r.ruleSetVersion!=='rules-3'&&id==='statistical_spam')return false;
     if(r.ruleSetVersion!=='rules-4'&&id==='statistical_context_spam')return false;
     if(r.ruleSetVersion!=='rules-5'&&id==='statistical_generalized_spam')return false;
+    if(r.ruleSetVersion!=='rules-6'&&id==='statistical_linear_spam')return false;
     if(v.reason!==REASONS[id]||typeof v.contribution!=='number'||!Number.isFinite(v.contribution)||v.contribution<0||v.contribution>RULE_CAPS[id])return false;
     seen.add(id);sum+=v.contribution;
   }
-  if(r.ruleSetVersion!=='rules-3'&&r.ruleSetVersion!=='rules-4'&&r.ruleSetVersion!=='rules-5'&&r.limitsHit.some(limit=>limit==='html_limit'||limit==='statistical_limit'))return false;
+  if(r.ruleSetVersion!=='rules-3'&&r.ruleSetVersion!=='rules-4'&&r.ruleSetVersion!=='rules-5'&&r.ruleSetVersion!=='rules-6'&&r.limitsHit.some(limit=>limit==='html_limit'||limit==='statistical_limit'))return false;
   if(sum!==r.heuristicScore||!r.limitsHit.every(v=>LIMIT_IDS.includes(v))||new Set(r.limitsHit).size!==r.limitsHit.length)return false;
   if(r.status==='unavailable')return ['invalid_input','request_limit','invalid_json'].includes(r.error as string)&&sum===0&&r.reasons.length===0&&r.limitsHit.length===0&&Object.values(r.signals).every(v=>v==='unknown');
   return r.error===null && (r.status==='partial'?r.limitsHit.length>0:r.limitsHit.length===0);

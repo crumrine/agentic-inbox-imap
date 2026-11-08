@@ -1,0 +1,3 @@
+# DEV-1008 source verification
+
+Rules-6/general-4 integration and explicit actual-stream byte completeness. This source ticket adds no deployment, scan, deletion, outbound mail or dependency. receipt.json records the exact source dependency, full checks and digests. Mutation logs preserve deliberately broken and restored runs. The actual SPA uses the existing synthetic HTTP bridge; joined workerd tests separately verify MIME/RPC/DO/R2, quarantine and recovery. Fixed original legitimate controls are retained, including prior rejected-model failures. DEV-1009 must independently assess the frozen fresh cohort on both merged sources before OPS-615 can deploy. Zero observed false positives does not guarantee zero future false positives.

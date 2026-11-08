@@ -5,11 +5,11 @@ import type { Env } from '../../types';
 import { decodeResponse, encodeBoundedJson, type ScoreInputV1, type ScoreResultV1 } from './protocol';
 import { LIMITS } from './contract';
 
-export const POLICY_VERSION = 'inbox-scoring-4';
+export const POLICY_VERSION = 'inbox-scoring-5';
 
 export interface Assessment {
   version: 1;
-  policyVersion: 'inbox-shadow-1' | 'inbox-scoring-2' | 'inbox-scoring-3' | typeof POLICY_VERSION;
+  policyVersion: 'inbox-shadow-1' | 'inbox-scoring-2' | 'inbox-scoring-3' | 'inbox-scoring-4' | typeof POLICY_VERSION;
   status: 'partial' | 'unavailable';
   inputIncomplete: boolean;
   result: ScoreResultV1 | null;
@@ -18,11 +18,8 @@ export const unavailable = (): Assessment => ({version:1, policyVersion:POLICY_V
 export const RAW_INSPECTION_BYTES = 131072;
 
 /** Scoring-only preflight; it does not make the inherited MIME parser safe. */
-export function inspectableRaw(raw: Uint8Array): boolean {
-  if (raw.byteLength > RAW_INSPECTION_BYTES) return false;
-  // Do not decode raw MIME. A short declared stream is zero padded by the
-  // existing intake helper; never call that complete scoring input.
-  return !raw.includes(0);
+export function inspectableRaw(raw: Uint8Array, complete: boolean): boolean {
+  return complete === true && raw.byteLength <= RAW_INSPECTION_BYTES;
 }
 
 /** Construct only fixed bounded fields; never serialize a mail object. */
@@ -145,12 +142,12 @@ export function shouldQuarantine(assessment: Assessment | undefined, preference:
   if (!result || assessment.status === 'unavailable' || result.status === 'unavailable' ||
       preference === undefined || preference === 'allow') return false;
   if (preference === 'block') return true;
-  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3' || result.ruleSetVersion === 'rules-4' || result.ruleSetVersion === 'rules-5') && result.signals.spam === 'present' &&
+  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3' || result.ruleSetVersion === 'rules-4' || result.ruleSetVersion === 'rules-5' || result.ruleSetVersion === 'rules-6') && result.signals.spam === 'present' &&
       result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;
   // Only the current model enables content routing; historical assessments remain readable.
-  if (result.ruleSetVersion === 'rules-5' && result.heuristicScore >= 60 && result.signals.spam === 'present' &&
+  if (result.ruleSetVersion === 'rules-6' && result.heuristicScore >= 60 && result.signals.spam === 'present' &&
       result.limitsHit.every(limit => ['auth_unknown', 'source_incomplete', 'html_uninspected', 'identity_uninspected'].includes(limit)) &&
-      result.reasons.some(reason => reason.id === 'statistical_generalized_spam' && reason.contribution > 0)) return true;
+      result.reasons.some(reason => reason.id === 'statistical_linear_spam' && reason.contribution > 0)) return true;
   // shortcut: conservative rules-1 policy, recalibrate with privately labelled mail before broadening.
   return result.heuristicScore >= 45 &&
     result.limitsHit.every(limit => limit === 'auth_unknown' || limit === 'source_incomplete') &&

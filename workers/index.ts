@@ -647,7 +647,7 @@ async function streamToArrayBuffer(stream: ReadableStream, streamSize: number) {
 		result.set(value, bytesRead);
 		bytesRead += value.length;
 	}
-	return result;
+	return {raw:result, complete:bytesRead === streamSize};
 }
 
 /**
@@ -742,9 +742,9 @@ async function receiveEmail(
 		return { status: "rejected", reason: REJECT_REASONS.malformed };
 	}
 
-	const rawEmail = await streamToArrayBuffer(event.raw, event.rawSize);
+	const {raw:rawEmail, complete:rawComplete} = await streamToArrayBuffer(event.raw, event.rawSize);
 	const scoringEnabled = env.MAIL_SCORING_MODE === "shadow" || env.MAIL_SCORING_MODE === "filter";
-	const rawInspectable = scoringEnabled && inspectableRaw(rawEmail);
+	const rawInspectable = scoringEnabled && inspectableRaw(rawEmail, rawComplete);
 	const parsedEmail = await new PostalMime().parse(rawEmail);
 
 	if (!parsedEmail.to?.length || !parsedEmail.to[0].address) {
