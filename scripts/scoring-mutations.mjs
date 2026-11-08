@@ -9,26 +9,31 @@ import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 
-const SCORER_PIN = 'faa15bea06db52f2dc240257d5335a66a933f909';
+const SCORER_PIN = '041e79c5f56880b8eff0e210968569461cb95fc0';
 const LEGACY_SCORER_PIN = '2fab406320ae3b3596345d2c76e0ef8a08593211';
 const root = process.cwd();
-const outDir = resolve(process.env.EVIDENCE_DIR || 'docs/evidence/dev-989');
+const outDir = resolve(process.env.EVIDENCE_DIR || 'docs/evidence/dev-998');
 const records = [];
 const sha256 = text => createHash('sha256').update(text).digest('hex');
 const stripAnsi = text => text.replace(/\x1b\[[0-9;]*m/g, '').replace(/[ \t]+$/gm, '');
 mkdirSync(outDir, {recursive: true});
 
-const contract989 = JSON.parse(readFileSync('docs/evidence/dev-989/contract.json', 'utf8'));
-const wire = JSON.stringify(contract989.fixture);
-const gtubeResult = contract989.gtubePreferenceResults.none.result;
+const contractEvidence = JSON.parse(readFileSync(join(outDir,'contract.json'), 'utf8'));
+const wire = JSON.stringify(contractEvidence.fixture);
+const gtubeResult = contractEvidence.gtubePreferenceResults.none.result;
 const gtubeWire = JSON.stringify({rpcVersion: '1', ok: true, result: gtubeResult});
 const gtubeAssessment = {version: 1, policyVersion: 'inbox-shadow-1', status: 'partial', inputIncomplete: false, result: gtubeResult};
 const parsed = {subject: 'Synthetic', text: 'hello', headers: [], headerLines: [], attachments: []};
 
-const removeInlineForwardGuard = source => source.replace("  if (/(?:^|[\\r\\n])-{3,}[\\r\\n]+(?:From|Subject|Date|To|Cc|Bcc):[ \\t]/.test(text)) {\n    // Preserve quote status so copied subject/name clues cannot cause automatic routing.\n    text = '>';\n    complete = false;\n  }\n", '');
+const removeInlineForwardGuard = source => source.replace("  if (/(?:^|[\\r\\n])-{3,}[\\r\\n]+(?:From|Subject|Date|To|Cc|Bcc):[ \\t]/.test(text) || html?.includes('class=\"postal-email-header\"')) {\n    // Preserve quote status so copied subject/name clues cannot cause automatic routing.\n    text = '>';\n    html = undefined;\n    complete = false;\n  }\n", '');
 
+const statisticalAssessment=contractEvidence.generalResults.plain;
+const removeStatisticalRouting = source => source.replace(/  if \(result\.ruleSetVersion === 'rules-3' && result\.heuristicScore >= 60[\s\S]*?return true;\n/, '');
 const tests = [
- ['omitted_body_failure', 'intake.ts', source => source.replace('    if (parsed.text && !input.text) return unavailable();\n', ''), async m => {
+ ['statistical_routing', 'intake.ts', removeStatisticalRouting, async m => {assert.equal(m.shouldQuarantine(statisticalAssessment,'none'),true);} ],
+ ['html_projection', 'intake.ts', s=>s.replace('...(html ? {html} : {}),',''), async m=>{assert.equal(m.project({...parsed,text:'',html:'<p>body</p>'}).html,'<p>body</p>');}],
+ ['html_source_bound', 'intake.ts', s=>s.replace('field(parsed.html, 32768)','field(parsed.html, 327680)'), async m=>{assert.equal(m.project({...parsed,text:'',html:'é'.repeat(16385)}).html,undefined);}],
+ ['omitted_body_failure', 'intake.ts', source => source.replace('    if ((parsed.text && !input.text) || (!input.text.trim() && parsed.html && !input.html)) return unavailable();\n', ''), async m => {
   let calls=0;const assessment=await m.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async()=>{calls++;return wire;}}},{...parsed,text:'x'.repeat(32769)},true);
   assert.equal(assessment.status,'unavailable');assert.equal(calls,0);
  }],
@@ -69,14 +74,14 @@ const tests = [
  ['manual_authority', 'feedback.ts', s => s.replace('authorities.has(authority)', 'true'), async m => {
   assert.equal(m.hasManualAuthority({mailboxId: 'a@example.test'}, 'a@example.test'), false);
  }],
- ['gtube_routing', 'intake.ts', s => s.replace("  if (result.ruleSetVersion === 'rules-2' && result.signals.spam === 'present' &&\n      result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;\n", ''), async m => {
+ ['gtube_routing', 'intake.ts', s => s.replace("  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3') && result.signals.spam === 'present' &&\n      result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;\n", ''), async m => {
   assert.equal(m.shouldQuarantine(gtubeAssessment, 'none'), true);
  }],
  ['gtube_allow_precedence', 'intake.ts', s => s.replace("|| preference === 'allow'", ''), async m => {
   assert.equal(m.shouldQuarantine(gtubeAssessment, 'allow'), false);
  }],
  ['gtube_version_guard', 'protocol.ts', s => s.replace("if(r.ruleSetVersion==='rules-1'&&id==='gtube')return false;", ''), async m => {
-  assert.equal(m.decodeResponse(gtubeWire.replace('"rules-2"', '"rules-1"')), null);
+  assert.equal(m.decodeResponse(gtubeWire.replace('"rules-3"', '"rules-1"')), null);
  }],
 ];
 
@@ -114,11 +119,22 @@ if (process.argv.includes('--workerd')) {
  assert.equal(execFileSync('git', ['-C', scorerRoot, 'status', '--porcelain'], {encoding: 'utf8'}).trim(), '');
 
  const workerdMutants = [
+  {name:'statistical_routing_workerd',repo:'agentic-inbox-imap',file:'workers/lib/mail-scoring/intake.ts',mutate:removeStatisticalRouting,
+   pattern:'routes actual plain and HTML statistical spam',spamInboxRegression:true,verifyRestored:true},
+  {name:'statistical_detection_workerd',repo:'mail-scoring',file:'packages/core/src/index.ts',mutate:s=>s.replace('!features.gtube&&generalSpam(input,limits)','false'),
+   pattern:'routes actual plain and HTML statistical spam',spamInboxRegression:true,verifyRestored:true},
+  {name:'html_projection_workerd',repo:'agentic-inbox-imap',file:'workers/lib/mail-scoring/intake.ts',mutate:s=>s.replace('...(html ? {html} : {}),',''),
+   pattern:'routes actual plain and HTML statistical spam',spamInboxRegression:true,verifyRestored:true},
+  {name:'html_forward_provenance_workerd',repo:'agentic-inbox-imap',file:'workers/lib/mail-scoring/intake.ts',mutate:s=>s.replace(' || html?.includes(\'class="postal-email-header"\')',''),
+   pattern:'keeps inline forwarded HTML reports',spamInboxRegression:false,verifyRestored:true},
+  {name:'html_source_bound_workerd',repo:'agentic-inbox-imap',file:'workers/lib/mail-scoring/intake.ts',mutate:s=>s.replace('field(parsed.html, 32768)','field(parsed.html, 327680)'),
+   pattern:'bounds selected HTML',spamInboxRegression:false,verifyRestored:true},
+
   {
    name: 'omitted_body_failure_workerd',
    repo: 'agentic-inbox-imap',
    file: 'workers/lib/mail-scoring/intake.ts',
-   mutate: source => source.replace('    if (parsed.text && !input.text) return unavailable();\n', ''),
+   mutate: source => source.replace('    if ((parsed.text && !input.text) || (!input.text.trim() && parsed.html && !input.html)) return unavailable();\n', ''),
    pattern: 'keeps oversized inline reports',
    spamInboxRegression: false,
    verifyRestored: true,
@@ -181,7 +197,7 @@ if (process.argv.includes('--workerd')) {
    name: 'gtube_routing_workerd',
    repo: 'agentic-inbox-imap',
    file: 'workers/lib/mail-scoring/intake.ts',
-   mutate: s => s.replace("  if (result.ruleSetVersion === 'rules-2' && result.signals.spam === 'present' &&\n      result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;\n", ''),
+   mutate: s => s.replace("  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3') && result.signals.spam === 'present' &&\n      result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;\n", ''),
    pattern: 'routes positive GTUBE to Spam',
    spamInboxRegression: true,
    verifyRestored: true,
@@ -200,7 +216,7 @@ if (process.argv.includes('--workerd')) {
  for (const {name, repo, file, mutate, pattern, spamInboxRegression, verifyRestored} of workerdMutants) {
   const temp = mkdtempSync(join(tmpdir(), 'dev-989-mutation-'));
   try {
-   for (const path of ['workers', 'shared', 'test', 'docs/evidence/dev-878', 'docs/evidence/dev-989', 'app', 'package.json', 'package-lock.json', 'vitest.config.ts', 'wrangler.jsonc', 'worker-configuration.d.ts']) {
+   for (const path of ['workers', 'shared', 'test', 'docs/evidence/dev-878', 'docs/evidence/dev-998', 'app', 'package.json', 'package-lock.json', 'vitest.config.ts', 'wrangler.jsonc', 'worker-configuration.d.ts']) {
     cpSync(path, join(temp, path), {recursive: true});
    }
    symlinkSync(join(root, 'node_modules'), join(temp, 'node_modules'), 'dir');
@@ -208,7 +224,10 @@ if (process.argv.includes('--workerd')) {
    let activeScorerDir = scorerRoot;
    if (repo === 'mail-scoring') {
     activeScorerDir = join(temp, 'mail-scoring');
-    cpSync(scorerRoot, activeScorerDir, {recursive: true});
+    execFileSync('git',['clone','--shared','--no-checkout',scorerRoot,activeScorerDir],{stdio:'pipe'});
+    execFileSync('git',['-C',activeScorerDir,'checkout','--detach',SCORER_PIN],{stdio:'pipe'});
+    symlinkSync(join(scorerRoot,'node_modules'),join(activeScorerDir,'node_modules'),'dir');
+    writeFileSync(join(activeScorerDir,'.git/info/exclude'),'node_modules\n');
     assert.equal(execFileSync('git', ['-C', activeScorerDir, 'rev-parse', 'HEAD'], {encoding: 'utf8'}).trim(), SCORER_PIN);
     assert.equal(execFileSync('git', ['-C', activeScorerDir, 'status', '--porcelain'], {encoding: 'utf8'}).trim(), '');
    }
