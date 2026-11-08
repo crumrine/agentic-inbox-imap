@@ -128,8 +128,8 @@ if (process.argv.includes('--workerd')) {
    repo: 'agentic-inbox-imap',
    file: 'workers/lib/mail-scoring/intake.ts',
    mutate: source => source.replace("text = '>';", "text = '';"),
-   pattern: 'keeps copied phishing subjects',
-   spamInboxRegression: false,
+   pattern: 'preserves explicit sender block on inspectable inline reports',
+   spamInboxRegression: true,
    verifyRestored: true,
   },
   {
@@ -250,7 +250,7 @@ if (process.argv.includes('--workerd')) {
     assert.match(log, /-\s*"folder_id":\s*"spam"[\s\S]*\+\s*"folder_id":\s*"inbox"/, `${name}: expected Spam-versus-Inbox regression`);
    }
 
-   const inlineRegression = ['inline_forward_omission_workerd', 'inline_quote_provenance_workerd', 'omitted_body_failure_workerd'].includes(name);
+   const inlineRegression = ['inline_forward_omission_workerd', 'omitted_body_failure_workerd'].includes(name);
    if (inlineRegression) {
     assert.match(log, /-\s*"folder_id":\s*"inbox"[\s\S]*\+\s*"folder_id":\s*"spam"/, 'expected legitimate report Inbox-to-Spam regression');
    }

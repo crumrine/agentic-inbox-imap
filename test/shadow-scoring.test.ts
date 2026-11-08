@@ -425,6 +425,19 @@ describe('inline forwarded MIME inspection provenance', () => {
     expect(b.scoreV1).not.toHaveBeenCalled();
   });
 
+  it('preserves explicit sender block on inspectable inline reports', async () => {
+    await registered();
+    const b = realBindings('filter');
+    expect((await request(b.e, `${base}/sender-preference`, {sender:'sender@example.test', preference:'block', expectedRevision:0})).status).toBe(200);
+    const row = await deliver(b.e, inlinePhishingReport(['From: reported@example.test'], 'Fwd: verify your password'));
+    expect(row).toMatchObject({folder_id:'spam'});
+    expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0]).toMatchObject({
+      status:'partial', result:{heuristicScore:85, limitsHit:expect.arrayContaining(['quoted_content']),
+        reasons:expect.arrayContaining([{id:'sender_blocked', contribution:40, reason:REASONS.sender_blocked}])},
+    });
+    expect(b.scoreV1).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps ordinary separator/header-like bodies inspectable and bounds forwarded body omission', async () => {
     for (const text of ['Meeting notes\n---\nStatus: complete', 'From: Operations\nPlease review the schedule.', '-'.repeat(32000) + '\nFroX: ordinary near-match']) {
       const parsed = await PostalMime.parse(bytes(BOX, text));

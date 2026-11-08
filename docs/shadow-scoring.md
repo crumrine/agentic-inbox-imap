@@ -127,7 +127,9 @@ code. Joined tests check four nested-header variants, stored partial evidence,
 unchanged raw/display, restart, REST and IMAP UID/raw retrieval, with one score
 per arrival. A copied phishing subject still scores 45 but remains in Inbox
 with explicit quoted inspection, while direct current-body phishing at 45 still
-routes to Spam. Removal/restored mutations prove both omission and quote-state
+routes to Spam. Inspectable forwarded reports still honor explicit sender
+blocks through successful partial scoring. Removal/restored mutations prove omission,
+quote-state and over-budget failure
 regressions; ordinary
 separator/header-like controls and 15 within-budget growth cases retain the
 existing URL regressions. Set `EVIDENCE_DIR=docs/evidence/dev-1001` when running
