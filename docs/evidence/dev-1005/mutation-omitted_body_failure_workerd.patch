@@ -1,0 +1,12 @@
+diff --git a/workers/lib/mail-scoring/intake.ts b/workers/lib/mail-scoring/intake.ts
+index 3002b49..61afbf5 100644
+--- a/workers/lib/mail-scoring/intake.ts
++++ b/workers/lib/mail-scoring/intake.ts
+@@ -117,7 +117,6 @@ export async function assessArrival(env: Env, parsed: Email, rawInspectable: boo
+     if (!rawInspectable || !env.MAIL_SCORER) return unavailable();
+     const input = project(parsed, envelopeFrom);
+     // A body omitted by the inspection budget must not become a subject-only verdict.
+-    if ((parsed.text && !input.text) || (!input.text.trim() && parsed.html && !input.html)) return unavailable();
+     if (preference) input.preferences = {senderAllowed:preference === 'allow',senderBlocked:preference === 'block'};
+     const bytes = encodeBoundedJson(JSON.stringify(input));
+     if (!bytes) return unavailable();

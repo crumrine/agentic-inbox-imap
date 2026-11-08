@@ -1,0 +1,38 @@
+RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-FACtL3
+
+ ❯ test/shadow-scoring.test.ts (77 tests | 1 failed | 76 skipped) 67ms
+     × keeps inline forwarded phishing reports in Inbox with intact raw mail and assessments 33ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 76 skipped (77)
+   Start at  22:54:32
+   Duration  1.15s (transform 302ms, setup 341ms, import 451ms, tests 67ms, environment 0ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/shadow-scoring.test.ts > inline forwarded MIME inspection provenance > keeps inline forwarded phishing reports in Inbox with intact raw mail and assessments
+AssertionError: expected { …(5) } to match object { folder_id: 'inbox', uid: 1 }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "folder_id": "inbox",
++   "folder_id": "spam",
+    "uid": 1,
+  }
+
+ ❯ test/shadow-scoring.test.ts:360:19
+    358|       expect(parsed.text).toContain(reportedPhishing);
+    359|       const row = await deliver(b.e, raw);
+    360|       expect(row).toMatchObject({folder_id:'inbox', uid:ids.length + 1…
+       |                   ^
+    361|       ids.push(row.id);
+    362|       expect(new Uint8Array(await (await env.BUCKET.get(row.raw_key))!…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯

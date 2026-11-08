@@ -1,6 +1,6 @@
 # Recoverable Spam (DEV-879)
 
-Current source behavior includes DEV-1003 contextual general-spam integration and the
+Current source behavior includes DEV-1005 generalized content integration and the
 DEV-1001 inline-forward safeguard. OPS-614 owns the separately verified manual
 rollout after independent source review and DEV-999 paired acceptance. Historical
 source/build evidence does not establish the current deployment. Actions and
@@ -14,24 +14,24 @@ default; shadow still records evidence without moving mail. Owner-authorized
 `MAIL_SCORING_MODE=filter` routes **new arrivals only** directly to Spam when:
 
 - The sender has an explicit mailbox-local block preference and scoring succeeded;
-- The validated `rules-2`, `rules-3` or `rules-4` result carries `signals.spam === "present"` and the
+- The validated `rules-2`, `rules-3`, `rules-4` or `rules-5` result carries `signals.spam === "present"` and the
   `gtube` reason with positive contribution (the exact 68-byte uppercase ASCII
   standard GTUBE test marker on an unquoted plain-text line), without requiring
   unrelated identity, sensitive-request or transport-auth evidence; or
-- The validated `rules-4` score is at least 60, spam is present and a positive
-  `statistical_context_spam` contribution is present. Only `auth_unknown`,
+- The validated `rules-5` score is at least 60, spam is present and a positive
+  `statistical_generalized_spam` contribution is present. Only `auth_unknown`,
   `source_incomplete`, `html_uninspected` and `identity_uninspected` limits are
   tolerated on this path; quoted, over-budget or otherwise uninspected evidence
   does not cause automatic statistical routing. The fixed model's internal
   cutoff is 0.99 with at least 20 informative clues; neither value is a calibrated
   probability for this mailbox. DEV-999 measures the complete caller path; or
-- The validated `rules-1`, `rules-2`, `rules-3` or `rules-4` score is at least 45, with a full sensitive-request
+- The validated `rules-1`, `rules-2`, `rules-3`, `rules-4` or `rules-5` score is at least 45, with a full sensitive-request
   contribution and independent suspicious identity evidence. Only `auth_unknown`
   and `source_incomplete` inspection limits are tolerated for this ordinary
   heuristic path. Other inspection limits retain Inbox delivery. This conservative
   policy is not a calibrated probability.
 
-Historical rules-3 general-1 evidence is readable but cannot automatically route on its statistical reason. Its failed acceptance is retained; it is not the new model.
+Historical rules-3 general-1 evidence is readable but cannot automatically route on its statistical reason. Its failed acceptance is retained; historical rules-4 content evidence is also readable without automatic generic routing. Current rules-5 uses the generalized model.
 
 An explicit allow preference overrides automatic routing — including for a
 validated `gtube` test-marker message — keeping the message in Inbox while

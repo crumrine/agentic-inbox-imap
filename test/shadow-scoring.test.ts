@@ -12,7 +12,7 @@ import worker from '../workers/app';
 import { createAlias } from '../workers/lib/aliases';
 import { toolMarkSpam, toolSetSenderPreference, toolGetEmail, toolGetThread, toolListEmails, toolSearchEmails, toolDraftReply } from '../workers/lib/tools';
 import { decodeResponse } from '../workers/lib/mail-scoring/protocol';
-import { STATISTICAL_SPAM } from './statistical-fixture';
+import { STATISTICAL_SPAM, PHARMACY_SPAM } from './statistical-fixture';
 import { project, shouldQuarantine, POLICY_VERSION, type Assessment } from '../workers/lib/mail-scoring/intake';
 import { GTUBE_MARKER, REASONS, type ScoreResultV1 } from '../workers/lib/mail-scoring/contract';
 import { applyMigrations, mailboxMigrations } from '../workers/durableObject/migrations';
@@ -209,7 +209,7 @@ describe('actual app email and authenticated REST in local workerd', () => {
       if(kind==='malformed') b.scoreV1.mockResolvedValue('SYNTHETIC_PRIVATE_CANARY');
       if(kind==='huge') b.scoreV1.mockResolvedValue('x'.repeat(4097));
       if(kind==='deep') b.scoreV1.mockResolvedValue('['.repeat(10)+'0'+']'.repeat(10));
-      if(kind==='version') b.scoreV1.mockResolvedValue(wire.replace('rules-1','rules-5'));
+      if(kind==='version') b.scoreV1.mockResolvedValue(wire.replace('rules-1','rules-6'));
       if(kind==='rules1_gtube') b.scoreV1.mockResolvedValue(JSON.stringify({rpcVersion:'1',ok:true,result:{...result,ruleSetVersion:'rules-1',heuristicScore:100,signals:{spam:'present',phishing:'unknown',marketing:'unknown'},reasons:[{id:'gtube',contribution:100,reason:REASONS.gtube}]}}));
       if(kind==='arbitrary_reason') b.scoreV1.mockResolvedValue(JSON.stringify({rpcVersion:'1',ok:true,result:{...result,ruleSetVersion:'rules-2',heuristicScore:100,signals:{spam:'present',phishing:'unknown',marketing:'unknown'},reasons:[{id:'custom_spam',contribution:100,reason:REASONS.gtube}]}}));
       if(kind==='forged_reason') b.scoreV1.mockResolvedValue(JSON.stringify({rpcVersion:'1',ok:true,result:{...result,reasons:[{id:'auth_failed',contribution:20,reason:'SYNTHETIC_PRIVATE_CANARY'}],heuristicScore:20}}));
@@ -364,7 +364,7 @@ describe('inline forwarded MIME inspection provenance', () => {
       expect(await mailbox(BOX).getSpamState(row.id)).toMatchObject({
         disposition:'unknown', revision:0,
         assessments:[{policyVersion:POLICY_VERSION, status:'partial', inputIncomplete:true,
-          result:{ruleSetVersion:'rules-4', heuristicScore:20, limitsHit:expect.arrayContaining(['quoted_content']), reasons:[
+          result:{ruleSetVersion:'rules-5', heuristicScore:20, limitsHit:expect.arrayContaining(['quoted_content']), reasons:[
             {id:'reply_to_mismatch', contribution:10},
             {id:'impersonation_combined', contribution:10},
           ]}}],
@@ -401,7 +401,7 @@ describe('inline forwarded MIME inspection provenance', () => {
     await registered();
     const raw = inlinePhishingReport(['From: reported@example.test', 'Subject: Reported message'], 'Fwd: verify your password');
     expect(project(await PostalMime.parse(raw)).subject).toBe('Fwd: verify your password');
-    for (const [scorer, ruleSetVersion] of [[env.MAIL_SCORER, 'rules-4'], [env.MAIL_SCORER_GENERAL1, 'rules-3'], [env.MAIL_SCORER_PREVIOUS, 'rules-2'], [env.MAIL_SCORER_LEGACY, 'rules-1']] as const) {
+    for (const [scorer, ruleSetVersion] of [[env.MAIL_SCORER, 'rules-5'], [env.MAIL_SCORER_CONTEXT, 'rules-4'], [env.MAIL_SCORER_GENERAL1, 'rules-3'], [env.MAIL_SCORER_PREVIOUS, 'rules-2'], [env.MAIL_SCORER_LEGACY, 'rules-1']] as const) {
       const b = realBindings('filter', scorer);
       const row = await deliver(b.e, raw);
       expect(row).toMatchObject({folder_id:'inbox'});
@@ -677,7 +677,7 @@ describe('joined local workerd GTUBE integration with separate actual scorer RPC
         result:{
           schemaVersion:'1',
           engineVersion:'0.1.0',
-          ruleSetVersion:'rules-4',
+          ruleSetVersion:'rules-5',
           status:'partial',
           heuristicScore:100,
           signals:{spam:'present', phishing:'unknown', marketing:'unknown'},
@@ -727,7 +727,7 @@ describe('joined local workerd GTUBE integration with separate actual scorer RPC
     expect(second).toMatchObject({folder_id:'spam', uid:2});
     expect((await request(b.e, `/api/imap/v1/${BOX}/spam/move`, {uids:[2], destination:'inbox'})).status).toBe(200);
     expect(await stub.getEmail(second.id)).toMatchObject({folder_id:'inbox', uid:3});
-    expect((await stub.getSpamState(second.id))).toMatchObject({disposition:'unknown', revision:0, assessments:[{result:{ruleSetVersion:'rules-4', heuristicScore:100}}]});
+    expect((await stub.getSpamState(second.id))).toMatchObject({disposition:'unknown', revision:0, assessments:[{result:{ruleSetVersion:'rules-5', heuristicScore:100}}]});
     expect((await request(b.e, `${base}/emails/${second.id}/move`, {folderId:'spam'})).status).toBe(200);
     expect((await request(b.e, `${base}/emails/${second.id}/move`, {folderId:'inbox'})).status).toBe(200);
     expect(await stub.getEmail(second.id)).toMatchObject({folder_id:'inbox', uid:4});
@@ -751,7 +751,7 @@ describe('joined local workerd GTUBE integration with separate actual scorer RPC
       expect(row.folder_id, label).toBe('spam');
       const state = await mailbox(BOX).getSpamState(row.id);
       expect(state?.assessments[0].result, label).toMatchObject({
-        ruleSetVersion:'rules-4',
+        ruleSetVersion:'rules-5',
         heuristicScore:100,
         signals:{spam:'present'},
         reasons:[{id:'gtube', contribution:100, reason:REASONS.gtube}],
@@ -775,7 +775,7 @@ describe('joined local workerd GTUBE integration with separate actual scorer RPC
     expect(htmlState?.assessments[0]).toMatchObject({
       status:'partial',
       inputIncomplete:true,
-      result:{ruleSetVersion:'rules-4', heuristicScore:0, reasons:[]},
+      result:{ruleSetVersion:'rules-5', heuristicScore:0, reasons:[]},
     });
     // An oversized text field skips optional RPC and records unavailable inspection.
     const callsBeforeFieldLimit = b.scoreV1.mock.calls.length;
@@ -838,7 +838,7 @@ describe('joined local workerd GTUBE integration with separate actual scorer RPC
     expect(shadowRow.folder_id).toBe('inbox');
     expect(shadowB.scoreV1).toHaveBeenCalledTimes(1);
     expect((await mailbox(BOX).getSpamState(shadowRow.id))?.assessments[0].result).toMatchObject({
-      ruleSetVersion:'rules-4',
+      ruleSetVersion:'rules-5',
       heuristicScore:100,
       reasons:[{id:'gtube', contribution:100, reason:REASONS.gtube}],
     });
@@ -853,7 +853,7 @@ describe('joined local workerd GTUBE integration with separate actual scorer RPC
     const allowedGtube = await deliver(b.e, bytes(BOX, gtubeBody));
     expect(allowedGtube.folder_id).toBe('inbox');
     expect((await stub.getSpamState(allowedGtube.id))?.assessments[0].result).toMatchObject({
-      ruleSetVersion:'rules-4',
+      ruleSetVersion:'rules-5',
       heuristicScore:100,
       signals:{spam:'present'},
       reasons:[
@@ -912,7 +912,7 @@ describe('joined local workerd GTUBE integration with separate actual scorer RPC
     expect(quotedDeceptiveState?.assessments[0].result?.limitsHit).toContain('quoted_content');
   });
 
-  it('supports caller-first mixed-version rollout and rollback between rules-1, rules-2, rules-3 and rules-4 while preserving stored assessment readability', async () => {
+  it('supports caller-first mixed-version rollout and rollback between rules-1, rules-2, rules-3, rules-4 and rules-5 while preserving stored assessment readability', async () => {
     await registered();
     const stub = mailbox(BOX);
     // Step 1: Caller updated first, connected to deployed legacy rules-1 scorer
@@ -958,31 +958,43 @@ describe('joined local workerd GTUBE integration with separate actual scorer RPC
     await stub.createEmail('inbox',emailData({id:'general1-policy'}),[],{
       version:1,policyVersion:'inbox-scoring-2',status:'partial',inputIncomplete:true,result:general1Result,
     });
-    // Step 2: Scorer upgraded to rules-4
+    const contextB=realBindings('filter',env.MAIL_SCORER_CONTEXT);
+    const contextGtube=await deliver(contextB.e,bytes(BOX,gtubeBody));expect(contextGtube.folder_id).toBe('spam');
+    const contextGeneral=await deliver(contextB.e,bytes(BOX,STATISTICAL_SPAM));expect(contextGeneral.folder_id).toBe('inbox');
+    const contextResult=(await stub.getSpamState(contextGeneral.id))!.assessments[0].result;
+    expect(contextResult).toMatchObject({ruleSetVersion:'rules-4',heuristicScore:60,reasons:[{id:'statistical_context_spam',contribution:60,reason:REASONS.statistical_context_spam}]});
+    const oldPharmacy=await deliver(contextB.e,bytes(BOX,PHARMACY_SPAM));expect(oldPharmacy.folder_id).toBe('inbox');
+    expect((await stub.getSpamState(oldPharmacy.id))?.assessments[0].result?.heuristicScore).toBe(0);
+    await stub.createEmail('inbox',emailData({id:'context-policy'}),[],{
+      version:1,policyVersion:'inbox-scoring-3',status:'partial',inputIncomplete:true,result:contextResult,
+    });
+    // Step 2: Scorer upgraded to rules-5
     const currentB = realBindings('filter', env.MAIL_SCORER);
     const currentGtube = await deliver(currentB.e, bytes(BOX, gtubeBody));
     expect(currentGtube.folder_id).toBe('spam');
     expect((await stub.getSpamState(currentGtube.id))?.assessments[0].result).toMatchObject({
-      ruleSetVersion:'rules-4',
+      ruleSetVersion:'rules-5',
       heuristicScore:100,
       reasons:[{id:'gtube', contribution:100, reason:REASONS.gtube}],
     });
-    // All four stored rule sets and all three policies survive restart and REST.
+    // All five stored rule sets and all four policies survive restart and REST.
     const restarted = await restart(BOX);
+    expect((await restarted.getSpamState('context-policy'))?.assessments[0]).toMatchObject({policyVersion:'inbox-scoring-3',result:{ruleSetVersion:'rules-4',heuristicScore:60}});
+    expect((await request(currentB.e,`${base}/emails/context-policy/spam`)).status).toBe(200);
     expect((await restarted.getSpamState('general1-policy'))?.assessments[0]).toMatchObject({policyVersion:'inbox-scoring-2',result:{ruleSetVersion:'rules-3',heuristicScore:60}});
     expect((await request(currentB.e,`${base}/emails/general1-policy/spam`)).status).toBe(200);
     expect((await restarted.getSpamState('old-policy'))?.assessments[0].policyVersion).toBe('inbox-shadow-1');
     expect((await restarted.getSpamState(previousGtube.id))?.assessments[0].result?.ruleSetVersion).toBe('rules-2');
     expect((await restarted.getSpamState(legacyGtube.id))?.assessments[0].result?.ruleSetVersion).toBe('rules-1');
-    expect((await restarted.getSpamState(currentGtube.id))?.assessments[0].result?.ruleSetVersion).toBe('rules-4');
+    expect((await restarted.getSpamState(currentGtube.id))?.assessments[0].result?.ruleSetVersion).toBe('rules-5');
     expect((await request(currentB.e, `${base}/emails/${legacyGtube.id}/spam`)).status).toBe(200);
     expect((await request(currentB.e, `${base}/emails/${currentGtube.id}/spam`)).status).toBe(200);
-    // Rollback to either previous scorer keeps new caller and stored rules-4 readable.
+    // Rollback to either previous scorer keeps new caller and stored rules-5 readable.
     expect((await deliver(previousB.e, bytes(BOX, STATISTICAL_SPAM))).folder_id).toBe('inbox');
     const rollbackRow = await deliver(legacyB.e, bytes(BOX, 'Post-rollback arrival'));
     expect(rollbackRow.folder_id).toBe('inbox');
     expect((await stub.getSpamState(rollbackRow.id))?.assessments[0].result?.ruleSetVersion).toBe('rules-1');
-    expect((await stub.getSpamState(currentGtube.id))?.assessments[0].result?.ruleSetVersion).toBe('rules-4');
+    expect((await stub.getSpamState(currentGtube.id))?.assessments[0].result?.ruleSetVersion).toBe('rules-5');
   });
 });
 
@@ -997,26 +1009,26 @@ function htmlBytes(html: string, plain?: string) {
     'Subject: Synthetic general content', 'MIME-Version: 1.0', ...content].join('\r\n'));
 }
 
-describe('joined rules-4 general spam detection', () => {
+describe('joined rules-5 general spam detection', () => {
   it('routes actual plain and HTML statistical spam, preserves raw/assessment and rescues with correct UIDs without rescoring', async () => {
     await registered(); const stub=mailbox(BOX); const b=realBindings();
     await stub.createEmail('inbox', emailData({id:'existing'}), []);
     const saved: Array<{id:string;assessment:Assessment}>=[];
-    for (const [index, raw] of [bytes(BOX, STATISTICAL_SPAM), htmlBytes(`<p>${STATISTICAL_SPAM}</p>`)].entries()) {
+    for (const [index, raw] of [bytes(BOX, STATISTICAL_SPAM), htmlBytes(`<p>${STATISTICAL_SPAM}</p>`), bytes(BOX,PHARMACY_SPAM),htmlBytes(`<p>${PHARMACY_SPAM}</p>`)].entries()) {
       const row=await deliver(b.e,raw);
       expect(row).toMatchObject({folder_id:'spam',uid:index+1});
       const assessment=(await stub.getSpamState(row.id))!.assessments[0];
       expect(assessment).toMatchObject({policyVersion:POLICY_VERSION,status:'partial',result:{
-        ruleSetVersion:'rules-4',heuristicScore:60,signals:{spam:'present'},
-        reasons:[{id:'statistical_context_spam',contribution:60,reason:REASONS.statistical_context_spam}],
+        ruleSetVersion:'rules-5',heuristicScore:60,signals:{spam:'present'},
+        reasons:[{id:'statistical_generalized_spam',contribution:60,reason:REASONS.statistical_generalized_spam}],
       }});
-      if(index===1) expect(assessment.result?.limitsHit).toContain('html_uninspected');
+      if(index%2===1) expect(assessment.result?.limitsHit).toContain('html_uninspected');
       expect(new Uint8Array(await (await env.BUCKET.get(row.raw_key))!.arrayBuffer())).toEqual(raw);
       expect(await stub.getEmail(row.id)).toBeNull();
       expect(await toolGetEmail(b.e,BOX,row.id)).toEqual({error:'Email not found'});
       expect((await request(b.e,`${base}/emails/${row.id}?scope=spam`)).status).toBe(200);
       expect((await request(b.e,`/api/imap/v1/${BOX}/spam/messages`)).status).toBe(200);
-      if(index===0) expect((await request(b.e,`${base}/spam-feedback`,{emailId:row.id,disposition:'not_spam',expectedRevision:0})).status).toBe(200);
+      if(index%2===0) expect((await request(b.e,`${base}/spam-feedback`,{emailId:row.id,disposition:'not_spam',expectedRevision:0})).status).toBe(200);
       else expect((await request(b.e,`/api/imap/v1/${BOX}/spam/move`,{uids:[row.uid],destination:'inbox'})).status).toBe(200);
       expect(await stub.getEmail(row.id)).toMatchObject({folder_id:'inbox',uid:index+2,raw_key:row.raw_key});
       expect((await stub.getSpamState(row.id))?.assessments).toEqual([assessment]);
@@ -1024,7 +1036,7 @@ describe('joined rules-4 general spam detection', () => {
     }
     const restarted=await restart(BOX);
     for(const {id,assessment} of saved) expect((await restarted.getSpamState(id))?.assessments).toEqual([assessment]);
-    expect(b.scoreV1).toHaveBeenCalledTimes(2);expect(b.ai).not.toHaveBeenCalled();expect(b.send).not.toHaveBeenCalled();
+    expect(b.scoreV1).toHaveBeenCalledTimes(4);expect(b.ai).not.toHaveBeenCalled();expect(b.send).not.toHaveBeenCalled();
   });
 
   it('keeps a strong subject with repeated unknown body words in Inbox',async()=>{
@@ -1032,7 +1044,7 @@ describe('joined rules-4 general spam detection', () => {
     const raw=new TextEncoder().encode(['From: Person <sender@example.test>',`To: ${BOX}`,
       `Subject: ${STATISTICAL_SPAM.trim()}`,'MIME-Version: 1.0','Content-Type: text/plain; charset=utf-8','','qzxv '.repeat(5)].join('\r\n'));
     const row=await deliver(b.e,raw);expect(row.folder_id).toBe('inbox');
-    expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0].result).toMatchObject({ruleSetVersion:'rules-4',heuristicScore:0});
+    expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0].result).toMatchObject({ruleSetVersion:'rules-5',heuristicScore:0});
     expect(new Uint8Array(await (await env.BUCKET.get(row.raw_key))!.arrayBuffer())).toEqual(raw);
   });
 
