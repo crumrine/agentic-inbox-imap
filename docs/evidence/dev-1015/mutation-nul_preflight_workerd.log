@@ -1,0 +1,37 @@
+RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-G00SN9
+
+ ❯ test/shadow-scoring.test.ts (81 tests | 1 failed | 80 skipped) 56ms
+     × scores complete chunked MIME with binary NUL attachments while preserving spam and legitimate mail bytes 40ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 80 skipped (81)
+   Start at  13:20:42
+   Duration  1.42s (transform 367ms, setup 407ms, import 513ms, tests 56ms, environment 0ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/shadow-scoring.test.ts > joined rules-8 general spam detection > scores complete chunked MIME with binary NUL attachments while preserving spam and legitimate mail bytes
+AssertionError: expected null to match object { ruleSetVersion: 'rules-8', …(1) }
+
+- Expected:
+{
+  "heuristicScore": 0,
+  "ruleSetVersion": "rules-8",
+}
+
++ Received:
+null
+
+ ❯ test/shadow-scoring.test.ts:1087:80
+    1085|         'Content-Transfer-Encoding: 8bit','',binary,'--binary-fixture-…
+    1086|       const row=await deliver(b.e,raw,BOX,0,true);expect(row.folder_id…
+    1087|       expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0]…
+       |                                                                                ^
+    1088|       expect(new Uint8Array(await (await env.BUCKET.get(row.raw_key))!…
+    1089|       const attachments=await query<{id:string;filename:string;size:nu…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯

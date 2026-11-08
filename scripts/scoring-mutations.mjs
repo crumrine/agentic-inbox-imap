@@ -9,10 +9,10 @@ import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 
-const SCORER_PIN = '143e24e938365c31f2669fd5f9e918408383dc7e';
+const SCORER_PIN = '62919bc8f939bc94c0552fc6a3917c03a3373646';
 const LEGACY_SCORER_PIN = '2fab406320ae3b3596345d2c76e0ef8a08593211';
 const root = process.cwd();
-const outDir = resolve(process.env.EVIDENCE_DIR || 'docs/evidence/dev-1012');
+const outDir = resolve(process.env.EVIDENCE_DIR || 'docs/evidence/dev-1015');
 const records = [];
 const sha256 = text => createHash('sha256').update(text).digest('hex');
 const stripAnsi = text => text.replace(/\x1b\[[0-9;]*m/g, '').replace(/[ \t]+$/gm, '');
@@ -28,12 +28,13 @@ const parsed = {subject: 'Synthetic', text: 'hello', headers: [], headerLines: [
 const removeInlineForwardGuard = source => source.replace("  if (/(?:^|[\\r\\n])-{3,}[\\r\\n]+(?:From|Subject|Date|To|Cc|Bcc):[ \\t]/.test(text) || html?.includes('class=\"postal-email-header\"')) {\n    // Preserve quote status so copied subject/name clues cannot cause automatic routing.\n    text = '>';\n    html = undefined;\n    complete = false;\n  }\n", '');
 
 const statisticalAssessment=contractEvidence.generalResults.plain;
-const removeStatisticalRouting = source => source.replace(/  if \(result\.ruleSetVersion === 'rules-7' && result\.heuristicScore >= 60[\s\S]*?return true;\n/, '');
+const removeStatisticalRouting = source => source.replace(/  if \(result\.ruleSetVersion === 'rules-8' && result\.heuristicScore >= 60[\s\S]*?return true;\n/, '');
 const tests = [
- ['legacy_linear_routing','intake.ts',s=>s.replace("result.ruleSetVersion === 'rules-7' && result.heuristicScore >= 60","(result.ruleSetVersion === 'rules-7' || result.ruleSetVersion === 'rules-6') && result.heuristicScore >= 60").replace("reason.id === 'statistical_robust_spam'","(reason.id === 'statistical_robust_spam' || reason.id === 'statistical_linear_spam')"),async m=>{assert.equal(m.shouldQuarantine(contractEvidence.linearResult,'none'),false);}],
- ['legacy_general1_routing','intake.ts',s=>s.replace("result.ruleSetVersion === 'rules-7' && result.heuristicScore >= 60","(result.ruleSetVersion === 'rules-7' || result.ruleSetVersion === 'rules-3') && result.heuristicScore >= 60").replace("reason.id === 'statistical_robust_spam'","(reason.id === 'statistical_robust_spam' || reason.id === 'statistical_spam')"),async m=>{assert.equal(m.shouldQuarantine(contractEvidence.general1Result,'none'),false);}],
- ['legacy_generalized_routing','intake.ts',s=>s.replace("result.ruleSetVersion === 'rules-7' && result.heuristicScore >= 60","(result.ruleSetVersion === 'rules-7' || result.ruleSetVersion === 'rules-5') && result.heuristicScore >= 60").replace("reason.id === 'statistical_robust_spam'","(reason.id === 'statistical_robust_spam' || reason.id === 'statistical_generalized_spam')"),async m=>{assert.equal(m.shouldQuarantine(contractEvidence.generalizedResult,'none'),false);}],
- ['legacy_context_routing','intake.ts',s=>s.replace("result.ruleSetVersion === 'rules-7' && result.heuristicScore >= 60","(result.ruleSetVersion === 'rules-7' || result.ruleSetVersion === 'rules-4') && result.heuristicScore >= 60").replace("reason.id === 'statistical_robust_spam'","(reason.id === 'statistical_robust_spam' || reason.id === 'statistical_context_spam')"),async m=>{assert.equal(m.shouldQuarantine(contractEvidence.contextResult,'none'),false);}],
+ ['legacy_robust_routing','intake.ts',s=>s.replace("result.ruleSetVersion === 'rules-8' && result.heuristicScore >= 60","(result.ruleSetVersion === 'rules-8' || result.ruleSetVersion === 'rules-7') && result.heuristicScore >= 60").replace("reason.id === 'statistical_refit_spam'","(reason.id === 'statistical_refit_spam' || reason.id === 'statistical_robust_spam')"),async m=>{assert.equal(m.shouldQuarantine(contractEvidence.robustResult,'none'),false);}],
+ ['legacy_linear_routing','intake.ts',s=>s.replace("result.ruleSetVersion === 'rules-8' && result.heuristicScore >= 60","(result.ruleSetVersion === 'rules-8' || result.ruleSetVersion === 'rules-6') && result.heuristicScore >= 60").replace("reason.id === 'statistical_refit_spam'","(reason.id === 'statistical_refit_spam' || reason.id === 'statistical_linear_spam')"),async m=>{assert.equal(m.shouldQuarantine(contractEvidence.linearResult,'none'),false);}],
+ ['legacy_general1_routing','intake.ts',s=>s.replace("result.ruleSetVersion === 'rules-8' && result.heuristicScore >= 60","(result.ruleSetVersion === 'rules-8' || result.ruleSetVersion === 'rules-3') && result.heuristicScore >= 60").replace("reason.id === 'statistical_refit_spam'","(reason.id === 'statistical_refit_spam' || reason.id === 'statistical_spam')"),async m=>{assert.equal(m.shouldQuarantine(contractEvidence.general1Result,'none'),false);}],
+ ['legacy_generalized_routing','intake.ts',s=>s.replace("result.ruleSetVersion === 'rules-8' && result.heuristicScore >= 60","(result.ruleSetVersion === 'rules-8' || result.ruleSetVersion === 'rules-5') && result.heuristicScore >= 60").replace("reason.id === 'statistical_refit_spam'","(reason.id === 'statistical_refit_spam' || reason.id === 'statistical_generalized_spam')"),async m=>{assert.equal(m.shouldQuarantine(contractEvidence.generalizedResult,'none'),false);}],
+ ['legacy_context_routing','intake.ts',s=>s.replace("result.ruleSetVersion === 'rules-8' && result.heuristicScore >= 60","(result.ruleSetVersion === 'rules-8' || result.ruleSetVersion === 'rules-4') && result.heuristicScore >= 60").replace("reason.id === 'statistical_refit_spam'","(reason.id === 'statistical_refit_spam' || reason.id === 'statistical_context_spam')"),async m=>{assert.equal(m.shouldQuarantine(contractEvidence.contextResult,'none'),false);}],
  ['statistical_routing', 'intake.ts', removeStatisticalRouting, async m => {assert.equal(m.shouldQuarantine(statisticalAssessment,'none'),true);} ],
  ['html_projection', 'intake.ts', s=>s.replace('...(html ? {html} : {}),',''), async m=>{assert.equal(m.project({...parsed,text:'',html:'<p>body</p>'}).html,'<p>body</p>');}],
  ['html_source_bound', 'intake.ts', s=>s.replace('field(parsed.html, 32768)','field(parsed.html, 327680)'), async m=>{assert.equal(m.project({...parsed,text:'',html:'é'.repeat(16385)}).html,undefined);}],
@@ -78,14 +79,14 @@ const tests = [
  ['manual_authority', 'feedback.ts', s => s.replace('authorities.has(authority)', 'true'), async m => {
   assert.equal(m.hasManualAuthority({mailboxId: 'a@example.test'}, 'a@example.test'), false);
  }],
- ['gtube_routing', 'intake.ts', s => s.replace("  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3' || result.ruleSetVersion === 'rules-4' || result.ruleSetVersion === 'rules-5' || result.ruleSetVersion === 'rules-6' || result.ruleSetVersion === 'rules-7') && result.signals.spam === 'present' &&\n      result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;\n", ''), async m => {
+ ['gtube_routing', 'intake.ts', s => s.replace("  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3' || result.ruleSetVersion === 'rules-4' || result.ruleSetVersion === 'rules-5' || result.ruleSetVersion === 'rules-6' || result.ruleSetVersion === 'rules-7' || result.ruleSetVersion === 'rules-8') && result.signals.spam === 'present' &&\n      result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;\n", ''), async m => {
   assert.equal(m.shouldQuarantine(gtubeAssessment, 'none'), true);
  }],
  ['gtube_allow_precedence', 'intake.ts', s => s.replace("|| preference === 'allow'", ''), async m => {
   assert.equal(m.shouldQuarantine(gtubeAssessment, 'allow'), false);
  }],
  ['gtube_version_guard', 'protocol.ts', s => s.replace("if(r.ruleSetVersion==='rules-1'&&id==='gtube')return false;", ''), async m => {
-  assert.equal(m.decodeResponse(gtubeWire.replace('"rules-7"', '"rules-1"')), null);
+  assert.equal(m.decodeResponse(gtubeWire.replace('"rules-8"', '"rules-1"')), null);
  }],
 ];
 
@@ -123,8 +124,11 @@ if (process.argv.includes('--workerd')) {
  assert.equal(execFileSync('git', ['-C', scorerRoot, 'status', '--porcelain'], {encoding: 'utf8'}).trim(), '');
 
  const workerdMutants = [
-  {name:'single_feature_stability_workerd',repo:'mail-scoring',file:'packages/core/src/linear.ts',
-   mutate:s=>s.replace('    if(remaining<=0 || MODEL_BIAS+(dot-clue.idf*clue.weight)/Math.sqrt(remaining)<MODEL_LOGIT_CUTOFF)return false;',''),
+  {name:'second_feature_stability_workerd',repo:'mail-scoring',file:'packages/core/src/linear.ts',
+   mutate:s=>s.replace('const remaining=dot-strongest-secondStrongest;','const remaining=dot-strongest;'),
+   pattern:'keeps fragile synthetic spam in Inbox',spamInboxRegression:false,verifyRestored:true},
+  {name:'two_feature_stability_workerd',repo:'mail-scoring',file:'packages/core/src/linear.ts',
+   mutate:s=>s.replace('const remaining=dot-strongest-secondStrongest;','const remaining=dot;'),
    pattern:'keeps fragile synthetic spam in Inbox',spamInboxRegression:false,verifyRestored:true},
   {name:'nul_preflight_workerd',repo:'agentic-inbox-imap',file:'workers/lib/mail-scoring/intake.ts',
    mutate:s=>s.replace('complete === true && raw.byteLength <= RAW_INSPECTION_BYTES','complete === true && raw.byteLength <= RAW_INSPECTION_BYTES && !raw.includes(0)'),
@@ -133,7 +137,7 @@ if (process.argv.includes('--workerd')) {
    mutate:s=>s.replace('complete:bytesRead === streamSize','complete:true'),
    pattern:'preserves declared short-stream padding',spamInboxRegression:false,verifyRestored:true},
   {name:'distinct_body_workerd',repo:'mail-scoring',file:'packages/core/src/linear.ts',
-   mutate:s=>s.replace('body.filter(hash=>(weights.get(hash)?.weight??0)>0).length<5','false'),
+   mutate:s=>s.replace('body.filter(hash=>(weights.get(hash)?.weight??0)>0).length<5','false').replace('body.filter(hash=>(weights.get(hash)?.referenceWeight??0)>0).length<5','false'),
    pattern:'keeps a strong subject with repeated unknown body words',spamInboxRegression:false,verifyRestored:true},
   {name:'statistical_routing_workerd',repo:'agentic-inbox-imap',file:'workers/lib/mail-scoring/intake.ts',mutate:removeStatisticalRouting,
    pattern:'routes actual plain and HTML statistical spam',spamInboxRegression:true,verifyRestored:true},
@@ -213,7 +217,7 @@ if (process.argv.includes('--workerd')) {
    name: 'gtube_routing_workerd',
    repo: 'agentic-inbox-imap',
    file: 'workers/lib/mail-scoring/intake.ts',
-   mutate: s => s.replace("  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3' || result.ruleSetVersion === 'rules-4' || result.ruleSetVersion === 'rules-5' || result.ruleSetVersion === 'rules-6' || result.ruleSetVersion === 'rules-7') && result.signals.spam === 'present' &&\n      result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;\n", ''),
+   mutate: s => s.replace("  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3' || result.ruleSetVersion === 'rules-4' || result.ruleSetVersion === 'rules-5' || result.ruleSetVersion === 'rules-6' || result.ruleSetVersion === 'rules-7' || result.ruleSetVersion === 'rules-8') && result.signals.spam === 'present' &&\n      result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;\n", ''),
    pattern: 'routes positive GTUBE to Spam',
    spamInboxRegression: true,
    verifyRestored: true,
@@ -232,7 +236,7 @@ if (process.argv.includes('--workerd')) {
  for (const {name, repo, file, mutate, pattern, spamInboxRegression, verifyRestored} of workerdMutants) {
   const temp = mkdtempSync(join(tmpdir(), 'dev-989-mutation-'));
   try {
-   for (const path of ['workers', 'shared', 'test', 'docs/evidence/dev-878', 'docs/evidence/dev-998', 'docs/evidence/dev-1003', 'docs/evidence/dev-1008', 'docs/evidence/dev-1012', 'app', 'package.json', 'package-lock.json', 'vitest.config.ts', 'wrangler.jsonc', 'worker-configuration.d.ts']) {
+   for (const path of ['workers', 'shared', 'test', 'docs/evidence/dev-878', 'docs/evidence/dev-998', 'docs/evidence/dev-1003', 'docs/evidence/dev-1008', 'docs/evidence/dev-1015', 'app', 'package.json', 'package-lock.json', 'vitest.config.ts', 'wrangler.jsonc', 'worker-configuration.d.ts']) {
     cpSync(path, join(temp, path), {recursive: true});
    }
    symlinkSync(join(root, 'node_modules'), join(temp, 'node_modules'), 'dir');
