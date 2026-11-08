@@ -1,0 +1,14 @@
+diff --git a/workers/lib/mail-scoring/intake.ts b/workers/lib/mail-scoring/intake.ts
+index d0ffa23..d030f2d 100644
+--- a/workers/lib/mail-scoring/intake.ts
++++ b/workers/lib/mail-scoring/intake.ts
+@@ -147,9 +147,6 @@ export function shouldQuarantine(assessment: Assessment | undefined, preference:
+   if (preference === 'block') return true;
+   if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3') && result.signals.spam === 'present' &&
+       result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;
+-  if (result.ruleSetVersion === 'rules-3' && result.heuristicScore >= 60 && result.signals.spam === 'present' &&
+-      result.limitsHit.every(limit => ['auth_unknown', 'source_incomplete', 'html_uninspected', 'identity_uninspected'].includes(limit)) &&
+-      result.reasons.some(reason => reason.id === 'statistical_spam' && reason.contribution > 0)) return true;
+   // shortcut: conservative rules-1 policy, recalibrate with privately labelled mail before broadening.
+   return result.heuristicScore >= 45 &&
+     result.limitsHit.every(limit => limit === 'auth_unknown' || limit === 'source_incomplete') &&
