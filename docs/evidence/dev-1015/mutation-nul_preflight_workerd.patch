@@ -1,0 +1,13 @@
+diff --git a/workers/lib/mail-scoring/intake.ts b/workers/lib/mail-scoring/intake.ts
+index 11a9203..7482c34 100644
+--- a/workers/lib/mail-scoring/intake.ts
++++ b/workers/lib/mail-scoring/intake.ts
+@@ -19,7 +19,7 @@ export const RAW_INSPECTION_BYTES = 131072;
+
+ /** Scoring-only preflight; it does not make the inherited MIME parser safe. */
+ export function inspectableRaw(raw: Uint8Array, complete: boolean): boolean {
+-  return complete === true && raw.byteLength <= RAW_INSPECTION_BYTES;
++  return complete === true && raw.byteLength <= RAW_INSPECTION_BYTES && !raw.includes(0);
+ }
+
+ /** Construct only fixed bounded fields; never serialize a mail object. */
