@@ -9,10 +9,10 @@ import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 
-const SCORER_PIN = '041e79c5f56880b8eff0e210968569461cb95fc0';
+const SCORER_PIN = 'cf588bf2870964f691e420f5e5249aa3255806f8';
 const LEGACY_SCORER_PIN = '2fab406320ae3b3596345d2c76e0ef8a08593211';
 const root = process.cwd();
-const outDir = resolve(process.env.EVIDENCE_DIR || 'docs/evidence/dev-998');
+const outDir = resolve(process.env.EVIDENCE_DIR || 'docs/evidence/dev-1003');
 const records = [];
 const sha256 = text => createHash('sha256').update(text).digest('hex');
 const stripAnsi = text => text.replace(/\x1b\[[0-9;]*m/g, '').replace(/[ \t]+$/gm, '');
@@ -28,8 +28,9 @@ const parsed = {subject: 'Synthetic', text: 'hello', headers: [], headerLines: [
 const removeInlineForwardGuard = source => source.replace("  if (/(?:^|[\\r\\n])-{3,}[\\r\\n]+(?:From|Subject|Date|To|Cc|Bcc):[ \\t]/.test(text) || html?.includes('class=\"postal-email-header\"')) {\n    // Preserve quote status so copied subject/name clues cannot cause automatic routing.\n    text = '>';\n    html = undefined;\n    complete = false;\n  }\n", '');
 
 const statisticalAssessment=contractEvidence.generalResults.plain;
-const removeStatisticalRouting = source => source.replace(/  if \(result\.ruleSetVersion === 'rules-3' && result\.heuristicScore >= 60[\s\S]*?return true;\n/, '');
+const removeStatisticalRouting = source => source.replace(/  if \(result\.ruleSetVersion === 'rules-4' && result\.heuristicScore >= 60[\s\S]*?return true;\n/, '');
 const tests = [
+ ['legacy_general1_routing','intake.ts',s=>s.replace("result.ruleSetVersion === 'rules-4' && result.heuristicScore >= 60","(result.ruleSetVersion === 'rules-4' || result.ruleSetVersion === 'rules-3') && result.heuristicScore >= 60").replace("reason.id === 'statistical_context_spam'","(reason.id === 'statistical_context_spam' || reason.id === 'statistical_spam')"),async m=>{assert.equal(m.shouldQuarantine(contractEvidence.general1Result,'none'),false);}],
  ['statistical_routing', 'intake.ts', removeStatisticalRouting, async m => {assert.equal(m.shouldQuarantine(statisticalAssessment,'none'),true);} ],
  ['html_projection', 'intake.ts', s=>s.replace('...(html ? {html} : {}),',''), async m=>{assert.equal(m.project({...parsed,text:'',html:'<p>body</p>'}).html,'<p>body</p>');}],
  ['html_source_bound', 'intake.ts', s=>s.replace('field(parsed.html, 32768)','field(parsed.html, 327680)'), async m=>{assert.equal(m.project({...parsed,text:'',html:'é'.repeat(16385)}).html,undefined);}],
@@ -74,14 +75,14 @@ const tests = [
  ['manual_authority', 'feedback.ts', s => s.replace('authorities.has(authority)', 'true'), async m => {
   assert.equal(m.hasManualAuthority({mailboxId: 'a@example.test'}, 'a@example.test'), false);
  }],
- ['gtube_routing', 'intake.ts', s => s.replace("  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3') && result.signals.spam === 'present' &&\n      result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;\n", ''), async m => {
+ ['gtube_routing', 'intake.ts', s => s.replace("  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3' || result.ruleSetVersion === 'rules-4') && result.signals.spam === 'present' &&\n      result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;\n", ''), async m => {
   assert.equal(m.shouldQuarantine(gtubeAssessment, 'none'), true);
  }],
  ['gtube_allow_precedence', 'intake.ts', s => s.replace("|| preference === 'allow'", ''), async m => {
   assert.equal(m.shouldQuarantine(gtubeAssessment, 'allow'), false);
  }],
  ['gtube_version_guard', 'protocol.ts', s => s.replace("if(r.ruleSetVersion==='rules-1'&&id==='gtube')return false;", ''), async m => {
-  assert.equal(m.decodeResponse(gtubeWire.replace('"rules-3"', '"rules-1"')), null);
+  assert.equal(m.decodeResponse(gtubeWire.replace('"rules-4"', '"rules-1"')), null);
  }],
 ];
 
@@ -119,6 +120,9 @@ if (process.argv.includes('--workerd')) {
  assert.equal(execFileSync('git', ['-C', scorerRoot, 'status', '--porcelain'], {encoding: 'utf8'}).trim(), '');
 
  const workerdMutants = [
+  {name:'distinct_body_workerd',repo:'mail-scoring',file:'packages/core/src/statistical.ts',
+   mutate:s=>s.replace('statisticalTokens(content.bodyText).length<5','contextFeatures([content.bodyText]).positions<5'),
+   pattern:'keeps a strong subject with repeated unknown body words',spamInboxRegression:false,verifyRestored:true},
   {name:'statistical_routing_workerd',repo:'agentic-inbox-imap',file:'workers/lib/mail-scoring/intake.ts',mutate:removeStatisticalRouting,
    pattern:'routes actual plain and HTML statistical spam',spamInboxRegression:true,verifyRestored:true},
   {name:'statistical_detection_workerd',repo:'mail-scoring',file:'packages/core/src/index.ts',mutate:s=>s.replace('!features.gtube&&generalSpam(input,limits)','false'),
@@ -197,7 +201,7 @@ if (process.argv.includes('--workerd')) {
    name: 'gtube_routing_workerd',
    repo: 'agentic-inbox-imap',
    file: 'workers/lib/mail-scoring/intake.ts',
-   mutate: s => s.replace("  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3') && result.signals.spam === 'present' &&\n      result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;\n", ''),
+   mutate: s => s.replace("  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3' || result.ruleSetVersion === 'rules-4') && result.signals.spam === 'present' &&\n      result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;\n", ''),
    pattern: 'routes positive GTUBE to Spam',
    spamInboxRegression: true,
    verifyRestored: true,
@@ -216,7 +220,7 @@ if (process.argv.includes('--workerd')) {
  for (const {name, repo, file, mutate, pattern, spamInboxRegression, verifyRestored} of workerdMutants) {
   const temp = mkdtempSync(join(tmpdir(), 'dev-989-mutation-'));
   try {
-   for (const path of ['workers', 'shared', 'test', 'docs/evidence/dev-878', 'docs/evidence/dev-998', 'app', 'package.json', 'package-lock.json', 'vitest.config.ts', 'wrangler.jsonc', 'worker-configuration.d.ts']) {
+   for (const path of ['workers', 'shared', 'test', 'docs/evidence/dev-878', 'docs/evidence/dev-998', 'docs/evidence/dev-1003', 'app', 'package.json', 'package-lock.json', 'vitest.config.ts', 'wrangler.jsonc', 'worker-configuration.d.ts']) {
     cpSync(path, join(temp, path), {recursive: true});
    }
    symlinkSync(join(root, 'node_modules'), join(temp, 'node_modules'), 'dir');

@@ -10,37 +10,38 @@ through the private `MAIL_SCORER` service binding, then applies the recoverable
 policy in [quarantine.md](quarantine.md). Reads, refreshes, IMAP and ordinary moves
 do not score again. Failures retain Inbox delivery; there is no historical scan.
 
-## Source pins and compatibility (DEV-998)
+## Source pins and compatibility (DEV-1003)
 
-The current contract and protocol copies come from merged `mail-scoring` PR #9,
-`041e79c5f56880b8eff0e210968569461cb95fc0`, with only the protocol import path
+The current contract and protocol copies come from merged `mail-scoring` PR #10,
+`cf588bf2870964f691e420f5e5249aa3255806f8`, with only the protocol import path
 changed. The engine remains `0.1.0`, schema/RPC remain `1`, and the rules are
-`rules-3`. No scanner package or new dependency is imported into Inbox. The
+`rules-4`. No scanner package or new dependency is imported into Inbox. The
 independent scorer contains the bounded parser and frozen public-corpus model;
 see that repository's `docs/general-spam.md` for provenance and limitations.
 
-The strict decoder accepts `rules-1 | rules-2 | rules-3`, rejects GTUBE under
+The strict decoder accepts `rules-1 | rules-2 | rules-3 | rules-4`, rejects GTUBE under
 rules-1, and rejects statistical reasons/new HTML or statistics limits under
 older rule sets. Unknown versions/reasons, altered static text, inconsistent or
 nonfinite contributions, JSON depth over 6 and output over 4096 UTF-8 bytes are
 rejected. Invented authentication or preferences are also rejected.
 
-The arrival policy is now `inbox-scoring-2`. Storage also accepts historical
-`inbox-shadow-1` assessments without rewriting their policy or rule version.
+The arrival policy is now `inbox-scoring-3`. Storage also accepts historical
+`inbox-shadow-1` and `inbox-scoring-2` assessments without rewriting their policy or rule version.
 There is no schema migration or old-mail re-evaluation.
 
 `node scripts/check-scoring-contract.mjs /path/to/mail-scoring` requires the exact
-current pin. `evidence/dev-998/contract.json` records contract digests, current
+current pin. `evidence/dev-1003/contract.json` records contract digests, current
 plain/HTML general-spam results, and actual previous rules-2
 (`faa15bea06db52f2dc240257d5335a66a933f909`) and legacy rules-1
 (`2fab406320ae3b3596345d2c76e0ef8a08593211`) compatibility.
+Historical rules-3 general-1 scores remain readable but never automatically route; its first paired acceptance failed on legitimate mail. GTUBE still works under rules-2/3/4. The new rules-4 context reason is rejected under every older version.
 Historical evidence remains unchanged in its original directories.
 
 ### Manual rollout and rollback
 
 OPS-614 requires reviewed merged source, DEV-999 paired held-out acceptance,
 independent review of the exact artifacts/plan, and fresh production config
-receipts. Deploy this caller before the rules-3 private scorer. The caller works
+receipts. Deploy this caller before the rules-4 private scorer. The caller works
 with either older scorer while the transition happens. No public scorer route,
 preview, new binding, gateway change or automatic workflow is needed.
 
