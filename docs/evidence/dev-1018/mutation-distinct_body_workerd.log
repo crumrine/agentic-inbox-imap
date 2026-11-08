@@ -1,0 +1,31 @@
+RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-pQJGLh
+
+ ❯ test/shadow-scoring.test.ts (82 tests | 1 failed | 81 skipped) 61ms
+     × keeps a strong subject with repeated unknown body words in Inbox 26ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 81 skipped (82)
+   Start at  15:13:19
+   Duration  1.30s (transform 323ms, setup 339ms, import 484ms, tests 61ms, environment 0ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/shadow-scoring.test.ts > joined rules-9 general spam detection > keeps a strong subject with repeated unknown body words in Inbox
+AssertionError: expected 'spam' to be 'inbox' // Object.is equality
+
+Expected: "inbox"
+Received: "spam"
+
+ ❯ test/shadow-scoring.test.ts:1193:60
+    1191|     const raw=new TextEncoder().encode(['From: Person <sender@example.…
+    1192|       `Subject: ${STATISTICAL_SPAM.trim()}`,'MIME-Version: 1.0','Conte…
+    1193|     const row=await deliver(b.e,raw);expect(row.folder_id).toBe('inbox…
+       |                                                            ^
+    1194|     expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0].r…
+    1195|     expect(new Uint8Array(await (await env.BUCKET.get(row.raw_key))!.a…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯

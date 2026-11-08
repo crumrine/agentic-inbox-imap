@@ -12,4 +12,7 @@ export const FRAGILE_SPAM = "Congratulations! You have been specially selected f
 // Original shorter prefix with insufficient stable evidence under general-6; not legitimate mail.
 export const REFIT_FRAGILE_SPAM = "Congratulations! You have been specially selected for an exclusive opportunity to earn extra";
 
-// Copied from reviewed merged mail-scoring 62919bc8f939bc94c0552fc6a3917c03a3373646; authored controls only.
+// Original synthetic SPAM prefix: one word discount passes, two word discounts abstain.
+export const CONTEXT_FRAGILE_SPAM = 'Congratulations! You have been specially selected for an exclusive opportunity to earn extra money every week. Work from home and start your profitable business';
+
+// Copied from reviewed merged mail-scoring 453cc3423e222b0e853bf3d8e9d590ee01e44bf7; authored controls only.
