@@ -1,0 +1,39 @@
+RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-8yMBK4
+
+ ❯ test/shadow-scoring.test.ts (67 tests | 1 failed | 66 skipped) 71ms
+     × projects URL evidence through real MIME/scorer RPC with exact composites and disposition 41ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 66 skipped (67)
+   Start at  18:33:24
+   Duration  1.16s (transform 340ms, setup 384ms, import 481ms, tests 71ms, environment 0ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/shadow-scoring.test.ts > joined plain-text URL symbols and capped composites > projects URL evidence through real MIME/scorer RPC with exact composites and disposition
+AssertionError: New contact HTTPS://person@example.test/path.: expected [] to deeply equal [ [ 'link_userinfo', 15 ] ]
+
+- Expected
++ Received
+
+- [
+-   [
+-     "link_userinfo",
+-     15,
+-   ],
+- ]
++ []
+
+ ❯ test/shadow-scoring.test.ts:540:81
+    538|       const assessment = (await mailbox(BOX).getSpamState(row.id))?.as…
+    539|       expect(row.folder_id, body).toBe(folder);
+    540|       expect(assessment?.result?.reasons.map(r => [r.id,r.contribution…
+       |                                                                                 ^
+    541|       expect(assessment?.result?.heuristicScore, body).toBe(reasons.re…
+    542|       expect(assessment?.status).toBe('partial');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯

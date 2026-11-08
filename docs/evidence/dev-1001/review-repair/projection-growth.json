@@ -1,0 +1,96 @@
+{
+  "node": "v24.15.0",
+  "samples": [
+    {
+      "kind": "url_suffix",
+      "sourceCharacters": 2057,
+      "elapsedMs": 0.28370900000000177,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_forward",
+      "sourceCharacters": 2076,
+      "elapsedMs": 0.01579200000000114,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_near_match",
+      "sourceCharacters": 2074,
+      "elapsedMs": 0.019792000000002474,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "url_suffix",
+      "sourceCharacters": 4105,
+      "elapsedMs": 0.02541700000000091,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_forward",
+      "sourceCharacters": 4124,
+      "elapsedMs": 0.019625000000001336,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_near_match",
+      "sourceCharacters": 4122,
+      "elapsedMs": 0.029209000000001595,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "url_suffix",
+      "sourceCharacters": 8201,
+      "elapsedMs": 0.026832999999999885,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_forward",
+      "sourceCharacters": 8220,
+      "elapsedMs": 0.014874999999999972,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_near_match",
+      "sourceCharacters": 8218,
+      "elapsedMs": 0.036166000000001475,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "url_suffix",
+      "sourceCharacters": 16393,
+      "elapsedMs": 0.032166999999997614,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_forward",
+      "sourceCharacters": 16412,
+      "elapsedMs": 0.018958000000001363,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_near_match",
+      "sourceCharacters": 16410,
+      "elapsedMs": 0.05325000000000202,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "url_suffix",
+      "sourceCharacters": 32009,
+      "elapsedMs": 0.05912500000000165,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_forward",
+      "sourceCharacters": 32028,
+      "elapsedMs": 0.03258299999999892,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_near_match",
+      "sourceCharacters": 32026,
+      "elapsedMs": 0.07949999999999946,
+      "retainedUrls": 0
+    }
+  ],
+  "scope": "Synthetic local synchronous projection wall time; not hosted CPU or billing. A wide 250ms ceiling checks original-token suffixes and inline-forward markers/near-matches within the source budget."
+}

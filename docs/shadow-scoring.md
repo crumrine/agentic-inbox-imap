@@ -103,6 +103,46 @@ not cancel an RPC or synchronous CPU. Static failures are stored without
 logging service errors or attacker strings. If optional assessment storage
 itself fails, delivery is retained and the read API reports unknown/unscored.
 
+### Inline forwarded MIME reports (DEV-1001)
+
+PostalMime 2.7.3 can flatten an inline `message/rfc822` into the parsed body,
+including a generated separator and From/Subject/Date/recipient header block.
+After the existing 32 KiB field preflight, the scoring projection recognizes
+that generated plain-text header pattern, replaces the whole scoring body with
+a redacted `>` quote marker and marks the input incomplete. The marker retains
+the existing `quoted_content` limit, so copied phishing subjects or display
+labels cannot bypass the ordinary partial-inspection guard. Raw MIME, stored display content and attachments
+remain intact. Explicit sender preferences and other bounded metadata remain
+available; normal current-body phishing and GTUBE controls are unchanged.
+
+This is conservative recognition of a known formatter pattern, not complete
+nested-MIME provenance. Omitting the entire scoring body can miss direct spam
+in a message that also forwards another message. It does not classify the
+retained report as safe. No MIME parser option, schema or gateway changes were
+made. The actual rules-2 scorer stays pinned at `faa15bea06db52f2dc240257d5335a66a933f909`.
+OPS-614 owns the separately gated manual rollout.
+
+The authored legitimate inline report fails as Inbox-to-Spam on the unfixed
+code. Joined tests check four nested-header variants, stored partial evidence,
+unchanged raw/display, restart, REST and IMAP UID/raw retrieval, with one score
+per arrival. A copied phishing subject still scores 45 but remains in Inbox
+with explicit quoted inspection, while direct current-body phishing at 45 still
+routes to Spam. Inspectable forwarded reports still honor explicit sender
+blocks through successful partial scoring. Removal/restored mutations prove omission,
+quote-state and over-budget failure
+regressions; ordinary
+separator/header-like controls and 15 within-budget growth cases retain the
+existing URL regressions. Set `EVIDENCE_DIR=docs/evidence/dev-1001` when running
+the contract, scoring-mutation and projection-growth scripts to preserve older
+receipts.
+
+If the plain body exceeds the existing field budget, optional inspection is
+unavailable and no RPC runs. That also protects large forwarded reports whose
+generated header marker was omitted with the body: subject-only clues cannot
+route them automatically. Raw delivery is retained; unavailable inspection is
+distinct from a scored zero. Explicit block routing still requires successful
+inspection, as it does for other inspection failures.
+
 DEV-993 adoption map uses original synthetic fixtures and implementation. The
 Rspamd composite-test approach inspired exact reason/contribution/disposition
 assertions; no Rspamd code, weights or corpus was copied. Existing Mailguard-derived

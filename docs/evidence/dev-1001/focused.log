@@ -1,0 +1,16 @@
+
+> test
+> vitest run test/shadow-scoring.test.ts -t inline forwarded MIME inspection provenance
+
+
+ RUN  v4.1.11 /Users/brian/projects/agentic-inbox-dev-1001
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed | 64 skipped (67)
+   Start at  18:27:49
+   Duration  1.41s (transform 367ms, setup 390ms, import 476ms, tests 169ms, environment 0ms)
+

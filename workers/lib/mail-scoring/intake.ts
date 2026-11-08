@@ -35,7 +35,14 @@ export function project(parsed: Email, envelopeFrom?: string): ScoreInputV1 {
     return value;
   };
   const subject = field(parsed.subject, 2048);
-  const text = field(parsed.text, 32768);
+  let text = field(parsed.text, 32768);
+  // PostalMime flattens inline message/rfc822 bodies beneath these generated headers.
+  // shortcut: omit the whole scoring body; split current/forwarded provenance if mixed-mail recall requires it.
+  if (/(?:^|[\r\n])-{3,}[\r\n]+(?:From|Subject|Date|To|Cc|Bcc):[ \t]/.test(text)) {
+    // Preserve quote status so copied subject/name clues cannot cause automatic routing.
+    text = '>';
+    complete = false;
+  }
   const urls: string[] = [];
   // The 32 KiB body cap bounds the linear line/token scans.
   for (const line of text.split(/\r\n|[\r\n]/)) {
@@ -103,6 +110,8 @@ export async function assessArrival(env: Env, parsed: Email, rawInspectable: boo
   try {
     if (!rawInspectable || !env.MAIL_SCORER) return unavailable();
     const input = project(parsed, envelopeFrom);
+    // A body omitted by the inspection budget must not become a subject-only verdict.
+    if (parsed.text && !input.text) return unavailable();
     if (preference) input.preferences = {senderAllowed:preference === 'allow',senderBlocked:preference === 'block'};
     const bytes = encodeBoundedJson(JSON.stringify(input));
     if (!bytes) return unavailable();

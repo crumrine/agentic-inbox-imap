@@ -1,0 +1,62 @@
+{
+  "ticket": "DEV-1001",
+  "source": "3f1bf9ee573f6fbef08124af0371cd7e398d98d9",
+  "base": "d49818571e969a537cd39ceaf9871bb7087576fa",
+  "scorer": "faa15bea06db52f2dc240257d5335a66a933f909",
+  "runtime": "Node24.15.0/npm11.12.1; exact existing locked consumer dependencies reused",
+  "consumerLockSha256": "78e660bfbd992d55aa9c798eb1b6adbfe6031a9e9a89a3f7e7bbabba1dd88a39",
+  "checks": {
+    "focused": "3/3 passed including4 actual inline-rfc822 header variants; direct current-body phishing remains45Spam; bounded/ordinary near-marker controls",
+    "unfixed": "authored realMime/RPC report assertion fails Inbox->Spam on d498 source, exit1",
+    "full": "631/631 tests in35files",
+    "typecheck": "passed",
+    "clientAndSsrBuild": "passed",
+    "mutations": "19 caught including new omission unit and actual workerd negative; restored actual report passes and source hashes match",
+    "growth": "15 cases within32KiB source; max local0.338ms observed, not hostedCPU",
+    "preservation": "rawR2/display/SQLite partialassessment/restart/REST/IMAP UID/raw and one-score-perarrival verified"
+  },
+  "limits": [
+    "Known PostalMime generated plain-header pattern only, not complete nestedMIME provenance.",
+    "Whole scoring body omitted including current prefix; mixed-mail spam can be missed, never treated safe.",
+    "No newdependency/model/HTML/schema/UI/gateway/provider change; source-only release gateOPS614."
+  ],
+  "buildModules": {
+    "assets/AgentPanel-DfQGp9tE.js": "edcafb42d32c446d12318a23520903bf8f3a04c58aa8004b889faa8f37f9eb33",
+    "assets/mimetext.node.es-CNa0XuDN.js": "d15a7721ca6d097dbe22f5d8f41e96ca7afe064a0a9fcaa67309da92cd4f3449",
+    "assets/react-CLtHAOtd.js": "2405fe455b7d900639c9b9150fdbd7046ca8b17c5d172f8603062c912d667825",
+    "assets/react-DW-krJlL.js": "abc9f32b6f775d2df0243a7dc59744396e1e9c25c55eb05cfd62d7cfc55d5295",
+    "assets/server-build-CT3lYWmU.js": "e0211f4e9db01ad56cf04bc5e4ab3a7d5fc2a0f31c535de194d6b544828e2ee8",
+    "assets/worker-entry-6bNEV8_V.js": "6db2649ea2916bccf3f65b1504b157e3f5d1c20b2390f6f536a3ef56378ce6ca",
+    "index.js": "da035166d5227917eb6825d19d2e43b8684dcd46d419a03f43f49e6cf2966e67"
+  },
+  "files": {
+    "before.json": "b1ac06fa3e813dde7c61de3df052535e6a8f758401ea11554296d38d24b9120f",
+    "build.log": "d43b911a01c5e5f947de18f6014bce9e60bad90f8adb071aad37c83c606a7f9b",
+    "contract.json": "d775ae05af2845850d65405e1b5509f5aa8a7ea4282dbf0beb32b595eebe5747",
+    "contract.log": "98224cb00bcfa7e1eebc50c8e81c839563d8c6b728df7339b4a48bb3a50d4e48",
+    "focused.log": "7d41da79b8b874d6cdca3578c9b9f919f2d5310af58dd4dde44207c8a606653a",
+    "full-tests.log": "d75b2cec73bd0472eb07be8ebacf8ef2fa78a033006420ef2984e15acb030d15",
+    "growth.log": "e755b5760e3c3461090c68ad8df4efc9d0750921aaf875513b25a989d92fae21",
+    "mutation-concurrency.log": "09bbe5118b504a2f254dc57b70e3cbef1b1b0b6ca698124f85facd0b886352b2",
+    "mutation-gtube_detection_workerd-restored.log": "94eb4a116269bc6c2f4c88f93db0f4a9a22e276492fca69ed5c44ae636b45e90",
+    "mutation-gtube_detection_workerd.log": "c36b3799a1d924eb9461685481937d3fb97ed67faa056682054bcce8650dabf2",
+    "mutation-gtube_detection_workerd.patch": "7ecca66a61c4ec213280968403a9e48e24a2c6621ae95f652a5eec20f8f840da",
+    "mutation-gtube_routing_workerd-restored.log": "cdb6a9f9fe9474e88ccfefc875168a8089082f147e7d914c23a82a4a41d145b7",
+    "mutation-gtube_routing_workerd.log": "7c0b0a7bdc2f79839e3d90ab27a312732866cd9d250201291dc9f0ebc8c901c3",
+    "mutation-gtube_routing_workerd.patch": "b882b458d29aaacd87dafb431a6f6622e6a0389f7d7b87cc6d354f8aa66220eb",
+    "mutation-gtube_version_rejection_workerd.log": "df7b3c0624dabf65c97c1e02ff45cc6c525274930a8febacbe5026a04063f818",
+    "mutation-inline_forward_omission_workerd-restored.log": "d37fed6306e0e8e594e12a5125771d88e4701066604320fc7baa5acbcf779aa6",
+    "mutation-inline_forward_omission_workerd.log": "24f380abf8df09130edba614705234921cc25a37cb6c36ce6a1b745b800a77f5",
+    "mutation-inline_forward_omission_workerd.patch": "5c1deaf8c09b7c46ba371a55f61d6cebbac9e095a6042a9c6a76fc26c342f491",
+    "mutation-mailbox_message_id.log": "d57c878b85aacd9ee44589ca2fcef80c2aad334124117fbe908b75d8ebf6d435",
+    "mutation-url_projection_workerd-restored.log": "2ae335a0489d9f7dd9f1c9a1aa6ba13a4c18b7073483747819fbc7dee150630a",
+    "mutation-url_projection_workerd.log": "bfd03e27c390a1e2239463ef2d25659e280cc7739ef1f007ee38a3570d59b42c",
+    "mutation-url_projection_workerd.patch": "80044d339ed077db7858304254d09983b28feedf7647300dce3c4507d2e1c59b",
+    "mutations-workerd.log": "ebd35fa1621d346876278a41911ae4b98fbd089f4cebc88ddeafa5d931caa62c",
+    "mutations.log": "b6ed39dabdd8fdbf92ddf7214a88a7cec11cfc21c7e60117a7943cf748014c51",
+    "projection-growth.json": "80ac6812d8f46bc074b744b5b869a1fc6525a5034fba13021b57861b51292f95",
+    "scoring-mutations.json": "77872dba37fc65706bbb0c879b0cc387b01ce4adee03463c1f8d17c8a648bfcf",
+    "typecheck.log": "5052c4941d18f0684526957d75d6a879847892985cefbbc71e7d2410f8d10a43",
+    "unfixed.log": "e6f8f8e72cda3639d9c46647a4664b51a390e8744278f6c4ac20c8da71d0a2a8"
+  }
+}

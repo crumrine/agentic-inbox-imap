@@ -1,0 +1,43 @@
+
+> test
+> vitest run test/shadow-scoring.test.ts -t keeps oversized inline reports
+
+
+ RUN  v4.1.11 /Users/brian/projects/agentic-inbox-dev-1001
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+ ❯ test/shadow-scoring.test.ts (69 tests | 1 failed | 68 skipped) 94ms
+     × keeps oversized inline reports in Inbox with unavailable inspection rather than subject-only quarantine 42ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/shadow-scoring.test.ts > inline forwarded MIME inspection provenance > keeps oversized inline reports in Inbox with unavailable inspection rather than subject-only quarantine
+AssertionError: expected { …(5) } to match object { folder_id: 'inbox' }
+(4 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "folder_id": "inbox",
++   "folder_id": "spam",
+  }
+
+ ❯ test/shadow-scoring.test.ts:417:17
+    415|     expect(raw.length).toBeLessThan(131072);
+    416|     const row = await deliver(b.e, raw);
+    417|     expect(row).toMatchObject({folder_id:'inbox'});
+       |                 ^
+    418|     expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0]).…
+    419|       status:'unavailable', inputIncomplete:true, result:null,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 68 skipped (69)
+   Start at  19:01:27
+   Duration  1.42s (transform 416ms, setup 444ms, import 501ms, tests 94ms, environment 0ms)
+

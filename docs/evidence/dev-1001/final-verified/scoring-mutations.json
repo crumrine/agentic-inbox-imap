@@ -1,0 +1,189 @@
+{
+  "scorerPin": "faa15bea06db52f2dc240257d5335a66a933f909",
+  "legacyScorerPin": "2fab406320ae3b3596345d2c76e0ef8a08593211",
+  "records": [
+    {
+      "name": "omitted_body_failure",
+      "baseline": "passed",
+      "mutant": "assertion_failed"
+    },
+    {
+      "name": "inline_quote_provenance",
+      "baseline": "passed",
+      "mutant": "assertion_failed"
+    },
+    {
+      "name": "inline_forward_omission",
+      "baseline": "passed",
+      "mutant": "assertion_failed"
+    },
+    {
+      "name": "off",
+      "baseline": "passed",
+      "mutant": "assertion_failed"
+    },
+    {
+      "name": "response_bound",
+      "baseline": "passed",
+      "mutant": "assertion_failed"
+    },
+    {
+      "name": "auth_provenance",
+      "baseline": "passed",
+      "mutant": "assertion_failed"
+    },
+    {
+      "name": "url_projection",
+      "baseline": "passed",
+      "mutant": "assertion_failed"
+    },
+    {
+      "name": "url_count_bound",
+      "baseline": "passed",
+      "mutant": "assertion_failed"
+    },
+    {
+      "name": "url_source_bound",
+      "baseline": "passed",
+      "mutant": "assertion_failed"
+    },
+    {
+      "name": "url_original_token_bound",
+      "baseline": "passed",
+      "mutant": "assertion_failed"
+    },
+    {
+      "name": "manual_authority",
+      "baseline": "passed",
+      "mutant": "assertion_failed"
+    },
+    {
+      "name": "gtube_routing",
+      "baseline": "passed",
+      "mutant": "assertion_failed"
+    },
+    {
+      "name": "gtube_allow_precedence",
+      "baseline": "passed",
+      "mutant": "assertion_failed"
+    },
+    {
+      "name": "gtube_version_guard",
+      "baseline": "passed",
+      "mutant": "assertion_failed"
+    },
+    {
+      "name": "omitted_body_failure_workerd",
+      "repo": "agentic-inbox-imap",
+      "file": "workers/lib/mail-scoring/intake.ts",
+      "originalSha256": "54a2b92b6be39c74d82e935741c01de16635d65fb2e3220ab171736b80bbd7f3",
+      "mutantSha256": "5482a05923ad5fc5776a04898773d91a89d39ccb24946bbd14de561fc9a57de1",
+      "patch": "mutation-omitted_body_failure_workerd.patch",
+      "mutant": "assertion_failed",
+      "regression": "folder_id inbox -> spam",
+      "log": "mutation-omitted_body_failure_workerd.log",
+      "restoredSha256": "54a2b92b6be39c74d82e935741c01de16635d65fb2e3220ab171736b80bbd7f3",
+      "restored": "passed",
+      "restoredLog": "mutation-omitted_body_failure_workerd-restored.log"
+    },
+    {
+      "name": "inline_quote_provenance_workerd",
+      "repo": "agentic-inbox-imap",
+      "file": "workers/lib/mail-scoring/intake.ts",
+      "originalSha256": "54a2b92b6be39c74d82e935741c01de16635d65fb2e3220ab171736b80bbd7f3",
+      "mutantSha256": "15d68336da7dbf6fbe8a16fb7d189c74b2dbea1f649522ff4e398d1d56572482",
+      "patch": "mutation-inline_quote_provenance_workerd.patch",
+      "mutant": "assertion_failed",
+      "regression": "folder_id spam -> inbox",
+      "log": "mutation-inline_quote_provenance_workerd.log",
+      "restoredSha256": "54a2b92b6be39c74d82e935741c01de16635d65fb2e3220ab171736b80bbd7f3",
+      "restored": "passed",
+      "restoredLog": "mutation-inline_quote_provenance_workerd-restored.log"
+    },
+    {
+      "name": "inline_forward_omission_workerd",
+      "repo": "agentic-inbox-imap",
+      "file": "workers/lib/mail-scoring/intake.ts",
+      "originalSha256": "54a2b92b6be39c74d82e935741c01de16635d65fb2e3220ab171736b80bbd7f3",
+      "mutantSha256": "ed9a2b568cc1c7aa9147c4b5d60ccb988d4a6553ae4be4a9223839a4fe7f3139",
+      "patch": "mutation-inline_forward_omission_workerd.patch",
+      "mutant": "assertion_failed",
+      "regression": "folder_id inbox -> spam",
+      "log": "mutation-inline_forward_omission_workerd.log",
+      "restoredSha256": "54a2b92b6be39c74d82e935741c01de16635d65fb2e3220ab171736b80bbd7f3",
+      "restored": "passed",
+      "restoredLog": "mutation-inline_forward_omission_workerd-restored.log"
+    },
+    {
+      "name": "url_projection_workerd",
+      "repo": "agentic-inbox-imap",
+      "file": "workers/lib/mail-scoring/intake.ts",
+      "originalSha256": "54a2b92b6be39c74d82e935741c01de16635d65fb2e3220ab171736b80bbd7f3",
+      "mutantSha256": "99334e63af9c0d79fda5f24bace2614e026dc40b91985aab4d53ac7daac5fe3b",
+      "patch": "mutation-url_projection_workerd.patch",
+      "mutant": "assertion_failed",
+      "log": "mutation-url_projection_workerd.log",
+      "restoredSha256": "54a2b92b6be39c74d82e935741c01de16635d65fb2e3220ab171736b80bbd7f3",
+      "restored": "passed",
+      "restoredLog": "mutation-url_projection_workerd-restored.log"
+    },
+    {
+      "name": "concurrency",
+      "repo": "agentic-inbox-imap",
+      "file": "workers/durableObject/index.ts",
+      "originalSha256": "fa50561b78879909d4dd7b918cc56dd36b8ae04f2f830b7c032db252ae18dc86",
+      "mutantSha256": "75c4cee3198380197307d7ac09b4ed9625d09888910107b76ae4b7f69c4b2668",
+      "mutant": "assertion_failed",
+      "log": "mutation-concurrency.log"
+    },
+    {
+      "name": "mailbox_message_id",
+      "repo": "agentic-inbox-imap",
+      "file": "workers/durableObject/index.ts",
+      "originalSha256": "fa50561b78879909d4dd7b918cc56dd36b8ae04f2f830b7c032db252ae18dc86",
+      "mutantSha256": "9384b22d8795673cdc71573d0fc2839bc697cab16d914bbef0ec3e54b88c2c96",
+      "mutant": "assertion_failed",
+      "log": "mutation-mailbox_message_id.log"
+    },
+    {
+      "name": "gtube_version_rejection_workerd",
+      "repo": "agentic-inbox-imap",
+      "file": "workers/lib/mail-scoring/protocol.ts",
+      "originalSha256": "83616f003e0ca7d9ea9f98b42d58b62ab6cf7f30ab59b4aa3d915f3ea0304828",
+      "mutantSha256": "f5d6b5548bccdafbbacb654e17576ba13cf5a6057cb4e366f292453ca53a76d7",
+      "mutant": "assertion_failed",
+      "regression": "folder_id spam -> inbox",
+      "log": "mutation-gtube_version_rejection_workerd.log"
+    },
+    {
+      "name": "gtube_routing_workerd",
+      "repo": "agentic-inbox-imap",
+      "file": "workers/lib/mail-scoring/intake.ts",
+      "originalSha256": "54a2b92b6be39c74d82e935741c01de16635d65fb2e3220ab171736b80bbd7f3",
+      "mutantSha256": "263988469d20e4a01332cbac4bfb0364cbb6a4a3d009c90e117f469d537bff5e",
+      "patch": "mutation-gtube_routing_workerd.patch",
+      "mutant": "assertion_failed",
+      "regression": "folder_id spam -> inbox",
+      "log": "mutation-gtube_routing_workerd.log",
+      "restoredSha256": "54a2b92b6be39c74d82e935741c01de16635d65fb2e3220ab171736b80bbd7f3",
+      "restored": "passed",
+      "restoredLog": "mutation-gtube_routing_workerd-restored.log"
+    },
+    {
+      "name": "gtube_detection_workerd",
+      "repo": "mail-scoring",
+      "scorerPin": "faa15bea06db52f2dc240257d5335a66a933f909",
+      "legacyScorerPin": "2fab406320ae3b3596345d2c76e0ef8a08593211",
+      "file": "packages/core/src/inspection.ts",
+      "originalSha256": "dc12fda986bdca9345eee3f7c539eff6c7a5750f8e50f667edc95a5e2ebf2270",
+      "mutantSha256": "f1edd344e44c32ae954586bcfe9d4426abe8daf1bc5a2e69851404f45e6f9879",
+      "patch": "mutation-gtube_detection_workerd.patch",
+      "mutant": "assertion_failed",
+      "regression": "folder_id spam -> inbox",
+      "log": "mutation-gtube_detection_workerd.log",
+      "restoredSha256": "dc12fda986bdca9345eee3f7c539eff6c7a5750f8e50f667edc95a5e2ebf2270",
+      "restored": "passed",
+      "restoredLog": "mutation-gtube_detection_workerd-restored.log"
+    }
+  ]
+}

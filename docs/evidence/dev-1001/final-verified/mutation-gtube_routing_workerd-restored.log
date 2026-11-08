@@ -1,0 +1,9 @@
+RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-dcGuvo
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 69 skipped (70)
+   Start at  19:14:28
+   Duration  1.10s (transform 306ms, setup 345ms, import 457ms, tests 75ms, environment 0ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.

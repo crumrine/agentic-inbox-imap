@@ -1,0 +1,9 @@
+RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-V5tzHF
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 67 skipped (68)
+   Start at  18:53:08
+   Duration  1.25s (transform 305ms, setup 357ms, import 450ms, tests 199ms, environment 0ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
