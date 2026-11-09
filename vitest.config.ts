@@ -10,7 +10,8 @@ import { buildSync } from "esbuild";
 import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
 
-const SCORER_PIN = "453cc3423e222b0e853bf3d8e9d590ee01e44bf7";
+const WORDPAIR_SCORER_PIN = "453cc3423e222b0e853bf3d8e9d590ee01e44bf7";
+const SCORER_PIN = "f8aa6004c7a0990ae99dff51b2da0afe41bad412";
 const REFIT_SCORER_PIN = "62919bc8f939bc94c0552fc6a3917c03a3373646";
 const ROBUST_SCORER_PIN = "143e24e938365c31f2669fd5f9e918408383dc7e";
 const LINEAR_SCORER_PIN = "0041d47f20d2565dc8725a3c11f0ed1af113ca74";
@@ -53,6 +54,7 @@ function buildScorerWorkers() {
 	let linear: string;
 	let robust: string;
 	let refit: string;
+	let wordpair: string;
 	try {
 		const archive = execFileSync("git", ["-C", dir, "archive", LEGACY_SCORER_PIN, "tsconfig.json", "packages/core", "workers/private"], { maxBuffer: 8 * 1024 * 1024 });
 		execFileSync("tar", ["-x", "-C", temp], { input: archive });
@@ -78,6 +80,9 @@ function buildScorerWorkers() {
 		const g6=execFileSync("git",["-C",dir,"archive",REFIT_SCORER_PIN,"tsconfig.json","packages/core","workers/private"],{maxBuffer:8*1024*1024});
 		execFileSync("tar",["-x","-C",temp],{input:g6});
 		refit=bundle(join(temp,"workers/private/index.ts"));
+		const g7=execFileSync("git",["-C",dir,"archive",WORDPAIR_SCORER_PIN,"tsconfig.json","packages/core","workers/private"],{maxBuffer:8*1024*1024});
+		execFileSync("tar",["-x","-C",temp],{input:g7});
+		wordpair=bundle(join(temp,"workers/private/index.ts"));
 	} finally {
 		rmSync(temp, { recursive: true, force: true });
 	}
@@ -91,9 +96,11 @@ function buildScorerWorkers() {
 			MAIL_SCORER_GENERALIZED: "mail-scoring-generalized",
 			MAIL_SCORER_LINEAR: "mail-scoring-linear",
 			MAIL_SCORER_ROBUST: "mail-scoring-robust",
+			MAIL_SCORER_WORDPAIR: "mail-scoring-wordpair",
 			MAIL_SCORER_REFIT: "mail-scoring-refit",
 		},
 		workers: [
+			{ name:"mail-scoring-wordpair",compatibilityDate:"2025-11-28",modules:[{type:"ESModule" as const,path:"index.mjs",contents:wordpair}] },
 			{ name:"mail-scoring-refit",compatibilityDate:"2025-11-28",modules:[{type:"ESModule" as const,path:"index.mjs",contents:refit}] },
 			{ name:"mail-scoring-robust",compatibilityDate:"2025-11-28",modules:[{type:"ESModule" as const,path:"index.mjs",contents:robust}] },
 			{ name:"mail-scoring-linear",compatibilityDate:"2025-11-28",modules:[{type:"ESModule" as const,path:"index.mjs",contents:linear}] },

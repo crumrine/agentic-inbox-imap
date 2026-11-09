@@ -17,8 +17,8 @@ export const LIMIT_IDS = Object.freeze([
 ] as const);
 export type LimitId = typeof LIMIT_IDS[number];
 export const ENGINE_VERSION = '0.1.0';
-export const RULE_SET_VERSION = 'rules-9';
-export const RULE_SET_VERSIONS = Object.freeze(['rules-1', 'rules-2', 'rules-3', 'rules-4', 'rules-5', 'rules-6', 'rules-7', 'rules-8', 'rules-9'] as const);
+export const RULE_SET_VERSION = 'rules-10';
+export const RULE_SET_VERSIONS = Object.freeze(['rules-1', 'rules-2', 'rules-3', 'rules-4', 'rules-5', 'rules-6', 'rules-7', 'rules-8', 'rules-9', 'rules-10'] as const);
 export type RuleSetVersion = typeof RULE_SET_VERSIONS[number];
 export const GTUBE_MARKER = 'XJS*C4JDBQADN1.NSBN3*2IDNEN*GTUBE-STANDARD-ANTI-UBE-TEST-EMAIL*C.34X';
 export const REASONS = Object.freeze({
@@ -32,6 +32,7 @@ export const REASONS = Object.freeze({
   sender_blocked: 'An explicit verified sender block preference was supplied.',
   sender_allowed: 'An explicit verified address allow preference was supplied; other evidence remains.',
   marketing_headers: 'The message declares mailing-list or bulk characteristics.',
+  statistical_balanced_evidence_spam: 'Spam evidence remains strong after discounting two words and retaining evidence against spam (general-8 heuristic).',
   statistical_word_pair_spam: 'The bounded word and adjacent-pair classifier retains spam evidence after discounting positive clues incident to its two strongest words (general-7; heuristic, not calibrated confidence).',
   statistical_refit_spam: 'Two fixed classifiers agree on spam; the new model also survives losing its two strongest words (general-6; heuristic, not calibrated confidence).',
   statistical_robust_spam: 'The bounded classifier retained spam evidence with any one positive word removed (public-corpus model general-5; heuristic, not calibrated confidence).',
@@ -43,7 +44,7 @@ export const REASONS = Object.freeze({
 });
 export const RULE_CAPS = Object.freeze({auth_failed:20,link_mismatch:30,link_userinfo:15,
   reply_to_mismatch:10,display_identity_mismatch:15,impersonation_combined:15,
-  sensitive_request_combined:25,sender_blocked:40,sender_allowed:0,marketing_headers:0,gtube:100,statistical_spam:60,statistical_context_spam:60,statistical_generalized_spam:60,statistical_linear_spam:60,statistical_robust_spam:60,statistical_refit_spam:60,statistical_word_pair_spam:60});
+  sensitive_request_combined:25,sender_blocked:40,sender_allowed:0,marketing_headers:0,gtube:100,statistical_spam:60,statistical_context_spam:60,statistical_generalized_spam:60,statistical_linear_spam:60,statistical_robust_spam:60,statistical_refit_spam:60,statistical_word_pair_spam:60,statistical_balanced_evidence_spam:60});
 export const FAMILY_CAPS = Object.freeze({authentication:20,links:35,identity:20,content:25,preference:40,marketing:0,test:100,statistics:60});
 export type ReasonId = keyof typeof REASONS;
 export type AuthValue = 'pass' | 'fail' | 'unknown';
