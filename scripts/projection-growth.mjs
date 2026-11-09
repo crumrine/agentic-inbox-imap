@@ -6,7 +6,7 @@ import {resolve, join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {build} from 'esbuild';
 const scratch = await mkdtemp(resolve('.projection-growth-'));
-const out = resolve(process.env.EVIDENCE_DIR || 'docs/evidence/dev-1018');
+const out = resolve(process.env.EVIDENCE_DIR || 'docs/evidence/dev-1022');
 try {
   const module = join(scratch, 'intake.mjs');
   await build({entryPoints:['workers/lib/mail-scoring/intake.ts'], outfile:module, bundle:true, platform:'node', format:'esm'});

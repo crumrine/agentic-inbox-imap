@@ -1,0 +1,7 @@
+# DEV-1022: rules-10 inbox compatibility
+
+Pin reviewed mail-scoring main `f8aa6004c7a0990ae99dff51b2da0afe41bad412`. The private checked artifact is `bf0c0329d30231d6e8e72afb036f021220a1ede5657ba420075b80836007563a` (2,330,667 bytes). The strict contract copies match the scorer except for the import path. Inbox policy 9 auto-routes statistical spam only under rules-10. Historical rules-9 and policy 8 assessments still survive storage, restart, explicit REST Not spam and IMAP rescue. Prior known versions and GTUBE remain supported. Unavailable inspection leaves mail in Inbox; Spam retains the original message.
+
+The 155 frozen source legitimate examples include all earlier examples and 24 additional originals from independent reviews. Every case is delivered through the real local Workers in plain text and HTML. All 310 receive valid partial rules-10 assessments at zero and remain in Inbox with identical raw bytes. No mail sending, rejection, production calls or history changes. The expanded control test needs an explicit timeout for its 310 deliveries; safety assertions are unchanged.
+
+Typecheck, full Worker tests (646), build, exact contract, projection growth and desktop/mobile synthetic browser checks passed. Browser evidence shows the whole static explanation and recovery controls; hostile MIME is displayed as inert text. The sixth observed scorer regression and source controls do not establish fresh acceptance or deployment. DEV-1009 owns the paired fifth test, OPS-615 owns deployment, and the previous failed classifiers remain rejected.

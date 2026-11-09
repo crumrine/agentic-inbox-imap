@@ -5,6 +5,7 @@
 declare namespace Cloudflare {
 	interface Env {
 		MAIL_SCORER?: import("../workers/lib/mail-scoring/protocol").ScorerBinding;
+		MAIL_SCORER_WORDPAIR?: import("../workers/lib/mail-scoring/protocol").ScorerBinding;
 		MAIL_SCORER_REFIT?: import("../workers/lib/mail-scoring/protocol").ScorerBinding;
 		MAIL_SCORER_ROBUST?: import("../workers/lib/mail-scoring/protocol").ScorerBinding;
 		MAIL_SCORER_LINEAR?: import("../workers/lib/mail-scoring/protocol").ScorerBinding;
