@@ -1,0 +1,798 @@
+{
+  "dependency": "eaa4aa0ab1be6f017d37cd1347e8727e5960751e",
+  "wordpairDependency": "453cc3423e222b0e853bf3d8e9d590ee01e44bf7",
+  "wordpairResult": {
+    "version": 1,
+    "policyVersion": "inbox-scoring-10",
+    "status": "partial",
+    "inputIncomplete": false,
+    "result": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-9",
+      "status": "partial",
+      "heuristicScore": 60,
+      "signals": {
+        "spam": "present",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [
+        {
+          "id": "statistical_word_pair_spam",
+          "contribution": 60,
+          "reason": "The bounded word and adjacent-pair classifier retains spam evidence after discounting positive clues incident to its two strongest words (general-7; heuristic, not calibrated confidence)."
+        }
+      ],
+      "limitsHit": [
+        "auth_unknown",
+        "identity_uninspected"
+      ],
+      "error": null
+    }
+  },
+  "wordpairGtubeResult": {
+    "schemaVersion": "1",
+    "engineVersion": "0.1.0",
+    "ruleSetVersion": "rules-9",
+    "status": "partial",
+    "heuristicScore": 100,
+    "signals": {
+      "spam": "present",
+      "phishing": "unknown",
+      "marketing": "unknown"
+    },
+    "reasons": [
+      {
+        "id": "gtube",
+        "contribution": 100,
+        "reason": "The plain-text body contains the standard GTUBE test marker (intentional test trigger, not a calibrated spam probability)."
+      }
+    ],
+    "limitsHit": [
+      "auth_unknown",
+      "identity_uninspected"
+    ],
+    "error": null
+  },
+  "refitDependency": "62919bc8f939bc94c0552fc6a3917c03a3373646",
+  "refitResult": {
+    "version": 1,
+    "policyVersion": "inbox-scoring-10",
+    "status": "partial",
+    "inputIncomplete": false,
+    "result": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-8",
+      "status": "partial",
+      "heuristicScore": 60,
+      "signals": {
+        "spam": "present",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [
+        {
+          "id": "statistical_refit_spam",
+          "contribution": 60,
+          "reason": "Two fixed classifiers agree on spam; the new model also survives losing its two strongest words (general-6; heuristic, not calibrated confidence)."
+        }
+      ],
+      "limitsHit": [
+        "auth_unknown",
+        "identity_uninspected"
+      ],
+      "error": null
+    }
+  },
+  "refitGtubeResult": {
+    "schemaVersion": "1",
+    "engineVersion": "0.1.0",
+    "ruleSetVersion": "rules-8",
+    "status": "partial",
+    "heuristicScore": 100,
+    "signals": {
+      "spam": "present",
+      "phishing": "unknown",
+      "marketing": "unknown"
+    },
+    "reasons": [
+      {
+        "id": "gtube",
+        "contribution": 100,
+        "reason": "The plain-text body contains the standard GTUBE test marker (intentional test trigger, not a calibrated spam probability)."
+      }
+    ],
+    "limitsHit": [
+      "auth_unknown",
+      "identity_uninspected"
+    ],
+    "error": null
+  },
+  "robustDependency": "143e24e938365c31f2669fd5f9e918408383dc7e",
+  "robustResult": {
+    "version": 1,
+    "policyVersion": "inbox-scoring-10",
+    "status": "partial",
+    "inputIncomplete": false,
+    "result": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-7",
+      "status": "partial",
+      "heuristicScore": 60,
+      "signals": {
+        "spam": "present",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [
+        {
+          "id": "statistical_robust_spam",
+          "contribution": 60,
+          "reason": "The bounded classifier retained spam evidence with any one positive word removed (public-corpus model general-5; heuristic, not calibrated confidence)."
+        }
+      ],
+      "limitsHit": [
+        "auth_unknown",
+        "identity_uninspected"
+      ],
+      "error": null
+    }
+  },
+  "robustGtubeResult": {
+    "schemaVersion": "1",
+    "engineVersion": "0.1.0",
+    "ruleSetVersion": "rules-7",
+    "status": "partial",
+    "heuristicScore": 100,
+    "signals": {
+      "spam": "present",
+      "phishing": "unknown",
+      "marketing": "unknown"
+    },
+    "reasons": [
+      {
+        "id": "gtube",
+        "contribution": 100,
+        "reason": "The plain-text body contains the standard GTUBE test marker (intentional test trigger, not a calibrated spam probability)."
+      }
+    ],
+    "limitsHit": [
+      "auth_unknown",
+      "identity_uninspected"
+    ],
+    "error": null
+  },
+  "linearDependency": "0041d47f20d2565dc8725a3c11f0ed1af113ca74",
+  "linearResult": {
+    "version": 1,
+    "policyVersion": "inbox-scoring-10",
+    "status": "partial",
+    "inputIncomplete": false,
+    "result": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-6",
+      "status": "partial",
+      "heuristicScore": 60,
+      "signals": {
+        "spam": "present",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [
+        {
+          "id": "statistical_linear_spam",
+          "contribution": 60,
+          "reason": "The bounded linear classifier found strong spam evidence (public-corpus model general-4; a heuristic, not a calibrated confidence probability)."
+        }
+      ],
+      "limitsHit": [
+        "auth_unknown",
+        "identity_uninspected"
+      ],
+      "error": null
+    }
+  },
+  "linearGtubeResult": {
+    "schemaVersion": "1",
+    "engineVersion": "0.1.0",
+    "ruleSetVersion": "rules-6",
+    "status": "partial",
+    "heuristicScore": 100,
+    "signals": {
+      "spam": "present",
+      "phishing": "unknown",
+      "marketing": "unknown"
+    },
+    "reasons": [
+      {
+        "id": "gtube",
+        "contribution": 100,
+        "reason": "The plain-text body contains the standard GTUBE test marker (intentional test trigger, not a calibrated spam probability)."
+      }
+    ],
+    "limitsHit": [
+      "auth_unknown",
+      "identity_uninspected"
+    ],
+    "error": null
+  },
+  "fragileResults": {
+    "originalPlain": {
+      "version": 1,
+      "policyVersion": "inbox-scoring-10",
+      "status": "partial",
+      "inputIncomplete": false,
+      "result": {
+        "schemaVersion": "1",
+        "engineVersion": "0.1.0",
+        "ruleSetVersion": "rules-11",
+        "status": "partial",
+        "heuristicScore": 0,
+        "signals": {
+          "spam": "unknown",
+          "phishing": "unknown",
+          "marketing": "unknown"
+        },
+        "reasons": [],
+        "limitsHit": [
+          "auth_unknown"
+        ],
+        "error": null
+      }
+    },
+    "shorterPlain": {
+      "version": 1,
+      "policyVersion": "inbox-scoring-10",
+      "status": "partial",
+      "inputIncomplete": false,
+      "result": {
+        "schemaVersion": "1",
+        "engineVersion": "0.1.0",
+        "ruleSetVersion": "rules-11",
+        "status": "partial",
+        "heuristicScore": 0,
+        "signals": {
+          "spam": "unknown",
+          "phishing": "unknown",
+          "marketing": "unknown"
+        },
+        "reasons": [],
+        "limitsHit": [
+          "auth_unknown"
+        ],
+        "error": null
+      }
+    },
+    "contextualPlain": {
+      "version": 1,
+      "policyVersion": "inbox-scoring-10",
+      "status": "partial",
+      "inputIncomplete": false,
+      "result": {
+        "schemaVersion": "1",
+        "engineVersion": "0.1.0",
+        "ruleSetVersion": "rules-11",
+        "status": "partial",
+        "heuristicScore": 0,
+        "signals": {
+          "spam": "unknown",
+          "phishing": "unknown",
+          "marketing": "unknown"
+        },
+        "reasons": [],
+        "limitsHit": [
+          "auth_unknown"
+        ],
+        "error": null
+      }
+    }
+  },
+  "generalizedDependency": "5ed110e5cdfc9905fc5ee2940a4a39cd9e4864b0",
+  "generalizedResult": {
+    "version": 1,
+    "policyVersion": "inbox-scoring-10",
+    "status": "partial",
+    "inputIncomplete": false,
+    "result": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-5",
+      "status": "partial",
+      "heuristicScore": 60,
+      "signals": {
+        "spam": "present",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [
+        {
+          "id": "statistical_generalized_spam",
+          "contribution": 60,
+          "reason": "The bounded classifier found strong spam evidence (public-corpus model general-3; a heuristic, not a calibrated confidence probability)."
+        }
+      ],
+      "limitsHit": [
+        "auth_unknown",
+        "identity_uninspected"
+      ],
+      "error": null
+    }
+  },
+  "generalizedGtubeResult": {
+    "schemaVersion": "1",
+    "engineVersion": "0.1.0",
+    "ruleSetVersion": "rules-5",
+    "status": "partial",
+    "heuristicScore": 100,
+    "signals": {
+      "spam": "present",
+      "phishing": "unknown",
+      "marketing": "unknown"
+    },
+    "reasons": [
+      {
+        "id": "gtube",
+        "contribution": 100,
+        "reason": "The plain-text body contains the standard GTUBE test marker (intentional test trigger, not a calibrated spam probability)."
+      }
+    ],
+    "limitsHit": [
+      "auth_unknown",
+      "identity_uninspected"
+    ],
+    "error": null
+  },
+  "contextDependency": "cf588bf2870964f691e420f5e5249aa3255806f8",
+  "contextResult": {
+    "version": 1,
+    "policyVersion": "inbox-scoring-10",
+    "status": "partial",
+    "inputIncomplete": false,
+    "result": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-4",
+      "status": "partial",
+      "heuristicScore": 60,
+      "signals": {
+        "spam": "present",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [
+        {
+          "id": "statistical_context_spam",
+          "contribution": 60,
+          "reason": "The bounded contextual classifier found strong spam evidence (public-corpus model general-2; a heuristic, not a calibrated confidence probability)."
+        }
+      ],
+      "limitsHit": [
+        "auth_unknown",
+        "identity_uninspected"
+      ],
+      "error": null
+    }
+  },
+  "contextGtubeResult": {
+    "schemaVersion": "1",
+    "engineVersion": "0.1.0",
+    "ruleSetVersion": "rules-4",
+    "status": "partial",
+    "heuristicScore": 100,
+    "signals": {
+      "spam": "present",
+      "phishing": "unknown",
+      "marketing": "unknown"
+    },
+    "reasons": [
+      {
+        "id": "gtube",
+        "contribution": 100,
+        "reason": "The plain-text body contains the standard GTUBE test marker (intentional test trigger, not a calibrated spam probability)."
+      }
+    ],
+    "limitsHit": [
+      "auth_unknown",
+      "identity_uninspected"
+    ],
+    "error": null
+  },
+  "oldPharmacyResult": {
+    "schemaVersion": "1",
+    "engineVersion": "0.1.0",
+    "ruleSetVersion": "rules-4",
+    "status": "partial",
+    "heuristicScore": 0,
+    "signals": {
+      "spam": "unknown",
+      "phishing": "unknown",
+      "marketing": "unknown"
+    },
+    "reasons": [],
+    "limitsHit": [
+      "auth_unknown",
+      "identity_uninspected"
+    ],
+    "error": null
+  },
+  "general1Dependency": "041e79c5f56880b8eff0e210968569461cb95fc0",
+  "general1Result": {
+    "version": 1,
+    "policyVersion": "inbox-scoring-10",
+    "status": "partial",
+    "inputIncomplete": false,
+    "result": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-3",
+      "status": "partial",
+      "heuristicScore": 60,
+      "signals": {
+        "spam": "present",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [
+        {
+          "id": "statistical_spam",
+          "contribution": 60,
+          "reason": "The bounded content classifier found strong spam evidence (public-corpus model general-1; a heuristic, not a calibrated confidence probability)."
+        }
+      ],
+      "limitsHit": [
+        "auth_unknown",
+        "identity_uninspected"
+      ],
+      "error": null
+    }
+  },
+  "general1GtubeResult": {
+    "schemaVersion": "1",
+    "engineVersion": "0.1.0",
+    "ruleSetVersion": "rules-3",
+    "status": "partial",
+    "heuristicScore": 100,
+    "signals": {
+      "spam": "present",
+      "phishing": "unknown",
+      "marketing": "unknown"
+    },
+    "reasons": [
+      {
+        "id": "gtube",
+        "contribution": 100,
+        "reason": "The plain-text body contains the standard GTUBE test marker (intentional test trigger, not a calibrated spam probability)."
+      }
+    ],
+    "limitsHit": [
+      "auth_unknown",
+      "identity_uninspected"
+    ],
+    "error": null
+  },
+  "previousDependency": "faa15bea06db52f2dc240257d5335a66a933f909",
+  "previousGtubeResult": {
+    "schemaVersion": "1",
+    "engineVersion": "0.1.0",
+    "ruleSetVersion": "rules-2",
+    "status": "partial",
+    "heuristicScore": 100,
+    "signals": {
+      "spam": "present",
+      "phishing": "unknown",
+      "marketing": "unknown"
+    },
+    "reasons": [
+      {
+        "id": "gtube",
+        "contribution": 100,
+        "reason": "The plain-text body contains the standard GTUBE test marker (intentional test trigger, not a calibrated spam probability)."
+      }
+    ],
+    "limitsHit": [
+      "auth_unknown",
+      "identity_uninspected"
+    ],
+    "error": null
+  },
+  "generalResults": {
+    "plain": {
+      "version": 1,
+      "policyVersion": "inbox-scoring-10",
+      "status": "partial",
+      "inputIncomplete": false,
+      "result": {
+        "schemaVersion": "1",
+        "engineVersion": "0.1.0",
+        "ruleSetVersion": "rules-11",
+        "status": "partial",
+        "heuristicScore": 60,
+        "signals": {
+          "spam": "present",
+          "phishing": "unknown",
+          "marketing": "unknown"
+        },
+        "reasons": [
+          {
+            "id": "statistical_balanced_evidence_spam",
+            "contribution": 60,
+            "reason": "Spam evidence remains strong after discounting two words and retaining evidence against spam (general-8 heuristic)."
+          }
+        ],
+        "limitsHit": [
+          "auth_unknown"
+        ],
+        "error": null
+      }
+    },
+    "pharmacyPlain": {
+      "version": 1,
+      "policyVersion": "inbox-scoring-10",
+      "status": "partial",
+      "inputIncomplete": false,
+      "result": {
+        "schemaVersion": "1",
+        "engineVersion": "0.1.0",
+        "ruleSetVersion": "rules-11",
+        "status": "partial",
+        "heuristicScore": 60,
+        "signals": {
+          "spam": "present",
+          "phishing": "unknown",
+          "marketing": "unknown"
+        },
+        "reasons": [
+          {
+            "id": "statistical_balanced_evidence_spam",
+            "contribution": 60,
+            "reason": "Spam evidence remains strong after discounting two words and retaining evidence against spam (general-8 heuristic)."
+          }
+        ],
+        "limitsHit": [
+          "auth_unknown"
+        ],
+        "error": null
+      }
+    }
+  },
+  "legacyDependency": "2fab406320ae3b3596345d2c76e0ef8a08593211",
+  "hashes": {
+    "packages/core/src/contract.ts": "685aecd407aacddd3f04016c73051d8cdc9cad728835a637c13884a144d91c16",
+    "workers/private/protocol.ts": "e51bf51d4253b2815a8f243f55710c959f973b0d352e39367157e2d65d02cd1f"
+  },
+  "fixture": {
+    "rpcVersion": "1",
+    "ok": true,
+    "result": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-11",
+      "status": "partial",
+      "heuristicScore": 0,
+      "signals": {
+        "spam": "unknown",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [],
+      "limitsHit": [
+        "auth_unknown"
+      ],
+      "error": null
+    }
+  },
+  "preferenceResults": {
+    "none": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-11",
+      "status": "partial",
+      "heuristicScore": 0,
+      "signals": {
+        "spam": "unknown",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [],
+      "limitsHit": [
+        "auth_unknown"
+      ],
+      "error": null
+    },
+    "allow": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-11",
+      "status": "partial",
+      "heuristicScore": 0,
+      "signals": {
+        "spam": "unknown",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [
+        {
+          "id": "sender_allowed",
+          "contribution": 0,
+          "reason": "An explicit verified address allow preference was supplied; other evidence remains."
+        }
+      ],
+      "limitsHit": [
+        "auth_unknown"
+      ],
+      "error": null
+    },
+    "block": {
+      "schemaVersion": "1",
+      "engineVersion": "0.1.0",
+      "ruleSetVersion": "rules-11",
+      "status": "partial",
+      "heuristicScore": 40,
+      "signals": {
+        "spam": "present",
+        "phishing": "unknown",
+        "marketing": "unknown"
+      },
+      "reasons": [
+        {
+          "id": "sender_blocked",
+          "contribution": 40,
+          "reason": "An explicit verified sender block preference was supplied."
+        }
+      ],
+      "limitsHit": [
+        "auth_unknown"
+      ],
+      "error": null
+    }
+  },
+  "gtubePreferenceResults": {
+    "none": {
+      "quarantine": true,
+      "result": {
+        "schemaVersion": "1",
+        "engineVersion": "0.1.0",
+        "ruleSetVersion": "rules-11",
+        "status": "partial",
+        "heuristicScore": 100,
+        "signals": {
+          "spam": "present",
+          "phishing": "unknown",
+          "marketing": "unknown"
+        },
+        "reasons": [
+          {
+            "id": "gtube",
+            "contribution": 100,
+            "reason": "The plain-text body contains the standard GTUBE test marker (intentional test trigger, not a calibrated spam probability)."
+          }
+        ],
+        "limitsHit": [
+          "auth_unknown"
+        ],
+        "error": null
+      }
+    },
+    "allow": {
+      "quarantine": false,
+      "result": {
+        "schemaVersion": "1",
+        "engineVersion": "0.1.0",
+        "ruleSetVersion": "rules-11",
+        "status": "partial",
+        "heuristicScore": 100,
+        "signals": {
+          "spam": "present",
+          "phishing": "unknown",
+          "marketing": "unknown"
+        },
+        "reasons": [
+          {
+            "id": "sender_allowed",
+            "contribution": 0,
+            "reason": "An explicit verified address allow preference was supplied; other evidence remains."
+          },
+          {
+            "id": "gtube",
+            "contribution": 100,
+            "reason": "The plain-text body contains the standard GTUBE test marker (intentional test trigger, not a calibrated spam probability)."
+          }
+        ],
+        "limitsHit": [
+          "auth_unknown"
+        ],
+        "error": null
+      }
+    },
+    "block": {
+      "quarantine": true,
+      "result": {
+        "schemaVersion": "1",
+        "engineVersion": "0.1.0",
+        "ruleSetVersion": "rules-11",
+        "status": "partial",
+        "heuristicScore": 100,
+        "signals": {
+          "spam": "present",
+          "phishing": "unknown",
+          "marketing": "unknown"
+        },
+        "reasons": [
+          {
+            "id": "sender_blocked",
+            "contribution": 40,
+            "reason": "An explicit verified sender block preference was supplied."
+          },
+          {
+            "id": "gtube",
+            "contribution": 60,
+            "reason": "The plain-text body contains the standard GTUBE test marker (intentional test trigger, not a calibrated spam probability)."
+          }
+        ],
+        "limitsHit": [
+          "auth_unknown"
+        ],
+        "error": null
+      }
+    }
+  },
+  "negativeResult": {
+    "schemaVersion": "1",
+    "engineVersion": "0.1.0",
+    "ruleSetVersion": "rules-11",
+    "status": "partial",
+    "heuristicScore": 0,
+    "signals": {
+      "spam": "unknown",
+      "phishing": "unknown",
+      "marketing": "unknown"
+    },
+    "reasons": [],
+    "limitsHit": [
+      "auth_unknown"
+    ],
+    "error": null
+  },
+  "quotedResult": {
+    "schemaVersion": "1",
+    "engineVersion": "0.1.0",
+    "ruleSetVersion": "rules-11",
+    "status": "partial",
+    "heuristicScore": 0,
+    "signals": {
+      "spam": "unknown",
+      "phishing": "unknown",
+      "marketing": "unknown"
+    },
+    "reasons": [],
+    "limitsHit": [
+      "source_incomplete",
+      "auth_unknown",
+      "quoted_content"
+    ],
+    "error": null
+  },
+  "legacyGtubeResult": {
+    "schemaVersion": "1",
+    "engineVersion": "0.1.0",
+    "ruleSetVersion": "rules-1",
+    "status": "partial",
+    "heuristicScore": 0,
+    "signals": {
+      "spam": "unknown",
+      "phishing": "unknown",
+      "marketing": "unknown"
+    },
+    "reasons": [],
+    "limitsHit": [
+      "auth_unknown",
+      "identity_uninspected"
+    ],
+    "error": null
+  },
+  "passed": true
+}

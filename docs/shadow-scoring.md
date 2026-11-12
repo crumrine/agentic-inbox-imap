@@ -10,7 +10,13 @@ through the private `MAIL_SCORER` service binding, then applies the recoverable
 policy in [quarantine.md](quarantine.md). Reads, refreshes, IMAP and ordinary moves
 do not score again. Failures retain Inbox delivery; there is no historical scan.
 
-## Source pins and compatibility (DEV-1018)
+## Current source compatibility
+
+The reconciled source uses scorer `eaa4aa0ab1be6f017d37cd1347e8727e5960751e`, `rules-11` and policy `inbox-scoring-10`; the decoder retains `rules-1` through `rules-10` and stored policies through `inbox-scoring-9`. The new brand reason is accepted only under rules-11. The balanced statistical reason remains valid under both rules-10 and rules-11 for caller-first rollout. [HTML inspection](html-inspection.md) and [reconciliation evidence](evidence/html-reconcile/README.md) describe the current checks.
+
+## Historical source pins and compatibility (DEV-1018)
+
+The following records the earlier rules-9 source state and is retained as history.
 
 The current contract and protocol copies come from merged `mail-scoring` PR #19,
 `453cc3423e222b0e853bf3d8e9d590ee01e44bf7`, with only the protocol import path

@@ -6,7 +6,11 @@ rollout after independent source review and DEV-1009 paired acceptance. Historic
 source/build evidence does not establish the current deployment. Actions and
 automatic Builds remain paused.
 
-## Policy and recovery
+## Current source policy
+
+The reconciled source accepts GTUBE under rules-2 through rules-11 and retains balanced statistical routing for rules-10 and rules-11. Rules-11 additionally routes a positive brand-impersonation reason when the score is at least 45 and only `auth_unknown`, `source_incomplete` or `html_uninspected` limits are present. Allow preferences still override these paths; failed inspection retains Inbox delivery. See [HTML inspection](html-inspection.md). The policy below records the earlier rules-9 source state, not the current deployment.
+
+## Historical policy and recovery
 
 The existing `folder_id = spam` is the quarantine boundary, including mail moved
 by an alternate IMAP client. There is no second store. Scoring remains off by

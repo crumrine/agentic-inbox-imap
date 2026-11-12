@@ -4,12 +4,13 @@ import type { Email } from 'postal-mime';
 import type { Env } from '../../types';
 import { decodeResponse, encodeBoundedJson, type ScoreInputV1, type ScoreResultV1 } from './protocol';
 import { LIMITS } from './contract';
+import { inspectHtml } from './html';
 
-export const POLICY_VERSION = 'inbox-scoring-9';
+export const POLICY_VERSION = 'inbox-scoring-10';
 
 export interface Assessment {
   version: 1;
-  policyVersion: 'inbox-shadow-1' | 'inbox-scoring-2' | 'inbox-scoring-3' | 'inbox-scoring-4' | 'inbox-scoring-5' | 'inbox-scoring-6' | 'inbox-scoring-7' | 'inbox-scoring-8' | typeof POLICY_VERSION;
+  policyVersion: 'inbox-shadow-1' | 'inbox-scoring-2' | 'inbox-scoring-3' | 'inbox-scoring-4' | 'inbox-scoring-5' | 'inbox-scoring-6' | 'inbox-scoring-7' | 'inbox-scoring-8' | 'inbox-scoring-9' | typeof POLICY_VERSION;
   status: 'partial' | 'unavailable';
   inputIncomplete: boolean;
   result: ScoreResultV1 | null;
@@ -115,6 +116,11 @@ export async function assessArrival(env: Env, parsed: Email, rawInspectable: boo
     const input = project(parsed, envelopeFrom);
     // A body omitted by the inspection budget must not become a subject-only verdict.
     if ((parsed.text && !input.text) || (!input.text.trim() && parsed.html && !input.html)) return unavailable();
+    if (input.html) {
+      const inspected = await inspectHtml(input.html);
+      if (!inspected) return unavailable();
+      input.extractedText = inspected.text; input.anchors = inspected.anchors;
+    }
     if (preference) input.preferences = {senderAllowed:preference === 'allow',senderBlocked:preference === 'block'};
     const bytes = encodeBoundedJson(JSON.stringify(input));
     if (!bytes) return unavailable();
@@ -142,12 +148,15 @@ export function shouldQuarantine(assessment: Assessment | undefined, preference:
   if (!result || assessment.status === 'unavailable' || result.status === 'unavailable' ||
       preference === undefined || preference === 'allow') return false;
   if (preference === 'block') return true;
-  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3' || result.ruleSetVersion === 'rules-4' || result.ruleSetVersion === 'rules-5' || result.ruleSetVersion === 'rules-6' || result.ruleSetVersion === 'rules-7' || result.ruleSetVersion === 'rules-8' || result.ruleSetVersion === 'rules-9' || result.ruleSetVersion === 'rules-10') && result.signals.spam === 'present' &&
+  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3' || result.ruleSetVersion === 'rules-4' || result.ruleSetVersion === 'rules-5' || result.ruleSetVersion === 'rules-6' || result.ruleSetVersion === 'rules-7' || result.ruleSetVersion === 'rules-8' || result.ruleSetVersion === 'rules-9' || result.ruleSetVersion === 'rules-10' || result.ruleSetVersion === 'rules-11') && result.signals.spam === 'present' &&
       result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;
   // Only the current model enables content routing; historical assessments remain readable.
-  if (result.ruleSetVersion === 'rules-10' && result.heuristicScore >= 60 && result.signals.spam === 'present' &&
+  if ((result.ruleSetVersion === 'rules-10' || result.ruleSetVersion === 'rules-11') && result.heuristicScore >= 60 && result.signals.spam === 'present' &&
       result.limitsHit.every(limit => ['auth_unknown', 'source_incomplete', 'html_uninspected', 'identity_uninspected'].includes(limit)) &&
       result.reasons.some(reason => reason.id === 'statistical_balanced_evidence_spam' && reason.contribution > 0)) return true;
+  if (result.ruleSetVersion === 'rules-11' && result.heuristicScore >= 45 &&
+      result.limitsHit.every(limit => ['auth_unknown', 'source_incomplete', 'html_uninspected'].includes(limit)) &&
+      result.reasons.some(reason => reason.id === 'brand_impersonation_combined' && reason.contribution > 0)) return true;
   // shortcut: conservative rules-1 policy, recalibrate with privately labelled mail before broadening.
   return result.heuristicScore >= 45 &&
     result.limitsHit.every(limit => limit === 'auth_unknown' || limit === 'source_incomplete') &&
