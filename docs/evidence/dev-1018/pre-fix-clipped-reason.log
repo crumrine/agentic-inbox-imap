@@ -1,0 +1,20 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ 'The bounded word and adjacent-pair classifier retains spam evidence after discounting positive clues incident to its two strongest words (general-7; heuristic, '
+- 'The bounded word and adjacent-pair classifier retains spam evidence after discounting positive clues incident to its two strongest words (general-7; heuristic, not calibrated confidence).'
+
+    at file:///Users/brian/projects/agentic-inbox-dev-1018/scripts/quarantine-browser.mjs:108:10 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 'The bounded word and adjacent-pair classifier retains spam evidence after discounting positive clues incident to its two strongest words (general-7; heuristic, ',
+  expected: 'The bounded word and adjacent-pair classifier retains spam evidence after discounting positive clues incident to its two strongest words (general-7; heuristic, not calibrated confidence).',
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.15.0

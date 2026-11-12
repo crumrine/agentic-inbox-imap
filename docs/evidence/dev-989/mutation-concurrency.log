@@ -1,0 +1,88 @@
+RUN  v4.1.11 /tmp/dev-989-mutation-lbnNc4
+
+ ❯ test/shadow-scoring.test.ts (55 tests | 1 failed | 54 skipped) 502ms
+     ↓ preserves existing mail, raw MIME, attachments and assessment; Not spam rescues with correct UIDs
+     ↓ off does not move even high scoring mail
+     ↓ shadow does not move even high scoring mail
+     ↓ ordinary stays in Inbox
+     ↓ below_threshold stays in Inbox
+     ↓ marketing stays in Inbox
+     ↓ quoted_content stays in Inbox
+     ↓ identity_uninspected stays in Inbox
+     ↓ field_bytes stays in Inbox
+     ↓ honors explicit allow preference
+     ↓ honors explicit block preference
+     ↓ preserves delivery when sender preferences cannot be read
+     ↓ keeps uninspectable raw input in Inbox (padding 0)
+     ↓ keeps uninspectable raw input in Inbox (padding 5)
+     ↓ off makes no calls, leaves legacy unknown, preserves raw bytes, attachments and UID
+     ↓ shadow scores once after alias/Bcc/multiple-recipient routing and persists across reads/restart
+     ↓ does not score unknown recipients
+       ↓ missing scorer keeps delivery and records unavailable without preferences or AI
+       ↓ throw scorer keeps delivery and records unavailable without preferences or AI
+       ↓ timeout scorer keeps delivery and records unavailable without preferences or AI
+       ↓ malformed scorer keeps delivery and records unavailable without preferences or AI
+       ↓ huge scorer keeps delivery and records unavailable without preferences or AI
+       ↓ deep scorer keeps delivery and records unavailable without preferences or AI
+       ↓ version scorer keeps delivery and records unavailable without preferences or AI
+       ↓ rules1_gtube scorer keeps delivery and records unavailable without preferences or AI
+       ↓ arbitrary_reason scorer keeps delivery and records unavailable without preferences or AI
+       ↓ forged_reason scorer keeps delivery and records unavailable without preferences or AI
+       ↓ invented_auth scorer keeps delivery and records unavailable without preferences or AI
+       ↓ inconsistent scorer keeps delivery and records unavailable without preferences or AI
+       ↓ nan scorer keeps delivery and records unavailable without preferences or AI
+       ↓ unavailable scorer keeps delivery and records unavailable without preferences or AI
+       ↓ missing scorer keeps delivery and records unavailable without preferences or AI
+       ↓ throw scorer keeps delivery and records unavailable without preferences or AI
+       ↓ timeout scorer keeps delivery and records unavailable without preferences or AI
+       ↓ malformed scorer keeps delivery and records unavailable without preferences or AI
+       ↓ huge scorer keeps delivery and records unavailable without preferences or AI
+       ↓ deep scorer keeps delivery and records unavailable without preferences or AI
+       ↓ version scorer keeps delivery and records unavailable without preferences or AI
+       ↓ rules1_gtube scorer keeps delivery and records unavailable without preferences or AI
+       ↓ arbitrary_reason scorer keeps delivery and records unavailable without preferences or AI
+       ↓ forged_reason scorer keeps delivery and records unavailable without preferences or AI
+       ↓ invented_auth scorer keeps delivery and records unavailable without preferences or AI
+       ↓ inconsistent scorer keeps delivery and records unavailable without preferences or AI
+       ↓ nan scorer keeps delivery and records unavailable without preferences or AI
+       ↓ unavailable scorer keeps delivery and records unavailable without preferences or AI
+     ↓ oversized/truncated raw skips optional RPC, oversized fields and HTML remain incomplete
+     ↓ spoofed lone and duplicate auth/ARC/x-spam never establish transport authority
+     × authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs 364ms
+     ↓ routine move, rescue and delete never train; explicit preferences affect only later shadow arrivals
+     ↓ migration 12 populated DB upgrades without rescanning and keeps FK/idempotence
+     ↓ routes positive GTUBE to Spam, isolates it from normal views/tools/agent epoch, and rescues via Not spam or ordinary/IMAP move with intact UIDs and assessment
+     ↓ routes plain-text, base64, quoted-printable, and mixed-quote GTUBE arrivals while keeping HTML-only and oversized/padded inputs in Inbox
+     ↓ keeps negative GTUBE, nonspam controls (score 0 and 10), near-matches, quoted/forwarded markers, forged headers, and off/shadow modes in Inbox
+     ↓ preserves explicit sender allow/block precedence on GTUBE and keeps ordinary quarantine partial-inspection guards intact
+     ↓ supports caller-first mixed-version rollout and rollback between rules-1 and rules-2 while preserving stored assessment readability
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 54 skipped (55)
+   Start at  21:03:10
+   Duration  17.97s (transform 6.22s, setup 6.54s, import 8.16s, tests 502ms, environment 0ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/shadow-scoring.test.ts > actual app email and authenticated REST in local workerd > authenticates explicit feedback, preserves assessment, is idempotent and rejects stale/cross-mailbox IDs
+AssertionError: expected 200 to be 409 // Object.is equality
+
+- Expected
++ Received
+
+- 409
++ 200
+
+ ❯ test/shadow-scoring.test.ts:258:98
+    256|     expect((await request(b.e,`${base}/spam-feedback`,{...body,emailId…
+    257|     for(let i=0;i<2;i++) {const r=await request(b.e,`${base}/spam-feed…
+    258|     expect((await request(b.e,`${base}/spam-feedback`,{...body,disposi…
+       |                                                                                                  ^
+    259|     expect((await request(b.e,`${base}/spam-feedback`,{...body,disposi…
+    260|     expect((await mailbox(BOX).getSpamState(row.id))?.assessments).toE…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯

@@ -1,0 +1,13 @@
+diff --git a/packages/core/src/inspection.ts b/packages/core/src/inspection.ts
+index e33ad1f..7f8f0e5 100644
+--- a/packages/core/src/inspection.ts
++++ b/packages/core/src/inspection.ts
+@@ -20,7 +20,7 @@ function hasUnquotedGtube(text:string,limits:Set<LimitId>):boolean {
+       if(prefix.startsWith('-----original message-----') || prefix.startsWith('---------- forwarded message')) {
+         limits.add('quoted_content');break;
+       }
+-      if(line.includes(GTUBE_MARKER))found=true;
++
+     }
+     lineStart=lineEnd+1;
+   }

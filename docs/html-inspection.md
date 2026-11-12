@@ -1,8 +1,7 @@
 # Bounded HTML scoring (DEV-962)
 
 The Inbox adapter uses Workers' native `HTMLRewriter` to extract inert text and
-HTTP anchors before its private scoring RPC. The portable scorer still does not
-parse raw HTML. No package dependency or version changed.
+HTTP anchors before its private scoring RPC. The scorer separately extracts text from bounded raw HTML for its statistical model. No new dependency is added.
 
 Limits are checked before parsing/allocation where possible: 65,536 UTF-8 source
 bytes (and UTF-16 length), 1,024 start tags, nesting depth 32, 16,384 extracted
@@ -22,18 +21,16 @@ once; this is not a complete named-entity dictionary. Unknown remains distinct
 from safe. Existing MIME parsing precedes this bounded extraction and is not
 made safe for arbitrary hostile MIME by this change.
 
-The pinned scorer source is `967ab7383931b27be545a5748643a8f0a29156d0`
-([Mail Scoring PR 5](https://github.com/crumrine/mail-scoring/pull/5)).
-The joined workerd check uses its pinned runtime as well as its source.
+The scorer integration is tracked in [Mail Scoring PR 5](https://github.com/crumrine/mail-scoring/pull/5), at source commit `eaa4aa0ab1be6f017d37cd1347e8727e5960751e`. Run `node scripts/check-html-joined.mjs /path/to/mail-scoring` with both repositories installed to exercise the actual pinned scorer and native Workers runtime. The original evidence in `docs/evidence/html-inspection/contract.json` belongs to the superseded rules-2 candidate; it is not evidence for rules-11.
 It also checks that absent optional Reply-To/envelope fields do not masquerade
 as malformed identity evidence.
 
 The existing RPC schema/engine are retained. The decoder accepts stored
-`rules-1` and new `rules-2`; the new combined rule is valid only in `rules-2`.
-New assessments record policy `inbox-html-2`; old assessments remain unchanged.
+`rules-1` through `rules-11`; the new combined rule is valid only in `rules-11`.
+New assessments record policy `inbox-scoring-10`; old assessments remain unchanged.
 Automatic routing still requires successful scoring, no disallowed inspection
 limits, score >=45 and either the existing combined sensitive/identity evidence
-or positive `brand_impersonation_combined` evidence (normally 45 points, reduced
+or positive rules-11 `brand_impersonation_combined` evidence (normally 45 points, reduced
 only by the global 100-point cap). Allow/block
 preferences, recoverable Spam, manual rescue and raw MIME/UID handling remain.
 Reads do not rescore, and this release does not backfill historical messages.
@@ -47,7 +44,7 @@ it; ambiguous or nested redirects add an inspection limit and prevent automatic
 routing. This parameter is a claimed destination, not proof of a server redirect.
 
 Rollout order: publish the caller that accepts both rule versions, then publish
-the private scorer at `rules-2`. In a rollback, `MAIL_SCORING_MODE=shadow` preserves
+the private scorer at `rules-11`. In a rollback, `MAIL_SCORING_MODE=shadow` preserves
 mail and stops new automatic routing. Preserve the live Access, service,
 storage, agent and email bindings and disabled public scorer/preview settings.
 

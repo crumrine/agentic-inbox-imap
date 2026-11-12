@@ -6,7 +6,7 @@ import { DurableObject } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 import { eq, and, or, asc, desc, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import { type Assessment, unavailable } from "../lib/mail-scoring/intake";
+import { type Assessment, unavailable, POLICY_VERSION } from "../lib/mail-scoring/intake";
 import { decodeResponse } from "../lib/mail-scoring/protocol";
 import { feedbackSchema, preferenceSchema, type Feedback, type Preference, type MutationResult } from "../lib/mail-scoring/feedback";
 import * as schema from "../db/schema";
@@ -1208,7 +1208,7 @@ export class MailboxDO extends DurableObject<Env> {
             try {
                 let safe = unavailable();
                 // Validate at the DO boundary too; never store unbounded RPC data.
-                if (assessment.version === 1 && ['inbox-shadow-1','inbox-html-2'].includes(assessment.policyVersion) &&
+                if (assessment.version === 1 && (assessment.policyVersion === 'inbox-shadow-1' || assessment.policyVersion === 'inbox-scoring-2' || assessment.policyVersion === 'inbox-scoring-3' || assessment.policyVersion === 'inbox-scoring-4' || assessment.policyVersion === 'inbox-scoring-5' || assessment.policyVersion === 'inbox-scoring-6' || assessment.policyVersion === 'inbox-scoring-7' || assessment.policyVersion === 'inbox-scoring-8' || assessment.policyVersion === 'inbox-scoring-9' || assessment.policyVersion === POLICY_VERSION) &&
                     assessment.result && typeof assessment.inputIncomplete === 'boolean') {
                     const json = JSON.stringify({rpcVersion:'1', ok:true, result:assessment.result});
                     const decoded = decodeResponse(json);

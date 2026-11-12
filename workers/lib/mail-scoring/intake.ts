@@ -3,24 +3,24 @@
 import type { Email } from 'postal-mime';
 import type { Env } from '../../types';
 import { decodeResponse, encodeBoundedJson, type ScoreInputV1, type ScoreResultV1 } from './protocol';
+import { LIMITS } from './contract';
 import { inspectHtml } from './html';
+
+export const POLICY_VERSION = 'inbox-scoring-10';
 
 export interface Assessment {
   version: 1;
-  policyVersion: 'inbox-shadow-1' | 'inbox-html-2';
+  policyVersion: 'inbox-shadow-1' | 'inbox-scoring-2' | 'inbox-scoring-3' | 'inbox-scoring-4' | 'inbox-scoring-5' | 'inbox-scoring-6' | 'inbox-scoring-7' | 'inbox-scoring-8' | 'inbox-scoring-9' | typeof POLICY_VERSION;
   status: 'partial' | 'unavailable';
   inputIncomplete: boolean;
   result: ScoreResultV1 | null;
 }
-export const unavailable = (): Assessment => ({version:1, policyVersion:'inbox-html-2', status:'unavailable', inputIncomplete:true, result:null});
+export const unavailable = (): Assessment => ({version:1, policyVersion:POLICY_VERSION, status:'unavailable', inputIncomplete:true, result:null});
 export const RAW_INSPECTION_BYTES = 131072;
 
 /** Scoring-only preflight; it does not make the inherited MIME parser safe. */
-export function inspectableRaw(raw: Uint8Array): boolean {
-  if (raw.byteLength > RAW_INSPECTION_BYTES) return false;
-  // Do not decode raw MIME. A short declared stream is zero padded by the
-  // existing intake helper; never call that complete scoring input.
-  return !raw.includes(0);
+export function inspectableRaw(raw: Uint8Array, complete: boolean): boolean {
+  return complete === true && raw.byteLength <= RAW_INSPECTION_BYTES;
 }
 
 /** Construct only fixed bounded fields; never serialize a mail object. */
@@ -35,7 +35,51 @@ export function project(parsed: Email, envelopeFrom?: string): ScoreInputV1 {
     return value;
   };
   const subject = field(parsed.subject, 2048);
-  const text = field(parsed.text, 32768);
+  let text = field(parsed.text, 32768);
+  // Do not replace a present over-budget plain body with a different HTML body.
+  const plainOmitted = Boolean(parsed.text) && !text;
+  let html = plainOmitted || text.trim() ? undefined : field(parsed.html, 32768) || undefined;
+  // PostalMime flattens inline message/rfc822 bodies beneath these generated headers.
+  // shortcut: omit the whole scoring body; split current/forwarded provenance if mixed-mail recall requires it.
+  if (/(?:^|[\r\n])-{3,}[\r\n]+(?:From|Subject|Date|To|Cc|Bcc):[ \t]/.test(text) || html?.includes('class="postal-email-header"')) {
+    // Preserve quote status so copied subject/name clues cannot cause automatic routing.
+    text = '>';
+    html = undefined;
+    complete = false;
+  }
+  const urls: string[] = [];
+  // The 32 KiB body cap bounds the linear line/token scans.
+  for (const line of text.split(/\r\n|[\r\n]/)) {
+    const prefix = line.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/g, '').replace(/^[ \t]+/, '').slice(0, 29).toLowerCase();
+    if (prefix.startsWith('>')) { complete = false; continue; }
+    if (prefix.startsWith('-----original message-----') || prefix.startsWith('---------- forwarded message')) {
+      complete = false;
+      break;
+    }
+    for (const match of line.matchAll(/https?(?::\/\/|%)[^\s<>"']+/gi)) {
+      if (match.index > 0 && /[\p{L}\p{N}_%]/u.test(line[match.index - 1])) continue;
+      if (urls.length === LIMITS.urls) { complete = false; break; }
+      const token = field(match[0], LIMITS.urlBytes);
+      if (!token) continue;
+      let brackets = 0;
+      for (const char of token) {
+        if (char === '[') brackets++;
+        else if (char === ']') brackets--;
+      }
+      let end = token.length;
+      while (end > 0) {
+        const last = token[end - 1];
+        if (last === ']' && brackets < 0) brackets++;
+        else if (!'.,;:!?)}'.includes(last)) break;
+        end--;
+      }
+      const url = token.slice(0, end);
+      // Keep raw URL controls from being stripped into new URL evidence downstream.
+      if (/[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/u.test(url)) { complete = false; continue; }
+      if (url) urls.push(url);
+    }
+    if (urls.length === LIMITS.urls) { complete = false; break; }
+  }
   const addresses = {
     from: field(parsed.from?.address, 512),
     replyTo: field(parsed.replyTo?.[0]?.address, 512),
@@ -57,11 +101,10 @@ export function project(parsed: Email, envelopeFrom?: string): ScoreInputV1 {
     if (headerBytes > 8192) { complete = false; break; }
     headers.push({name:h.key.toLowerCase(), value});
   }
-  // Raw HTML is omitted here; assessArrival adds bounded native HTML features.
-  // Attachments and remaining headers remain uninspected.
+  // HTML visibility, attachments and remaining headers are not completely inspected.
   // Keep omissions explicit even when the upstream service says complete.
   if (parsed.html || parsed.attachments.length || parsed.headers.length !== headers.length || (parsed.replyTo?.length ?? 0) > 1) complete = false;
-  return {schemaVersion:'1', policyVersion:'inbox-html-2', subject, text, addresses, headers,
+  return {schemaVersion:'1', policyVersion:POLICY_VERSION, subject, text, urls, addresses, headers, ...(html ? {html} : {}),
     sourceComplete:complete, transport:{provenance:'unknown',complete:false,spf:'unknown',dkim:'unknown',dmarc:'unknown'}};
 }
 
@@ -71,10 +114,12 @@ export async function assessArrival(env: Env, parsed: Email, rawInspectable: boo
   try {
     if (!rawInspectable || !env.MAIL_SCORER) return unavailable();
     const input = project(parsed, envelopeFrom);
-    if(parsed.html){
-      const html=await inspectHtml(parsed.html);
-      if(!html)return unavailable();
-      input.extractedText=html.text;input.anchors=html.anchors;
+    // A body omitted by the inspection budget must not become a subject-only verdict.
+    if ((parsed.text && !input.text) || (!input.text.trim() && parsed.html && !input.html)) return unavailable();
+    if (input.html) {
+      const inspected = await inspectHtml(input.html);
+      if (!inspected) return unavailable();
+      input.extractedText = inspected.text; input.anchors = inspected.anchors;
     }
     if (preference) input.preferences = {senderAllowed:preference === 'allow',senderBlocked:preference === 'block'};
     const bytes = encodeBoundedJson(JSON.stringify(input));
@@ -93,7 +138,7 @@ export async function assessArrival(env: Env, parsed: Email, rawInspectable: boo
         (r.id === 'sender_allowed' && preference !== 'allow') ||
         (r.id === 'sender_blocked' && preference !== 'block'))) return unavailable();
     // Unverified transport always leaves this intake assessment partial.
-    return {version:1, policyVersion:'inbox-html-2', status:'partial', inputIncomplete:!input.sourceComplete, result:decoded.result};
+    return {version:1, policyVersion:POLICY_VERSION, status:'partial', inputIncomplete:!input.sourceComplete, result:decoded.result};
   } catch { return unavailable(); }
   finally { if (timer !== undefined) clearTimeout(timer); }
 }
@@ -103,10 +148,18 @@ export function shouldQuarantine(assessment: Assessment | undefined, preference:
   if (!result || assessment.status === 'unavailable' || result.status === 'unavailable' ||
       preference === undefined || preference === 'allow') return false;
   if (preference === 'block') return true;
-  // shortcut: conservative combined-evidence policy, recalibrate with privately labelled mail before broadening.
+  if ((result.ruleSetVersion === 'rules-2' || result.ruleSetVersion === 'rules-3' || result.ruleSetVersion === 'rules-4' || result.ruleSetVersion === 'rules-5' || result.ruleSetVersion === 'rules-6' || result.ruleSetVersion === 'rules-7' || result.ruleSetVersion === 'rules-8' || result.ruleSetVersion === 'rules-9' || result.ruleSetVersion === 'rules-10' || result.ruleSetVersion === 'rules-11') && result.signals.spam === 'present' &&
+      result.reasons.some(reason => reason.id === 'gtube' && reason.contribution > 0)) return true;
+  // Only the current model enables content routing; historical assessments remain readable.
+  if ((result.ruleSetVersion === 'rules-10' || result.ruleSetVersion === 'rules-11') && result.heuristicScore >= 60 && result.signals.spam === 'present' &&
+      result.limitsHit.every(limit => ['auth_unknown', 'source_incomplete', 'html_uninspected', 'identity_uninspected'].includes(limit)) &&
+      result.reasons.some(reason => reason.id === 'statistical_balanced_evidence_spam' && reason.contribution > 0)) return true;
+  if (result.ruleSetVersion === 'rules-11' && result.heuristicScore >= 45 &&
+      result.limitsHit.every(limit => ['auth_unknown', 'source_incomplete', 'html_uninspected'].includes(limit)) &&
+      result.reasons.some(reason => reason.id === 'brand_impersonation_combined' && reason.contribution > 0)) return true;
+  // shortcut: conservative rules-1 policy, recalibrate with privately labelled mail before broadening.
   return result.heuristicScore >= 45 &&
     result.limitsHit.every(limit => limit === 'auth_unknown' || limit === 'source_incomplete') &&
-    (result.reasons.some(reason => reason.id === 'brand_impersonation_combined' && reason.contribution > 0) ||
-      (result.reasons.some(reason => reason.id === 'sensitive_request_combined' && reason.contribution === 25) &&
-      result.reasons.some(reason => ['reply_to_mismatch', 'display_identity_mismatch', 'impersonation_combined'].includes(reason.id) && reason.contribution > 0)));
+    result.reasons.some(reason => reason.id === 'sensitive_request_combined' && reason.contribution === 25) &&
+    result.reasons.some(reason => ['reply_to_mismatch', 'display_identity_mismatch', 'impersonation_combined'].includes(reason.id) && reason.contribution > 0);
 }

@@ -1,0 +1,13 @@
+diff --git a/packages/core/src/statistical.ts b/packages/core/src/statistical.ts
+index eaae66d..83a416d 100644
+--- a/packages/core/src/statistical.ts
++++ b/packages/core/src/statistical.ts
+@@ -16,7 +16,7 @@ export function generalSpam(input:ScoreInputV1,limits:Set<LimitId>):boolean {
+   const content=statisticalText(input.subject,input.text,input.html??'');
+   if(!content.complete){limits.add(input.text.trim()?'statistical_limit':'html_limit');return false;}
+   if(content.quoted){limits.add('quoted_content');return false;}
+-  if(statisticalTokens(content.bodyText).length<5)return false;
++  if(contextFeatures([content.bodyText]).positions<5)return false;
+   const tokens=contextFeatures([content.subjectText,content.bodyText]);
+   if(tokens.limited){limits.add('statistical_limit');return false;}
+   if([...limits].some(limit=>!['auth_unknown','source_incomplete','html_uninspected','identity_uninspected'].includes(limit)))return false;

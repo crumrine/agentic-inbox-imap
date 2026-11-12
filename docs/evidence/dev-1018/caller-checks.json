@@ -1,0 +1,27 @@
+{
+  "scorerPin": "453cc3423e222b0e853bf3d8e9d590ee01e44bf7",
+  "base": "b5a89a074e362d8123ee3bf260b6208c78503479",
+  "policy": "inbox-scoring-8",
+  "rules": "rules-9",
+  "backendTests": 646,
+  "focusedTests": 82,
+  "actualWorkerVersions": 9,
+  "mutants": 42,
+  "directMutants": 23,
+  "workerdMutants": 19,
+  "restoredWorkerdMutants": 16,
+  "projectionGrowthSamples": 25,
+  "browserWidths": [
+    1440,
+    390
+  ],
+  "all131SubjectsBodiesLabelsPreserved": true,
+  "legitimatePlainHtmlDeliveries": 262,
+  "legitimateScore0Current9PartialInboxRawUnchanged": true,
+  "coreReviewControlsSha256": "eb653329c725b8a58088a93444c504d222c6a9215e400c7e70c37d072d556812",
+  "original119ControlsSha256": "667dc0c9052480d0e63a83b7097550c1f8d9550a575ed9a15bf5d7d515e84975",
+  "fourthPredictions": 0,
+  "productionMutation": false,
+  "uiFix": "Exact local canonical reason strings up to256 render in full; untrusted strings still truncate160 before rendering; no browser assertions weakened",
+  "scope": "Source and local tests only; no fresh acceptance or actual provider inbound receipt"
+}

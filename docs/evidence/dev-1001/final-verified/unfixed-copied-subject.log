@@ -1,0 +1,43 @@
+
+> test
+> vitest run test/shadow-scoring.test.ts -t keeps copied phishing subjects
+
+
+ RUN  v4.1.11 /Users/brian/projects/agentic-inbox-dev-1001
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mAI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.[0m
+
+
+ ❯ test/shadow-scoring.test.ts (68 tests | 1 failed | 67 skipped) 68ms
+     × keeps copied phishing subjects on inline reports in Inbox with explicit quoted inspection 38ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/shadow-scoring.test.ts > inline forwarded MIME inspection provenance > keeps copied phishing subjects on inline reports in Inbox with explicit quoted inspection
+AssertionError: expected { …(5) } to match object { folder_id: 'inbox' }
+(4 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "folder_id": "inbox",
++   "folder_id": "spam",
+  }
+
+ ❯ test/shadow-scoring.test.ts:402:17
+    400|     expect(project(await PostalMime.parse(raw)).subject).toBe('Fwd: ve…
+    401|     const row = await deliver(b.e, raw);
+    402|     expect(row).toMatchObject({folder_id:'inbox'});
+       |                 ^
+    403|     expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0]).…
+    404|       status:'partial', inputIncomplete:true,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 67 skipped (68)
+   Start at  18:44:55
+   Duration  1.39s (transform 410ms, setup 431ms, import 492ms, tests 68ms, environment 0ms)
+

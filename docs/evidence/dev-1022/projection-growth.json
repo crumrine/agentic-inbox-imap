@@ -1,0 +1,156 @@
+{
+  "node": "v24.15.0",
+  "samples": [
+    {
+      "kind": "html",
+      "sourceCharacters": 2055,
+      "elapsedMs": 0.5321249999999935,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "html_forward",
+      "sourceCharacters": 2087,
+      "elapsedMs": 0.18087500000000034,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "url_suffix",
+      "sourceCharacters": 2057,
+      "elapsedMs": 0.10233300000000156,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_forward",
+      "sourceCharacters": 2076,
+      "elapsedMs": 0.06445899999999938,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_near_match",
+      "sourceCharacters": 2074,
+      "elapsedMs": 0.041791000000003464,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "html",
+      "sourceCharacters": 4103,
+      "elapsedMs": 0.048332999999999515,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "html_forward",
+      "sourceCharacters": 4135,
+      "elapsedMs": 0.0365420000000114,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "url_suffix",
+      "sourceCharacters": 4105,
+      "elapsedMs": 0.07054200000000321,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_forward",
+      "sourceCharacters": 4124,
+      "elapsedMs": 0.042582999999993376,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_near_match",
+      "sourceCharacters": 4122,
+      "elapsedMs": 0.04975000000000307,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "html",
+      "sourceCharacters": 8199,
+      "elapsedMs": 0.03404199999999946,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "html_forward",
+      "sourceCharacters": 8231,
+      "elapsedMs": 0.026291999999997984,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "url_suffix",
+      "sourceCharacters": 8201,
+      "elapsedMs": 0.06833299999999554,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_forward",
+      "sourceCharacters": 8220,
+      "elapsedMs": 0.02620800000001111,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_near_match",
+      "sourceCharacters": 8218,
+      "elapsedMs": 0.10879200000000822,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "html",
+      "sourceCharacters": 16391,
+      "elapsedMs": 0.08941700000001163,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "html_forward",
+      "sourceCharacters": 16423,
+      "elapsedMs": 0.05379099999998971,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "url_suffix",
+      "sourceCharacters": 16393,
+      "elapsedMs": 0.10512500000000102,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_forward",
+      "sourceCharacters": 16412,
+      "elapsedMs": 0.06099999999999284,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_near_match",
+      "sourceCharacters": 16410,
+      "elapsedMs": 0.1409579999999977,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "html",
+      "sourceCharacters": 32007,
+      "elapsedMs": 0.05525000000000091,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "html_forward",
+      "sourceCharacters": 32039,
+      "elapsedMs": 0.062167000000002304,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "url_suffix",
+      "sourceCharacters": 32009,
+      "elapsedMs": 0.3172909999999973,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_forward",
+      "sourceCharacters": 32028,
+      "elapsedMs": 0.07716700000000287,
+      "retainedUrls": 0
+    },
+    {
+      "kind": "inline_near_match",
+      "sourceCharacters": 32026,
+      "elapsedMs": 0.3706669999999974,
+      "retainedUrls": 0
+    }
+  ],
+  "scope": "Synthetic local synchronous projection wall time; not hosted CPU or billing. A wide 250ms ceiling checks original-token suffixes and inline-forward markers/near-matches within the source budget."
+}

@@ -1,0 +1,37 @@
+RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-Ff1yF6
+
+ ❯ test/shadow-scoring.test.ts (75 tests | 1 failed | 74 skipped) 114ms
+     × keeps oversized inline reports in Inbox with unavailable inspection rather than subject-only quarantine 40ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 74 skipped (75)
+   Start at  19:43:47
+   Duration  1.69s (transform 467ms, setup 528ms, import 696ms, tests 114ms, environment 0ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/shadow-scoring.test.ts > inline forwarded MIME inspection provenance > keeps oversized inline reports in Inbox with unavailable inspection rather than subject-only quarantine
+AssertionError: expected { …(5) } to match object { folder_id: 'inbox' }
+(4 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "folder_id": "inbox",
++   "folder_id": "spam",
+  }
+
+ ❯ test/shadow-scoring.test.ts:421:17
+    419|     expect(raw.length).toBeLessThan(131072);
+    420|     const row = await deliver(b.e, raw);
+    421|     expect(row).toMatchObject({folder_id:'inbox'});
+       |                 ^
+    422|     expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0]).…
+    423|       status:'unavailable', inputIncomplete:true, result:null,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯

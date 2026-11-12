@@ -1,0 +1,15 @@
+
+> test
+> vitest run test/shadow-scoring.test.ts -t plain-text URL --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000
+
+
+ RUN  v4.1.11 /Users/brian/projects/agentic-inbox-dev-993
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+
+ Test Files  1 passed (1)
+      Tests  5 passed | 55 skipped (60)
+   Start at  15:02:08
+   Duration  1.61s (transform 435ms, setup 491ms, import 570ms, tests 194ms, environment 0ms)

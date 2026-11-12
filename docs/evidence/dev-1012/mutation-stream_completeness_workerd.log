@@ -1,0 +1,31 @@
+RUN  v4.1.11 /private/var/folders/3j/8c03ys2n675998v_lvbjtzz00000gp/T/dev-989-mutation-O2pPw0
+
+ ❯ test/shadow-scoring.test.ts (81 tests | 1 failed | 80 skipped) 100ms
+     × preserves declared short-stream padding without scoring and rejects an overlong declared stream 31ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 80 skipped (81)
+   Start at  11:46:54
+   Duration  1.60s (transform 461ms, setup 459ms, import 639ms, tests 100ms, environment 0ms)
+
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/shadow-scoring.test.ts > joined rules-7 general spam detection > preserves declared short-stream padding without scoring and rejects an overlong declared stream
+AssertionError: expected 'spam' to be 'inbox' // Object.is equality
+
+Expected: "inbox"
+Received: "spam"
+
+ ❯ test/shadow-scoring.test.ts:1078:71
+    1076|   it('preserves declared short-stream padding without scoring and reje…
+    1077|     await registered();const b=realBindings();const raw=bytes(BOX,GTUB…
+    1078|     const row=await deliver(b.e,raw,BOX,4,true);expect(row.folder_id).…
+       |                                                                       ^
+    1079|     expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0]).…
+    1080|     const padded=new Uint8Array(raw.length+4);padded.set(raw);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯

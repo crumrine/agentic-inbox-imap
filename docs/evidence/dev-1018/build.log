@@ -1,0 +1,64 @@
+
+> build
+> react-router build
+
+Using Vite Environment API (experimental)
+vite v6.4.1 building for production...
+transforming...
+✓ 5199 modules transformed.
+rendering chunks...
+computing gzip size...
+build/client/.assetsignore                                 0.02 kB
+build/client/.vite/manifest.json                          11.00 kB │ gzip:   1.38 kB
+build/client/assets/root-BB9mqibX.css                    112.46 kB │ gzip:  18.73 kB
+build/client/assets/mailbox-index-DTFj9JhM.js              0.16 kB │ gzip:   0.16 kB
+build/client/assets/mailbox-CrKs1LK-.js                    0.51 kB │ gzip:   0.31 kB
+build/client/assets/not-found-Bo527aFc.js                  0.63 kB │ gzip:   0.44 kB
+build/client/assets/Plus.es-D6Uewz7f.js                    1.58 kB │ gzip:   0.59 kB
+build/client/assets/text-gzt92mlji1lug13d-CXg4LFxa.js      1.65 kB │ gzip:   0.70 kB
+build/client/assets/MagnifyingGlass.es-DywZfvBL.js         1.67 kB │ gzip:   0.69 kB
+build/client/assets/empty-crbntv0dhud7besh-C0xUQ9iY.js     1.78 kB │ gzip:   0.92 kB
+build/client/assets/Copy.es-BG0Tc1Ge.js                    1.83 kB │ gzip:   0.63 kB
+build/client/assets/Warning.es-Ch436Ce_.js                 3.36 kB │ gzip:   1.10 kB
+build/client/assets/Robot.es-F3cUDtEf.js                   3.42 kB │ gzip:   1.09 kB
+build/client/assets/EnvelopeSimple.es-DIZxIJyT.js          3.54 kB │ gzip:   1.12 kB
+build/client/assets/index-CWnbTYGu.js                      3.95 kB │ gzip:   1.56 kB
+build/client/assets/select-jxxef2rf76pgdrf8-B0uRyxTk.js    4.72 kB │ gzip:   2.01 kB
+build/client/assets/Tray.es-DiZ7-L1e.js                    5.16 kB │ gzip:   1.36 kB
+build/client/assets/search-results-sPSnu5KL.js             6.20 kB │ gzip:   2.68 kB
+build/client/assets/PencilSimple.es-Cz0TESlq.js            7.17 kB │ gzip:   2.40 kB
+build/client/assets/home-Bizi9piC.js                       8.31 kB │ gzip:   3.14 kB
+build/client/assets/root-_blpPN9L.js                      11.65 kB │ gzip:   4.26 kB
+build/client/assets/email-list-Xpss3_ze.js                11.69 kB │ gzip:   4.25 kB
+build/client/assets/react-kh66zKnm.js                     18.91 kB │ gzip:   6.73 kB
+build/client/assets/mailboxes-CiDCCR-2.js                 24.65 kB │ gzip:   8.12 kB
+build/client/assets/settings-B9HoLXK5.js                  27.59 kB │ gzip:   8.44 kB
+build/client/assets/button-b1yp3lbrhjr9eg07-DGgR_Ana.js   32.35 kB │ gzip:  10.59 kB
+build/client/assets/mailbox-DN6XUYSW.js                   41.21 kB │ gzip:  12.43 kB
+build/client/assets/MailboxSplitView-fTUAmx1-.js          67.44 kB │ gzip:  19.12 kB
+build/client/assets/chunk-LFPYN7LY-C2JhVUp_.js           128.54 kB │ gzip:  43.21 kB
+build/client/assets/react-DqXH8arD.js                    146.99 kB │ gzip:  40.01 kB
+build/client/assets/AgentPanel-DzOI6Jfk.js               177.80 kB │ gzip:  54.09 kB
+build/client/assets/entry.client-DcbTlCX3.js             187.65 kB │ gzip:  59.32 kB
+build/client/assets/api-Arf_cSn6.js                      252.81 kB │ gzip:  82.60 kB
+build/client/assets/folders-Ce7IGrPr.js                  468.13 kB │ gzip: 146.13 kB
+✓ built in 2.95s
+vite v6.4.1 building SSR bundle for production...
+transforming...
+✓ 5756 modules transformed.
+rendering chunks...
+build/server/wrangler.json                            1.80 kB
+build/server/.vite/manifest.json                      2.10 kB
+build/server/assets/server-build-BB9mqibX.css       112.46 kB
+build/server/index.js                                 0.32 kB
+build/server/assets/react-CocLhhhJ.js                32.96 kB
+build/server/assets/react-N4MGkZ03.js                39.28 kB
+build/server/assets/mimetext.node.es-BWX7ooQI.js    223.62 kB
+build/server/assets/AgentPanel-B12vWM5F.js          434.67 kB
+build/server/assets/server-build-bK3Bkb_w.js      2,331.91 kB
+build/server/assets/worker-entry-z4N-oCfc.js      2,510.07 kB
+
+✓ 1 asset copied from React Router server build to client assets.
+build/client/assets/server-build-BB9mqibX.css
+
+✓ built in 3.35s

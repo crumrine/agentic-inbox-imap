@@ -8,7 +8,7 @@ import type {Env} from '../workers/types';
 import PostalMime from 'postal-mime';
 
 const synthetic='<h1>Account notice</h1><p>Security team: inspect a negative review.</p><a href="https://tracker.example/route?fallback=https%3A%2F%2Fdestination.invalid%2F">Respond now</a>';
-const result:ScoreResultV1={schemaVersion:'1',engineVersion:'0.1.0',ruleSetVersion:'rules-2',status:'partial',heuristicScore:45,
+const result:ScoreResultV1={schemaVersion:'1',engineVersion:'0.1.0',ruleSetVersion:'rules-11',status:'partial',heuristicScore:45,
   reasons:[{id:'brand_impersonation_combined',contribution:45,reason:REASONS.brand_impersonation_combined}],
   signals:{spam:'present',phishing:'present',marketing:'unknown'},limitsHit:['auth_unknown','source_incomplete'],error:null};
 afterEach(()=>vi.unstubAllGlobals());
@@ -62,7 +62,7 @@ describe('bounded native HTML inspection in real workerd',()=>{
     const assessment=await assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1}} as unknown as Env,parsed,true,undefined,'none');
     expect(assessment?.status).toBe('partial');expect(shouldQuarantine(assessment,'none')).toBe(true);expect(shouldQuarantine(assessment,'allow')).toBe(false);
     const input=JSON.parse(new TextDecoder().decode(scoreV1.mock.calls[0][1]));
-    expect(input.extractedText).toContain('negative review');expect(input.anchors).toHaveLength(1);expect(input).not.toHaveProperty('html');
+    expect(input.extractedText).toContain('negative review');expect(input.anchors).toHaveLength(1);expect(input.html).toBe(parsed.html);
     const capped:ScoreResultV1={...result,heuristicScore:100,reasons:[
       {id:'link_mismatch',contribution:30,reason:REASONS.link_mismatch},{id:'link_userinfo',contribution:5,reason:REASONS.link_userinfo},
       {id:'sensitive_request_combined',contribution:25,reason:REASONS.sensitive_request_combined},

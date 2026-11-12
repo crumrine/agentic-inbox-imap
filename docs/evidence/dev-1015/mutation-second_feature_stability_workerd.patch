@@ -1,0 +1,13 @@
+diff --git a/packages/core/src/linear.ts b/packages/core/src/linear.ts
+index bb01ba3..46acd1f 100644
+--- a/packages/core/src/linear.ts
++++ b/packages/core/src/linear.ts
+@@ -24,7 +24,7 @@ export function linearSpam(features:readonly ContextFeature[],bodyWords:readonly
+   }
+   if(norm<=0 || MODEL_REFERENCE_BIAS+referenceDot/Math.sqrt(norm)<MODEL_LOGIT_CUTOFF)return false;
+   // Keeping the full norm gives a lower bound after losing any two positive words.
+-  const remaining=dot-strongest-secondStrongest;
++  const remaining=dot-strongest;
+   if(norm<=0 || remaining<=0 || MODEL_BIAS+remaining/Math.sqrt(norm)<MODEL_LOGIT_CUTOFF)return false;
+   return true;
+ }

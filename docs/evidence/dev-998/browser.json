@@ -1,0 +1,149 @@
+{
+  "browser": "157.0.8103.38",
+  "results": [
+    {
+      "width": 1440,
+      "blockedExternalRequests": 0,
+      "errors": [],
+      "actions": [
+        {
+          "path": "sender-preference",
+          "body": {
+            "sender": "sender@example.test",
+            "preference": "block",
+            "expectedRevision": 0
+          }
+        },
+        {
+          "path": "sender-preference",
+          "body": {
+            "sender": "sender@example.test",
+            "preference": "allow",
+            "expectedRevision": 1
+          }
+        },
+        {
+          "path": "sender-preference",
+          "body": {
+            "sender": "sender@example.test",
+            "preference": "none",
+            "expectedRevision": 2
+          }
+        },
+        {
+          "path": "emails/evil",
+          "body": {
+            "read": false
+          }
+        },
+        {
+          "path": "spam-feedback",
+          "body": {
+            "emailId": "evil",
+            "disposition": "not_spam",
+            "expectedRevision": 0
+          }
+        },
+        {
+          "path": "spam-feedback",
+          "body": {
+            "emailId": "gtube",
+            "disposition": "not_spam",
+            "expectedRevision": 0
+          }
+        },
+        {
+          "path": "spam-feedback",
+          "body": {
+            "emailId": "general",
+            "disposition": "not_spam",
+            "expectedRevision": 0
+          }
+        }
+      ],
+      "escapedReason": true,
+      "inertPreview": true,
+      "gtubePreviewVerified": true,
+      "gtubeReasonVerified": true,
+      "gtubeRescued": true,
+      "generalPreviewVerified": true,
+      "generalReasonVerified": true,
+      "generalRescued": true,
+      "inputBodyCharacters": 20551,
+      "renderedBodyCharacters": 16384,
+      "renderedReasonCharacters": 160
+    },
+    {
+      "width": 390,
+      "blockedExternalRequests": 0,
+      "errors": [],
+      "actions": [
+        {
+          "path": "sender-preference",
+          "body": {
+            "sender": "sender@example.test",
+            "preference": "block",
+            "expectedRevision": 0
+          }
+        },
+        {
+          "path": "sender-preference",
+          "body": {
+            "sender": "sender@example.test",
+            "preference": "allow",
+            "expectedRevision": 1
+          }
+        },
+        {
+          "path": "sender-preference",
+          "body": {
+            "sender": "sender@example.test",
+            "preference": "none",
+            "expectedRevision": 2
+          }
+        },
+        {
+          "path": "emails/evil",
+          "body": {
+            "read": false
+          }
+        },
+        {
+          "path": "spam-feedback",
+          "body": {
+            "emailId": "evil",
+            "disposition": "not_spam",
+            "expectedRevision": 0
+          }
+        },
+        {
+          "path": "spam-feedback",
+          "body": {
+            "emailId": "gtube",
+            "disposition": "not_spam",
+            "expectedRevision": 0
+          }
+        },
+        {
+          "path": "spam-feedback",
+          "body": {
+            "emailId": "general",
+            "disposition": "not_spam",
+            "expectedRevision": 0
+          }
+        }
+      ],
+      "escapedReason": true,
+      "inertPreview": true,
+      "gtubePreviewVerified": true,
+      "gtubeReasonVerified": true,
+      "gtubeRescued": true,
+      "generalPreviewVerified": true,
+      "generalReasonVerified": true,
+      "generalRescued": true,
+      "inputBodyCharacters": 20551,
+      "renderedBodyCharacters": 16384,
+      "renderedReasonCharacters": 160
+    }
+  ]
+}

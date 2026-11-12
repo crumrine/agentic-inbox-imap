@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Brian Crumrine
 // SPDX-License-Identifier: Apache-2.0
-import {LIMITS, LIMIT_IDS, REASONS, RULE_CAPS, type ScoreResultV1} from './contract';
-export type {ScoreInputV1, ScoreResultV1, ScoreContext} from './contract';
+import {ENGINE_VERSION, LIMITS, LIMIT_IDS, REASONS, RULE_CAPS, RULE_SET_VERSIONS, type RuleSetVersion, type ScoreResultV1} from './contract';
+export type {ScoreInputV1, ScoreResultV1, ScoreContext, RuleSetVersion} from './contract';
 export const RPC_VERSION = '1';
 export const RPC_OUTPUT_BYTES = 4096;
 export const CONTEXT_BYTES = 256;
@@ -16,7 +16,7 @@ const keys=(v:unknown, names:readonly string[]):v is Record<string,unknown> =>
 /** Only called on bounded JSON.parse output, never RPC objects with accessors. */
 function resultValid(r:unknown):r is ScoreResultV1 {
   if(!keys(r,['schemaVersion','engineVersion','ruleSetVersion','status','heuristicScore','signals','reasons','limitsHit','error']))return false;
-  if(r.schemaVersion!=='1'||r.engineVersion!=='0.1.0'||!['rules-1','rules-2'].includes(r.ruleSetVersion as string))return false;
+  if(r.schemaVersion!=='1'||r.engineVersion!==ENGINE_VERSION||!RULE_SET_VERSIONS.includes(r.ruleSetVersion as RuleSetVersion))return false;
   if(!['complete','partial','unavailable'].includes(r.status as string)||typeof r.heuristicScore!=='number'||!Number.isFinite(r.heuristicScore)||r.heuristicScore<0||r.heuristicScore>100)return false;
   if(!keys(r.signals,['spam','phishing','marketing'])||!Object.values(r.signals).every(v=>v==='present'||v==='unknown'))return false;
   if(!Array.isArray(r.reasons)||r.reasons.length>Object.keys(REASONS).length||!Array.isArray(r.limitsHit)||r.limitsHit.length>LIMIT_IDS.length)return false;
@@ -24,10 +24,20 @@ function resultValid(r:unknown):r is ScoreResultV1 {
   for(const v of r.reasons) {
     if(!keys(v,['id','contribution','reason'])||typeof v.id!=='string'||!Object.hasOwn(REASONS,v.id)||seen.has(v.id))return false;
     const id=v.id as keyof typeof REASONS;
-    if(id==='brand_impersonation_combined' && r.ruleSetVersion!=='rules-2')return false;
+    if(r.ruleSetVersion==='rules-1'&&id==='gtube')return false;
+    if(r.ruleSetVersion!=='rules-3'&&id==='statistical_spam')return false;
+    if(r.ruleSetVersion!=='rules-4'&&id==='statistical_context_spam')return false;
+    if(r.ruleSetVersion!=='rules-5'&&id==='statistical_generalized_spam')return false;
+    if(r.ruleSetVersion!=='rules-6'&&id==='statistical_linear_spam')return false;
+    if(r.ruleSetVersion!=='rules-7'&&id==='statistical_robust_spam')return false;
+    if(r.ruleSetVersion!=='rules-8'&&id==='statistical_refit_spam')return false;
+    if(r.ruleSetVersion!=='rules-9'&&id==='statistical_word_pair_spam')return false;
+    if(r.ruleSetVersion!=='rules-10'&&r.ruleSetVersion!=='rules-11'&&id==='statistical_balanced_evidence_spam')return false;
+    if(id==='brand_impersonation_combined'&&r.ruleSetVersion!=='rules-11')return false;
     if(v.reason!==REASONS[id]||typeof v.contribution!=='number'||!Number.isFinite(v.contribution)||v.contribution<0||v.contribution>RULE_CAPS[id])return false;
     seen.add(id);sum+=v.contribution;
   }
+  if(r.ruleSetVersion!=='rules-3'&&r.ruleSetVersion!=='rules-4'&&r.ruleSetVersion!=='rules-5'&&r.ruleSetVersion!=='rules-6'&&r.ruleSetVersion!=='rules-7'&&r.ruleSetVersion!=='rules-8'&&r.ruleSetVersion!=='rules-9'&&r.ruleSetVersion!=='rules-10'&&r.ruleSetVersion!=='rules-11'&&r.limitsHit.some(limit=>limit==='html_limit'||limit==='statistical_limit'))return false;
   if(sum!==r.heuristicScore||!r.limitsHit.every(v=>LIMIT_IDS.includes(v))||new Set(r.limitsHit).size!==r.limitsHit.length)return false;
   if(r.status==='unavailable')return ['invalid_input','request_limit','invalid_json'].includes(r.error as string)&&sum===0&&r.reasons.length===0&&r.limitsHit.length===0&&Object.values(r.signals).every(v=>v==='unknown');
   return r.error===null && (r.status==='partial'?r.limitsHit.length>0:r.limitsHit.length===0);

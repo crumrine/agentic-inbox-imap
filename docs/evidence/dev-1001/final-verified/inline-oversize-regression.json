@@ -1,0 +1,1 @@
+{"case":"authored_legitimate_inline_phishing_report","rules":"rules-2","score":45,"reasons":["reply_to_mismatch","impersonation_combined","sensitive_request_combined"],"rawBytes":33337,"quarantined":true,"generatedForwardHeaderDetected":false,"limits":["source_incomplete","auth_unknown"],"attachments":0}

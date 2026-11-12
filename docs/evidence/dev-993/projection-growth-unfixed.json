@@ -1,0 +1,31 @@
+{
+  "node": "v24.13.0",
+  "samples": [
+    {
+      "sourceCharacters": 2057,
+      "elapsedMs": 2.6824999999999903,
+      "retainedUrls": 0
+    },
+    {
+      "sourceCharacters": 4105,
+      "elapsedMs": 9.482166000000007,
+      "retainedUrls": 0
+    },
+    {
+      "sourceCharacters": 8201,
+      "elapsedMs": 33.44862500000001,
+      "retainedUrls": 0
+    },
+    {
+      "sourceCharacters": 16393,
+      "elapsedMs": 128.156375,
+      "retainedUrls": 0
+    },
+    {
+      "sourceCharacters": 32009,
+      "elapsedMs": 490.961875,
+      "retainedUrls": 0
+    }
+  ],
+  "scope": "Synthetic local synchronous projection wall time; not hosted CPU or billing. A wide 250ms ceiling catches the former multi-second suffix-regex regression."
+}

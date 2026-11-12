@@ -1,38 +1,57 @@
 # Recoverable Spam (DEV-879)
 
-The current [HTML inspection extension](html-inspection.md) adds the rules-2
-combined-brand path alongside the policy described below.
+Current source behavior includes DEV-1018 word-pair content integration and the
+DEV-1001 inline-forward safeguard. OPS-615 owns the separately verified manual
+rollout after independent source review and DEV-1009 paired acceptance. Historical
+source/build evidence does not establish the current deployment. Actions and
+automatic Builds remain paused.
 
-Source-only change, stacked on Inbox PR #7 at
-`2838cfb45b870054297fd09e7b88a0c1545801f1`, the reviewed successor to the
-original `7cc31772b0ca17ec28ea4d78367e41e0a24e5ce5` prerequisite. The source-branch
-merge at `43889e5c0ba7fd43090e830fbeac048a9551ffc8` incorporates its static error
-diagnostics and clean-install lock repair; prior quarantine implementation and
-historical evidence are unchanged. Scorer PR #3 remains pinned at
-`bb02819e4662e1d680805435dd886e3dc4728906`; no scorer or gateway code changes.
-Future authorized merge order: mail-scoring #1 (`ce6d9afedf607584c150d457f0e078a307047f8a`),
-#2 (`8456996596af6446f533cacb90ff9ce2ecd1a4ab`), #3, Inbox #7, this PR.
-No merge, release, deployment, live mail or provider testing is authorized here.
-See `diagnostics-validation.md` for the corrected automatic-build history;
-source CI must not be interpreted as proof of current production state.
+## Current source policy
 
-## Policy and recovery
+The reconciled source accepts GTUBE under rules-2 through rules-11 and retains balanced statistical routing for rules-10 and rules-11. Rules-11 additionally routes a positive brand-impersonation reason when the score is at least 45 and only `auth_unknown`, `source_incomplete` or `html_uninspected` limits are present. Allow preferences still override these paths; failed inspection retains Inbox delivery. See [HTML inspection](html-inspection.md). The policy below records the earlier rules-9 source state, not the current deployment.
+
+## Historical policy and recovery
 
 The existing `folder_id = spam` is the quarantine boundary, including mail moved
 by an alternate IMAP client. There is no second store. Scoring remains off by
 default; shadow still records evidence without moving mail. Owner-authorized
 `MAIL_SCORING_MODE=filter` routes **new arrivals only** directly to Spam when:
 
-- The sender has an explicit mailbox-local block preference and scoring succeeded; or
-- The validated rules-1 score is at least 45, with a full sensitive-request
+- The sender has an explicit mailbox-local block preference and scoring succeeded;
+- The validated `rules-2`, `rules-3`, `rules-4`, `rules-5`, `rules-6`, `rules-7`, `rules-8` or `rules-9` result carries `signals.spam === "present"` and the
+  `gtube` reason with positive contribution (the exact 68-byte uppercase ASCII
+  standard GTUBE test marker on an unquoted plain-text line), without requiring
+  unrelated identity, sensitive-request or transport-auth evidence; or
+- The validated `rules-9` score is at least 60, spam is present and a positive
+  `statistical_word_pair_spam` contribution is present. Only `auth_unknown`,
+  `source_incomplete`, `html_uninspected` and `identity_uninspected` limits are
+  tolerated on this path; quoted, over-budget or otherwise uninspected evidence
+  does not cause automatic statistical routing. The fixed word/adjacent-pair model requires five distinct positive unigram body words, at least50%known body words and supported normalized letters. After discounting positive clues incident to the two strongest words, the remaining positive dot product divided by the full original norm must clear the same fixed cutoff. Negative context remains in the score. This bounds loss of existing incident features, not edited text creating new pairs; its internal0.99cutoff is not calibrated mailbox confidence. DEV-1009 measures the complete caller path; or
+- The validated `rules-1`, `rules-2`, `rules-3`, `rules-4`, `rules-5`, `rules-6`, `rules-7`, `rules-8` or `rules-9` score is at least 45, with a full sensitive-request
   contribution and independent suspicious identity evidence. Only `auth_unknown`
-  and `source_incomplete` inspection limits are tolerated. Other inspection limits
-  retain Inbox delivery. This conservative policy is not a calibrated probability.
+  and `source_incomplete` inspection limits are tolerated for this ordinary
+  heuristic path. Other inspection limits retain Inbox delivery. This conservative
+  policy is not a calibrated probability.
 
-An explicit allow preference overrides automatic routing, without erasing the
-score. Missing/failed preference lookup or unavailable/failed scoring retains
-Inbox delivery. Partial inspection alone never triggers routing; transport
-provenance remains unknown, and HTML/attachment content remains uninspected.
+Historical rules-3/4/5/6/7/8 statistical evidence remains readable without automatic generic routing. Current rules-9 uses the reviewed fixed general-7 word/pair model; unsupported text and resource-limit cases abstain rather than being declared safe.
+
+Rules-6 and rules-8 each failed independent acceptance by catching legitimate mail; rules-7 failed the unchanged50%recall gate. None may be deployed or used for rollback. Rules-9 uses a TRAIN-selected word/pair model with a conservative two-word incident-positive discount, retaining negative context and all earlier safety guards. DEV-1009 requires all five observed corpora followed by the frozen fourth cohort under unchanged50%recall/+20absolute-point gain/zeroHAM gates before OPS-615 manual release. Use the same caller in shadow/off mode or the previously approved rules-5 scorer while retaining this caller for rollback.
+
+An explicit allow preference overrides automatic routing — including for a
+validated `gtube` test-marker message — keeping the message in Inbox while
+preserving the stored heuristic score (`100`) and both `sender_allowed`
+(`0`) and `gtube` (`100`) reasons. An explicit block preference routes to Spam
+when scoring succeeds (`sender_blocked` contributes `40`, and if `gtube` also
+fires its contribution is clipped to the remaining `60` under the `100` total cap).
+Missing/failed preference lookup or unavailable/failed scoring retains
+Inbox delivery. Forged `X-Spam-Flag`, `X-Spam-Status` or authentication headers,
+quoted/forwarded GTUBE lines, GTUBE near-matches, oversized raw inputs
+(`> 131,072` bytes) or over-limit text fields (`> 32,768` bytes), `gtube` claimed
+under `rules-1`, and unknown versions or reason IDs never trigger quarantine.
+Partial inspection alone never triggers routing; transport
+provenance remains unknown, HTML visibility remains incomplete and attachment
+bytes remain uninspected. HTML-only general spam can route through the bounded
+statistical path; an HTML-only GTUBE marker alone is not a trigger.
 The original body, raw MIME, attachments and assessment remain stored. No Spam
 expiry/emptying job is added. A mail client's own deletion rules are independent.
 Manual Not spam or ordinary moves rescue messages using existing UID allocation.
@@ -134,6 +153,11 @@ paid AI was introduced.
 
 ## Verification and remaining observations
 
+See `evidence/dev-989/README.md` for `rules-2` GTUBE contract parity against
+`mail-scoring` `faa15bea06db52f2dc240257d5335a66a933f909` (and mixed-version
+compatibility with `rules-1` `2fab406320ae3b3596345d2c76e0ef8a08593211`),
+joined local `workerd` tests with the real separate scorer RPC, mutation checks,
+and desktop/mobile browser verification.
 See `evidence/dev-879-dependency-refresh/README.md` for renewed validation of the
 corrected prerequisite and the exact source lineage. Historical bundles below
 retain their original pins, executions and unsuccessful attempts.

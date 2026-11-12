@@ -1,0 +1,13 @@
+diff --git a/packages/core/src/linear.ts b/packages/core/src/linear.ts
+index 4f989d6..53de691 100644
+--- a/packages/core/src/linear.ts
++++ b/packages/core/src/linear.ts
+@@ -30,7 +30,7 @@ export function linearSpam(features:readonly ContextFeature[],bodyWords:readonly
+   }
+   // Remove all positive clues incident to two words; shared pairs subtract twice, conservatively.
+   // Keeping negative evidence and the full norm bounds any two-word removal from below.
+-  const remaining=dot-strongest-secondStrongest;
++  const remaining=dot;
+   if(norm<=0 || remaining<=0 || MODEL_BIAS+remaining/Math.sqrt(norm)<MODEL_LOGIT_CUTOFF)return false;
+   return true;
+ }
