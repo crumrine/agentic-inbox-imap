@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/emersion/go-imap/v2/imapserver"
+
+	"github.com/crumrine/agentic-inbox-imap/gateway/internal/backend"
 )
 
 // rawClient speaks IMAP as text. go-imap's own client cannot issue LSUB,
@@ -176,6 +178,42 @@ func TestLSubListsEverySubscribedFolder(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Errorf("LSUB response %q is missing %q", joined, want)
 		}
+	}
+}
+
+func TestListAndLSubIdentifySpecialUseMailboxes(t *testing.T) {
+	be := newFakeBackend(t)
+	be.folders = append(be.folders,
+		backend.Folder{ID: "drafts", Name: "Drafts"},
+		backend.Folder{ID: "spam", Name: "Spam"},
+		backend.Folder{ID: "trash", Name: "Trash"},
+		backend.Folder{ID: "custom", Name: "Projects"},
+	)
+	c := startRawClient(t, be)
+	requireOK(t, c.do("LOGIN %s %s", testMailbox, testPassword))
+
+	for _, command := range []string{"LIST", "LSUB"} {
+		t.Run(command, func(t *testing.T) {
+			lines := c.do(`%s "" "*"`, command)
+			requireOK(t, lines)
+			joined := strings.Join(lines, "\n")
+			for name, attrs := range map[string]string{
+				"INBOX": "", "Archive": `\Archive`, "Sent": `\Sent`,
+				"Drafts": `\Drafts`, "Spam": `\Junk`, "Trash": `\Trash`, "Projects": "",
+			} {
+				if command == "LSUB" {
+					attrs = strings.TrimSpace(`\Subscribed ` + attrs)
+				}
+				mailbox := fmt.Sprintf("%q", name)
+				if name == "INBOX" {
+					mailbox = name
+				}
+				want := fmt.Sprintf(`* %s (%s) "/" %s`, command, attrs, mailbox)
+				if !strings.Contains(joined, want) {
+					t.Errorf("missing %q in %q", want, lines)
+				}
+			}
+		})
 	}
 }
 
