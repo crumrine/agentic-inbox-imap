@@ -14,7 +14,7 @@ import {
 	buildReferencesChain,
 	buildThreadingHeaders,
 	resolveOriginalEmail,
-	resolveSendAs,
+	resolveMessageSendAs,
 } from "../lib/email-helpers";
 import { SendEmailRequestSchema } from "../lib/schemas";
 import { buildAndStoreOutboundMime } from "../lib/raw-mime";
@@ -41,25 +41,23 @@ export async function handleReplyEmail(c: AppContext) {
 	const { originalMsgId, references, threadId: thread_id } = buildReferencesChain(originalEmail);
 
 	// Automatic send-as (DEV-692 part two): a reply to something that arrived
-	// at `info@` goes back out as `info@`, with no picker and no user action.
+	// at `info@` goes back out as `info@`; following up on a Sent message
+	// preserves its sender after the same ownership check.
 	// `resolveOriginalEmail` matters here — replying from a draft row must read
 	// the routing address off the message being answered, not off the draft,
 	// which never had one. The stored value is re-resolved against the alias
-	// registry inside `resolveSendAs`; see the comment there for why it
+	// registry inside `resolveMessageSendAs`; see the comment there for why it
 	// cannot be trusted as stored. That same read carries the alias's own
 	// display name, so `info@` can go out as "Support" rather than under the
 	// mailbox owner's personal name.
-	const sendAs = await resolveSendAs(c.env, mailboxId, originalEmail.delivered_to);
+	const sendAs = await resolveMessageSendAs(c.env, stub, mailboxId, originalEmail);
 	const from = applySendAs(body.from, sendAs, from_name);
 
 	let toStr: string, fromEmail: string, fromDomain: string;
 	try {
 		({ toStr, fromEmail, fromDomain } = await validateSenderWithAliases(
-			// `sendAs.address` goes in as already-proven. It is either the
-			// mailbox's own address or one `resolveSendAs` re-resolved from the
-			// original's `delivered_to`, and for a domain-wildcard alias that
-			// delivery evidence is the *whole* permission — the exact-only
-			// lookup inside would refuse it, correctly, having no way to see it.
+			// The shared resolver has checked current ownership, including
+			// stored delivery evidence when a wildcard alias is involved.
 			c.env, to, from, mailboxId, [sendAs.address],
 		));
 	} catch (e) {
@@ -158,17 +156,14 @@ export async function handleForwardEmail(c: AppContext) {
 
 	// Same automatic send-as as the reply route: a message that came in on an
 	// alias is forwarded on from that alias, under that alias's display name.
-	const sendAs = await resolveSendAs(c.env, mailboxId, originalEmail.delivered_to);
+	const sendAs = await resolveMessageSendAs(c.env, stub, mailboxId, originalEmail);
 	const from = applySendAs(body.from, sendAs, from_name);
 
 	let toStr: string, fromEmail: string, fromDomain: string;
 	try {
 		({ toStr, fromEmail, fromDomain } = await validateSenderWithAliases(
-			// `sendAs.address` goes in as already-proven. It is either the
-			// mailbox's own address or one `resolveSendAs` re-resolved from the
-			// original's `delivered_to`, and for a domain-wildcard alias that
-			// delivery evidence is the *whole* permission — the exact-only
-			// lookup inside would refuse it, correctly, having no way to see it.
+			// The shared resolver has checked current ownership, including
+			// stored delivery evidence when a wildcard alias is involved.
 			c.env, to, from, mailboxId, [sendAs.address],
 		));
 	} catch (e) {
