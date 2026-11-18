@@ -24,3 +24,4 @@ gateway/*.exe
 gateway/**/*.test
 
 .browser-build/
+.html-inspection/
