@@ -940,10 +940,9 @@ func (s *Session) listInto(w listWriter, ref string, patterns []string, options 
 		if options != nil && options.ReturnChildren {
 			data.Attrs = append(data.Attrs, imap.MailboxAttrHasNoChildren)
 		}
-		if options != nil && (options.ReturnSpecialUse || options.SelectSpecialUse) {
-			if attr := specialUseAttr(name); attr != "" {
-				data.Attrs = append(data.Attrs, attr)
-			}
+		// Basic LIST clients also need roles to choose move destinations (RFC 6154).
+		if attr := specialUseAttr(name); attr != "" {
+			data.Attrs = append(data.Attrs, attr)
 		}
 		if options != nil && options.ReturnStatus != nil {
 			status, err := s.statusFor(ctx, mailbox, folder, options.ReturnStatus)
@@ -961,8 +960,8 @@ func (s *Session) listInto(w listWriter, ref string, patterns []string, options 
 }
 
 // specialUseAttr guesses a folder's special-use role from its name. The
-// Worker does not record roles yet; a wrong guess here only affects which
-// icon a client draws, never which messages it shows.
+// Worker does not record roles yet; clients use these to choose destinations
+// for sent mail, junk, deleted messages and archives.
 func specialUseAttr(name string) imap.MailboxAttr {
 	switch strings.ToLower(name) {
 	case "sent", "sent items", "sent messages":

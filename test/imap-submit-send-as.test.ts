@@ -441,3 +441,36 @@ describe("the rewrite is withheld when it would be wrong", () => {
 		expect(sent.from).toBe(OWNER);
 	});
 });
+
+describe("follow-ups to Sent messages preserve From", () => {
+	it.each([
+		["exact alias", "exact", true, false, ALIAS],
+		["exact alias without inbound history", "exact", false, false, ALIAS],
+		["wildcard with delivery evidence", "wildcard", true, false, ALIAS],
+		["wildcard without delivery evidence", "wildcard", false, false, OWNER],
+		["default sender with other alias history", "default", true, false, OWNER],
+		["deleted alias", "deleted", true, false, OWNER],
+		["repointed alias", "repointed", true, false, OWNER],
+		["explicit sender choice", "exact", true, true, CHOSEN],
+	] as const)("%s", async (_label, kind, delivered, explicit, expected) => {
+		await createAlias(env, kind === "wildcard" ? "info@" : ALIAS, OWNER);
+		if (delivered) await seedOriginal(ALIAS);
+		await ownerStub.createEmail(Folders.SENT, {
+			id: "prior-sent", sender: kind === "default" ? OWNER : ALIAS, recipient: OUTSIDER,
+			subject: "Question about pricing", body: "<p>Earlier reply.</p>",
+			date: "2026-08-02T00:00:00Z", message_id: "prior-sent@example.com",
+			thread_id: "original-thread",
+		}, []);
+		if (kind === "deleted") await deleteAlias(env, ALIAS, OWNER);
+		if (kind === "repointed") await createAlias(env, ALIAS, OTHER, { allowRepoint: true });
+		const email = fakeEmail();
+		if (explicit) await createAlias(env, CHOSEN, OWNER);
+		const sent = await submitOk(email, explicit ? CHOSEN : OWNER, rawReply({
+			from: explicit ? CHOSEN : OWNER,
+			inReplyTo: "prior-sent@example.com", references: "prior-sent@example.com",
+		}));
+		expect(sent.from).toBe(expected);
+		expect(fromLine(sent.raw)).toBe(`From: ${expected}`);
+		expect(await sentSenders()).toEqual([kind === "default" ? OWNER : ALIAS, expected]);
+	});
+});

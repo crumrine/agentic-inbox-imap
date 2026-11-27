@@ -59,7 +59,7 @@ import { normalizeMailboxId, verifyAppPassword } from "../lib/credentials";
 import { normalizeAddress } from "../lib/aliases";
 import {
 	generateMessageId,
-	resolveSendAs,
+	resolveMessageSendAs,
 	type SendAsIdentity,
 	SenderValidationError,
 	validateSenderWithAliases,
@@ -1618,10 +1618,11 @@ function parseEnvelope(
  *    route in workers/index.ts. `In-Reply-To` is tried first and the tail of
  *    `References` second, per the threading logic in `receiveEmail`: both name
  *    the direct parent, and the direct parent is the message being answered.
- *    A parent with a NULL `delivered_to` — every row written before migration
- *    11, and every outbound row — is a complete answer meaning "not known".
+ *    An inbound parent with NULL `delivered_to` means "not known". A Sent
+ *    parent instead supplies its stored sender; wildcard aliases still require
+ *    a stored inbound delivery to that same address in this mailbox.
  *
- * 3. **The alias still resolves here, checked now.** `resolveSendAs` does
+ * 3. **The alias still resolves here, checked now.** `resolveMessageSendAs` does
  *    exactly this and falls back to the mailbox address, so a `delivered_to`
  *    naming an alias that has since been deleted or re-pointed at somebody
  *    else's mailbox comes back as the mailbox's own address — which this reads
@@ -1655,10 +1656,10 @@ async function resolveSubmissionSendAs(
 	const candidates = [...new Set(parents)];
 	if (candidates.length === 0) return null;
 
-	const deliveredTo = await stub.lookupDeliveredTo(candidates);
-	if (!deliveredTo) return null;
+	const original = await stub.lookupReplySource(candidates);
+	if (!original) return null;
 
-	const identity = await resolveSendAs(env, mailboxId, deliveredTo);
+	const identity = await resolveMessageSendAs(env, stub, mailboxId, original);
 	return identity.address === mailboxId ? null : identity;
 }
 

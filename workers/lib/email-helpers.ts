@@ -222,10 +222,11 @@ export interface SendAsIdentity {
  * `resolveInboundDelivery` is the other, on the envelope recipient itself;
  * everything here is that same address read back out of the column it wrote.
  *
- * Everything without such evidence lands on the mailbox's own address by the
- * guard on the first line: compose passes nothing, and so does a reply to a
- * row whose `delivered_to` is NULL (every row written before migration 11, and
- * every outbound row). That fallback is the safe answer, not a degraded one.
+ * `sentFrom` is a Sent row's sender, not delivery evidence. It can select an
+ * exact alias without inbound history; a wildcard is allowed only when the
+ * caller also supplies the same address read from an inbound `delivered_to`.
+ * `resolveMessageSendAs` obtains that evidence from this mailbox's stored mail.
+ * An inbound row without `delivered_to` still falls back to the mailbox.
  *
  * The extra `hasMailbox` check applies the same precedence outbound that
  * `resolveInboundDelivery` applies inbound: a wildcard never speaks for an
@@ -238,12 +239,15 @@ export async function resolveSendAs(
 	env: AliasEnv,
 	mailboxId: string,
 	deliveredTo: string | null | undefined,
+	sentFrom?: string,
 ): Promise<SendAsIdentity> {
 	const mailbox = normalizeAddress(mailboxId);
-	const candidate = normalizeAddress(deliveredTo ?? "");
+	const candidate = normalizeAddress(sentFrom ?? deliveredTo ?? "");
 	if (!candidate || candidate === mailbox) return { address: mailbox };
 
-	const match = await readDeliveryAlias(env, candidate, { allowWildcard: true });
+	const match = await readDeliveryAlias(env, candidate, {
+		allowWildcard: sentFrom === undefined || candidate === normalizeAddress(deliveredTo ?? ""),
+	});
 	if (!match || match.record.mailbox !== mailbox) return { address: mailbox };
 	if (match.via === "wildcard" && (await hasMailbox(env, candidate))) {
 		return { address: mailbox };
@@ -251,6 +255,22 @@ export async function resolveSendAs(
 
 	const { name } = match.record;
 	return { address: candidate, ...(name !== undefined ? { name } : {}) };
+}
+
+/** Preserve an outbound identity; wildcard permission still needs inbound evidence. */
+export async function resolveMessageSendAs(
+	env: AliasEnv,
+	stub: DurableObjectStub<MailboxDO>,
+	mailboxId: string,
+	original: Pick<EmailFull, "sender" | "folder_id" | "delivered_to">,
+): Promise<SendAsIdentity> {
+	if (original.folder_id !== Folders.SENT) {
+		return resolveSendAs(env, mailboxId, original.delivered_to);
+	}
+	const sender = normalizeAddress(original.sender);
+	if (sender === normalizeAddress(mailboxId)) return { address: sender };
+	const deliveredTo = await stub.hasReceivedAddress(sender) ? sender : null;
+	return resolveSendAs(env, mailboxId, deliveredTo, sender);
 }
 
 /**
