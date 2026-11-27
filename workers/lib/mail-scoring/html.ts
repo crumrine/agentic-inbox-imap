@@ -69,6 +69,6 @@ export async function inspectHtml(html:string):Promise<Inspection|null> {
     }).onDocument({text(chunk){append(chunk.text);}}).transform(new Response(html));
     // Native consumption propagates callback failure and cancels parsing; output is at most sourceBytes.
     await transformed.arrayBuffer();
-    return {text:decodeText(text.join('')),anchors:anchors.map(a=>({href:a.href,text:decodeText(a.text)}))};
+    return {text:decodeText(text.join('')),anchors:anchors.map(a=>({href:a.href,text:decodeText(a.text).replace(/[\t\r\n]+/g,' ')}))};
   } catch {return null;}
 }

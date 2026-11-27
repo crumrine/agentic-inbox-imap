@@ -6,11 +6,11 @@ import { decodeResponse, encodeBoundedJson, type ScoreInputV1, type ScoreResultV
 import { LIMITS } from './contract';
 import { inspectHtml } from './html';
 
-export const POLICY_VERSION = 'inbox-scoring-10';
+export const POLICY_VERSION = 'inbox-scoring-11';
 
 export interface Assessment {
   version: 1;
-  policyVersion: 'inbox-shadow-1' | 'inbox-scoring-2' | 'inbox-scoring-3' | 'inbox-scoring-4' | 'inbox-scoring-5' | 'inbox-scoring-6' | 'inbox-scoring-7' | 'inbox-scoring-8' | 'inbox-scoring-9' | typeof POLICY_VERSION;
+  policyVersion: 'inbox-shadow-1' | 'inbox-scoring-2' | 'inbox-scoring-3' | 'inbox-scoring-4' | 'inbox-scoring-5' | 'inbox-scoring-6' | 'inbox-scoring-7' | 'inbox-scoring-8' | 'inbox-scoring-9' | 'inbox-scoring-10' | typeof POLICY_VERSION;
   status: 'partial' | 'unavailable';
   inputIncomplete: boolean;
   result: ScoreResultV1 | null;

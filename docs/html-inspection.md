@@ -27,7 +27,7 @@ as malformed identity evidence.
 
 The existing RPC schema/engine are retained. The decoder accepts stored
 `rules-1` through `rules-11`; the new combined rule is valid only in `rules-11`.
-New assessments record policy `inbox-scoring-10`; old assessments remain unchanged.
+New assessments record policy `inbox-scoring-11`; old assessments remain unchanged.
 Automatic routing still requires successful scoring, no disallowed inspection
 limits, score >=45 and either the existing combined sensitive/identity evidence
 or positive rules-11 `brand_impersonation_combined` evidence (normally 45 points, reduced

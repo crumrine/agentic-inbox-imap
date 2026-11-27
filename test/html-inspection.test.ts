@@ -27,6 +27,11 @@ describe('bounded native HTML inspection in real workerd',()=>{
     const output=await inspectHtml('<base href="https://never-fetch.invalid"><meta http-equiv="refresh" content="0;url=https://never-fetch.invalid"><blockquote>'+synthetic+'</blockquote><div hidden>'+synthetic+'</div><div class="gmail_quote">'+synthetic+'</div><svg><a href="https://never-fetch.invalid">hidden</a></svg><a href="javascript:alert(1)">safe text</a><a href="/relative">relative</a><p>Visible</p>');
     expect(output?.anchors).toEqual([]);expect(output?.text).not.toContain('Security team');expect(output?.text).toContain('Visible');
   });
+  it('normalizes HTML anchor whitespace without hiding unsafe controls',async()=>{
+    const output=await inspectHtml('<a href="https://example.test/">Read\n\t details</a><a href="https://other.test/">Safe\u202e text</a>');
+    expect(output?.anchors).toEqual([{href:'https://example.test/',text:'Read  details'},{href:'https://other.test/',text:'Safe\u202e text'}]);
+    expect(output?.text).toContain('Read\n\t details');
+  });
   it.each([
     ['source','x'.repeat(HTML_LIMITS.sourceBytes+1)],
     ['UTF-8 source','界'.repeat(22000)],
