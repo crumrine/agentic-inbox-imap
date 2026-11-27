@@ -40,7 +40,7 @@ it('joins actual MIME intake, native HTML parser, private Worker RPC, SQLite, re
   const nestedPath=html.replace('tracker.example/route?fallback=https%3A%2F%2Fdestination.invalid%2F','outer.example/?url=https%3A%2F%2Ftracker.example%2Fredirect%2Fhttps%253A%252F%252Fquickbooks.com%252Freviews');
   expect((await deliver('notice@sender.invalid','QuickBooks',nestedPath,'Please view this message in HTML.')).folder_id).toBe('inbox');
   const state=await stub.getSpamState(bad.id);
-  expect(state?.assessments[0]).toMatchObject({policyVersion:'inbox-scoring-10',status:'partial',result:{ruleSetVersion:'rules-11',heuristicScore:45,reasons:[{id:'brand_impersonation_combined'}]}});
+  expect(state?.assessments[0]).toMatchObject({policyVersion:'inbox-scoring-11',status:'partial',result:{ruleSetVersion:'rules-11',heuristicScore:45,reasons:[{id:'brand_impersonation_combined'}]}});
   expect((await deliver('notice@notification.intuit.com')).folder_id).toBe('inbox');
   expect((await deliver('person@example.test','Bookkeeping discussion')).folder_id).toBe('inbox');
   const calls=scoreV1.mock.calls.length;
@@ -67,7 +67,7 @@ it('keeps all frozen legitimate controls in Inbox under rules-11',async()=>{
     await waitOnExecutionContext(ctx);expect(reject,sample.id).not.toHaveBeenCalled();
     const [row]=await query<{id:string;folder_id:string;raw_key:string}>(stub,'SELECT id,folder_id,raw_key FROM emails ORDER BY rowid DESC');
     expect(row.folder_id,sample.id).toBe('inbox');
-    expect((await stub.getSpamState(row.id))?.assessments[0]).toMatchObject({policyVersion:'inbox-scoring-10',status:'partial',result:{status:'partial',ruleSetVersion:'rules-11',heuristicScore:0}});
+    expect((await stub.getSpamState(row.id))?.assessments[0]).toMatchObject({policyVersion:'inbox-scoring-11',status:'partial',result:{status:'partial',ruleSetVersion:'rules-11',heuristicScore:0}});
     expect(new Uint8Array(await (await env.BUCKET.get(row.raw_key))!.arrayBuffer())).toEqual(raw);
   }
   expect(forbidden).not.toHaveBeenCalled();
@@ -84,4 +84,16 @@ it('retains the existing HTML statistical regression and positive controls',asyn
     expect(assessment?.status).toBe('partial');expect(assessment?.result?.ruleSetVersion).toBe('rules-11');
     expect(assessment?.result?.heuristicScore).toBe(expected);expect(shouldQuarantine(assessment,'none')).toBe(expected===60);
   }
+});
+
+it('keeps HTML anchor whitespace distinct from unsafe controls through the real scorer',async()=>{
+  const {default:PostalMime}=await import('postal-mime');
+  const {assessArrival,shouldQuarantine}=await import('../workers/lib/mail-scoring/intake');
+  const {STATISTICAL_SPAM}=await import('./statistical-fixture');
+  const e={...env,MAIL_SCORING_MODE:'filter'} as unknown as Env;
+  const assess=async(anchor:string)=>assessArrival(e,await PostalMime.parse(`From: Person <sender@example.test>\r\nTo: receiver@example.test\r\nSubject: \r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>${STATISTICAL_SPAM}</p>${anchor}`),true,'sender@example.test','none');
+  const ordinary=await assess('<a href="https://example.test/">Read\n\t details</a>');
+  expect(ordinary?.result?.limitsHit).not.toContain('control_chars');expect(shouldQuarantine(ordinary,'none')).toBe(true);
+  const hostile=await assess('<a href="https://example.test/">Read\u202e details</a>');
+  expect(hostile?.result?.limitsHit).toContain('control_chars');expect(shouldQuarantine(hostile,'none')).toBe(false);
 });

@@ -1025,8 +1025,15 @@ describe('joined local workerd GTUBE integration with separate actual scorer RPC
       heuristicScore:100,
       reasons:[{id:'gtube', contribution:100, reason:REASONS.gtube}],
     });
+    await stub.createEmail('spam',emailData({id:'policy-10'}),[],{
+      version:1,policyVersion:'inbox-scoring-10',status:'partial',inputIncomplete:true,
+      result:(await stub.getSpamState(currentGtube.id))!.assessments[0].result,
+    });
     // All ten stored rule sets and historical policies survive restart and REST.
     const restarted = await restart(BOX);
+    expect((await restarted.getSpamState('policy-10'))?.assessments[0].policyVersion).toBe('inbox-scoring-10');
+    expect((await request(currentB.e,`${base}/spam-feedback`,{emailId:'policy-10',disposition:'not_spam',expectedRevision:0})).status).toBe(200);
+    expect(await restarted.getEmail('policy-10')).toMatchObject({folder_id:'inbox'});
     for(const id of ['refit-policy-rest','refit-policy-imap']){
       expect((await restarted.getSpamState(id))?.assessments[0]).toMatchObject({policyVersion:'inbox-scoring-7',result:refitResult});
       expect((await request(currentB.e,`${base}/emails/${id}/spam`)).status).toBe(200);
