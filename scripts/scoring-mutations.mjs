@@ -40,7 +40,7 @@ const tests = [
  ['statistical_routing', 'intake.ts', removeStatisticalRouting, async m => {assert.equal(m.shouldQuarantine(statisticalAssessment,'none'),true);} ],
  ['html_projection', 'intake.ts', s=>s.replace('...(html ? {html} : {}),',''), async m=>{assert.equal(m.project({...parsed,text:'',html:'<p>body</p>'}).html,'<p>body</p>');}],
  ['html_source_bound', 'intake.ts', s=>s.replace('field(parsed.html, 32768)','field(parsed.html, 327680)'), async m=>{assert.equal(m.project({...parsed,text:'',html:'é'.repeat(16385)}).html,undefined);}],
- ['omitted_body_failure', 'intake.ts', source => source.replace('    if ((parsed.text && !input.text) || (!input.text.trim() && parsed.html && !input.html)) return unavailable();\n', ''), async m => {
+ ['omitted_body_failure', 'intake.ts', source => source.replace("    if ((parsed.text && !input.text) || (parsed.html && !input.html && input.text !== '>')) return unavailable();\n", ''), async m => {
   let calls=0;const assessment=await m.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async()=>{calls++;return wire;}}},{...parsed,text:'x'.repeat(32769)},true);
   assert.equal(assessment.status,'unavailable');assert.equal(calls,0);
  }],

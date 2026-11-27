@@ -38,7 +38,7 @@ export function project(parsed: Email, envelopeFrom?: string): ScoreInputV1 {
   let text = field(parsed.text, 32768);
   // Do not replace a present over-budget plain body with a different HTML body.
   const plainOmitted = Boolean(parsed.text) && !text;
-  let html = plainOmitted || text.trim() ? undefined : field(parsed.html, 32768) || undefined;
+  let html = plainOmitted ? undefined : field(parsed.html, 32768) || undefined;
   // PostalMime flattens inline message/rfc822 bodies beneath these generated headers.
   // shortcut: omit the whole scoring body; split current/forwarded provenance if mixed-mail recall requires it.
   if (/(?:^|[\r\n])-{3,}[\r\n]+(?:From|Subject|Date|To|Cc|Bcc):[ \t]/.test(text) || html?.includes('class="postal-email-header"')) {
@@ -115,7 +115,7 @@ export async function assessArrival(env: Env, parsed: Email, rawInspectable: boo
     if (!rawInspectable || !env.MAIL_SCORER) return unavailable();
     const input = project(parsed, envelopeFrom);
     // A body omitted by the inspection budget must not become a subject-only verdict.
-    if ((parsed.text && !input.text) || (!input.text.trim() && parsed.html && !input.html)) return unavailable();
+    if ((parsed.text && !input.text) || (parsed.html && !input.html && input.text !== '>')) return unavailable();
     if (input.html) {
       const inspected = await inspectHtml(input.html);
       if (!inspected) return unavailable();

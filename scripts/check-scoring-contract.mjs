@@ -9,7 +9,7 @@ import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 const dependency=resolve(process.argv[2] ?? '../mail-scoring');
-const pin='eaa4aa0ab1be6f017d37cd1347e8727e5960751e';
+const pin='e203c9765678b64a0b4222062f67fec79af8b5e8';
 const wordpairPin='453cc3423e222b0e853bf3d8e9d590ee01e44bf7';
 const refitPin='62919bc8f939bc94c0552fc6a3917c03a3373646';
 const robustPin='143e24e938365c31f2669fd5f9e918408383dc7e';

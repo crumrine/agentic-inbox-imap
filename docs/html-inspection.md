@@ -21,7 +21,7 @@ once; this is not a complete named-entity dictionary. Unknown remains distinct
 from safe. Existing MIME parsing precedes this bounded extraction and is not
 made safe for arbitrary hostile MIME by this change.
 
-The scorer integration is tracked in [Mail Scoring PR 5](https://github.com/crumrine/mail-scoring/pull/5), at source commit `eaa4aa0ab1be6f017d37cd1347e8727e5960751e`. Run `node scripts/check-html-joined.mjs /path/to/mail-scoring` with both repositories installed to exercise the actual pinned scorer and native Workers runtime. The original evidence in `docs/evidence/html-inspection/contract.json` belongs to the superseded rules-2 candidate; it is not evidence for rules-11.
+The scorer integration is tracked in [Mail Scoring PR 5](https://github.com/crumrine/mail-scoring/pull/5), at source commit `e203c9765678b64a0b4222062f67fec79af8b5e8`. Run `node scripts/check-html-joined.mjs /path/to/mail-scoring` with both repositories installed to exercise the actual pinned scorer and native Workers runtime. The original evidence in `docs/evidence/html-inspection/contract.json` belongs to the superseded rules-2 candidate; it is not evidence for rules-11.
 It also checks that absent optional Reply-To/envelope fields do not masquerade
 as malformed identity evidence.
 
@@ -40,8 +40,9 @@ an explicit recognized sender display identity, an unrelated sender domain,
 account/review/security lure language, and an unrelated HTTP action destination.
 Brand mentions, normal marketing and tracking links alone do not qualify. One
 explicit HTTP redirect parameter can be inspected lexically without requesting
-it; ambiguous or nested redirects add an inspection limit and prevent automatic
-routing. This parameter is a claimed destination, not proof of a server redirect.
+it; unrecognized query parameters and nested redirects add an inspection limit
+and prevent automatic brand routing. HTML alternatives are inspected alongside
+bounded plain text, which remains the statistical scoring source when present. This parameter is a claimed destination, not proof of a server redirect.
 
 Rollout order: publish the caller that accepts both rule versions, then publish
 the private scorer at `rules-11`. In a rollback, `MAIL_SCORING_MODE=shadow` preserves

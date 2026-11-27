@@ -245,7 +245,7 @@ describe('actual app email and authenticated REST in local workerd', () => {
     const input = project(await PostalMime.parse(oversized));
     expect(input.text).toBe('');expect(input.sourceComplete).toBe(false);
     const parsed=await PostalMime.parse(bytes()); parsed.html='<img src="https://never-fetch.invalid">';
-    expect(project(parsed).sourceComplete).toBe(false);expect(project(parsed)).not.toHaveProperty('html');
+    expect(project(parsed).sourceComplete).toBe(false);expect(project(parsed).html).toBe(parsed.html);
   });
   it('spoofed lone and duplicate auth/ARC/x-spam never establish transport authority',async()=>{
     await registered();const b=bindings();
@@ -1251,14 +1251,14 @@ describe('joined rules-10 general spam detection', () => {
     ]) expect((await deliver(b.e,htmlBytes(html))).folder_id).toBe('inbox');
     const mixed=htmlBytes(`<p>${STATISTICAL_SPAM}</p>`,'Hello, the meeting is tomorrow. Please bring the agenda.');
     expect((await deliver(b.e,mixed)).folder_id).toBe('inbox');
-    expect(project(await PostalMime.parse(mixed)).html).toBeUndefined();
+    expect(project(await PostalMime.parse(mixed)).html).toContain(STATISTICAL_SPAM.trim());
     expect((await deliver(b.e,bytes(BOX,STATISTICAL_SPAM.split('\n').map(line=>'> '+line).join('\n')))).folder_id).toBe('inbox');
   });
 
   it('bounds selected HTML and rejects omitted bodies without replacing oversized plain text', async () => {
     await registered();const b=realBindings();
     for(const raw of [htmlBytes('x'.repeat(32769)),htmlBytes('é'.repeat(16385)),
-      htmlBytes(`<p>${STATISTICAL_SPAM}</p>`,'x'.repeat(32769))]) {
+      htmlBytes(`<p>${STATISTICAL_SPAM}</p>`,'x'.repeat(32769)),htmlBytes('x'.repeat(32769),'ordinary text')]) {
       const row=await deliver(b.e,raw);expect(row.folder_id).toBe('inbox');
       expect((await mailbox(BOX).getSpamState(row.id))?.assessments[0]).toMatchObject({status:'unavailable',result:null});
       expect(new Uint8Array(await (await env.BUCKET.get(row.raw_key))!.arrayBuffer())).toEqual(raw);

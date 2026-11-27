@@ -17,8 +17,10 @@ it('joins actual MIME intake, native HTML parser, private Worker RPC, SQLite, re
   const binding=(env as unknown as Env).MAIL_SCORER!;
   const scoreV1=vi.fn((...args:Parameters<typeof binding.scoreV1>)=>binding.scoreV1(...args));
   const e={...env,MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1},EMAIL:{send:forbidden},AI:{run:forbidden},EMAIL_AGENT:{idFromName:forbidden,get:forbidden}} as unknown as Env;
-  async function deliver(from:string,name='QuickBooks',body=html){
-    const raw=new TextEncoder().encode(`From: ${name} <${from}>\r\nTo: ${BOX}\r\nSubject: Synthetic notice\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${body}`);
+  async function deliver(from:string,name='QuickBooks',body=html,plain?:string){
+    const content=plain===undefined ? `Content-Type: text/html; charset=utf-8\r\n\r\n${body}` :
+      `MIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary="alt"\r\n\r\n--alt\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${plain}\r\n--alt\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${body}\r\n--alt--`;
+    const raw=new TextEncoder().encode(`From: ${name} <${from}>\r\nTo: ${BOX}\r\nSubject: Synthetic notice\r\n${content}`);
     const ctx=createExecutionContext();const reject=vi.fn();
     await worker.email({raw:new ReadableStream({start(c){c.enqueue(raw);c.close();}}),rawSize:raw.length,to:BOX,from,setReject:reject} as unknown as ForwardableEmailMessage,e,ctx);
     await waitOnExecutionContext(ctx);expect(reject).not.toHaveBeenCalled();
@@ -27,6 +29,12 @@ it('joins actual MIME intake, native HTML parser, private Worker RPC, SQLite, re
     return row;
   }
   const bad=await deliver('notice@sender.invalid');expect(bad.folder_id,JSON.stringify(await stub.getSpamState(bad.id))).toBe('spam');expect(await stub.getEmail(bad.id)).toBeNull();
+  const mixed=await deliver('notice@sender.invalid','QuickBooks',html,'Please view this message in HTML.');
+  expect(mixed.folder_id,JSON.stringify(await stub.getSpamState(mixed.id))).toBe('spam');
+  expect((await deliver('notice@notification.intuit.com','QuickBooks',html,'Please view this message in HTML.')).folder_id).toBe('inbox');
+  expect((await deliver('notice@sender.invalid','QuickBooks',html,'Please investigate.\n----\nFrom: reported@example.test\nForwarded report.')).folder_id).toBe('inbox');
+  const unknown=html.replace('fallback=https%3A%2F%2Fdestination.invalid%2F','u=https%3A%2F%2Fquickbooks.com%2Freviews');
+  expect((await deliver('notice@sender.invalid','QuickBooks',unknown,'Please view this message in HTML.')).folder_id).toBe('inbox');
   const state=await stub.getSpamState(bad.id);
   expect(state?.assessments[0]).toMatchObject({policyVersion:'inbox-scoring-10',status:'partial',result:{ruleSetVersion:'rules-11',heuristicScore:45,reasons:[{id:'brand_impersonation_combined'}]}});
   expect((await deliver('notice@notification.intuit.com')).folder_id).toBe('inbox');
