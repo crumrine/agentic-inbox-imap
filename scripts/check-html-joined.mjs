@@ -7,7 +7,7 @@ import {mkdirSync} from 'node:fs';
 import {build} from 'esbuild';
 import assert from 'node:assert/strict';
 const scorer=resolve(process.argv[2] ?? '../mail-scoring');
-const pin='f2f65698e87e28f95bc0c4694e8f593c132a03d4';
+const pin='65d811e76cc99fd634a381e6f0b7ee1dd9300820';
 assert.equal(execFileSync('git',['-C',scorer,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),pin);
 assert.equal(execFileSync('git',['-C',scorer,'status','--porcelain'],{encoding:'utf8'}).trim(),'');
 const requireScorer=createRequire(join(scorer,'package.json'));
