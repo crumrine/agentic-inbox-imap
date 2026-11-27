@@ -9,7 +9,7 @@ import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 const dependency=resolve(process.argv[2] ?? '../mail-scoring');
-const pin='65d811e76cc99fd634a381e6f0b7ee1dd9300820';
+const pin='66c6ab8d1a1531d0d2319a440fdf16f66523cad2';
 const wordpairPin='453cc3423e222b0e853bf3d8e9d590ee01e44bf7';
 const refitPin='62919bc8f939bc94c0552fc6a3917c03a3373646';
 const robustPin='143e24e938365c31f2669fd5f9e918408383dc7e';
@@ -80,7 +80,7 @@ try{
   calls.push(args);return modules.scorer.scoreRpc(...args);
  }}},parsed,true,'bounce@example.test');
  assert.equal(calls.length,1);assert.equal(assessment.status,'partial');
- assert.equal(assessment.result.schemaVersion,'1');assert.equal(assessment.result.ruleSetVersion,'rules-11');
+ assert.equal(assessment.result.schemaVersion,'1');assert.equal(assessment.result.ruleSetVersion,'rules-12');
  assert.ok(assessment.result.limitsHit.includes('auth_unknown'));
  assert.equal(assessment.result.heuristicScore,0);
  assert.equal(modules.caller.shouldQuarantine(assessment,'none'),false);
@@ -102,7 +102,7 @@ try{
  for(const preference of ['none','allow','block']){
   const value=await modules.caller.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async(...args)=>modules.scorer.scoreRpc(...args)}},gtubeParsed,true,'bounce@example.test',preference);
   assert.equal(value.status,'partial');assert.ok(value.result);
-  assert.equal(value.result.ruleSetVersion,'rules-11');
+  assert.equal(value.result.ruleSetVersion,'rules-12');
   assert.equal(value.result.heuristicScore,100);
   assert.equal(value.result.signals.spam,'present');
   const ids=value.result.reasons.map(r=>r.id);
@@ -129,8 +129,8 @@ try{
  assert.equal(modules.caller.shouldQuarantine(legacyAssessment,'none'),false);
  // Reject gtube reason under rules-1 and reject unknown ruleSetVersion / reason IDs
  const gtubeWire=JSON.stringify({rpcVersion:'1',ok:true,result:gtubePreferenceResults.none.result});
- assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"rules-11"','"rules-1"')),null);
- assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"rules-11"','"rules-12"')),null);
+ assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"rules-12"','"rules-1"')),null);
+ assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"rules-12"','"rules-13"')),null);
  assert.equal(modules.protocol.decodeResponse(gtubeWire.replace('"gtube"','"unknown_reason"')),null);
  const previous=await modules.caller.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async(...args)=>modules.previousScorer.scoreRpc(...args)}},gtubeParsed,true,'bounce@example.test','none');
  assert.equal(previous.result.ruleSetVersion,'rules-2');assert.equal(modules.caller.shouldQuarantine(previous,'none'),true);
@@ -180,7 +180,7 @@ try{
  // Native HTMLRewriter coverage runs in the pinned workerd integration below.
  for(const [name,body] of [['original',modules.authored.FRAGILE_SPAM],['shorter',modules.authored.REFIT_FRAGILE_SPAM],['contextual',modules.authored.CONTEXT_FRAGILE_SPAM]]){
   const value=await modules.caller.assessArrival({MAIL_SCORING_MODE:'filter',MAIL_SCORER:{scoreV1:async(...args)=>modules.scorer.scoreRpc(...args)}},{...parsed,subject:'',text:body},true,'bounce@example.test','none');
-  assert.equal(value.status,'partial');assert.equal(value.result.ruleSetVersion,'rules-11');assert.equal(value.result.heuristicScore,0);assert.equal(modules.caller.shouldQuarantine(value,'none'),false);fragileResults[name+'Plain']=value;
+  assert.equal(value.status,'partial');assert.equal(value.result.ruleSetVersion,'rules-12');assert.equal(value.result.heuristicScore,0);assert.equal(modules.caller.shouldQuarantine(value,'none'),false);fragileResults[name+'Plain']=value;
  }
  const generalResults={};
  for(const [kind,body] of [['plain',modules.authored.STATISTICAL_SPAM],['pharmacyPlain',modules.authored.PHARMACY_SPAM]]) {
@@ -188,15 +188,15 @@ try{
    {...parsed,text:body},true,'bounce@example.test','none');
   assert.equal(value.result.heuristicScore,60);assert.equal(modules.caller.shouldQuarantine(value,'none'),true);
   const generalWire=JSON.stringify({rpcVersion:'1',ok:true,result:value.result});
-  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-11"','"rules-2"')),null);
-  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-11"','"rules-1"')),null);
-  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-11"','"rules-3"')),null);
-  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-11"','"rules-4"')),null);
-  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-11"','"rules-5"')),null);
-  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-11"','"rules-6"')),null);
-  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-11"','"rules-7"')),null);
-  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-11"','"rules-8"')),null);
-  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-11"','"rules-9"')),null);
+  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-12"','"rules-2"')),null);
+  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-12"','"rules-1"')),null);
+  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-12"','"rules-3"')),null);
+  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-12"','"rules-4"')),null);
+  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-12"','"rules-5"')),null);
+  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-12"','"rules-6"')),null);
+  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-12"','"rules-7"')),null);
+  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-12"','"rules-8"')),null);
+  assert.equal(modules.protocol.decodeResponse(generalWire.replace('"rules-12"','"rules-9"')),null);
   generalResults[kind]=value;
  }
  execFileSync(process.execPath,['scripts/check-html-joined.mjs',dependency],{stdio:'inherit'});

@@ -21,17 +21,16 @@ once; this is not a complete named-entity dictionary. Unknown remains distinct
 from safe. Existing MIME parsing precedes this bounded extraction and is not
 made safe for arbitrary hostile MIME by this change.
 
-The scorer integration is tracked in [Mail Scoring PR 5](https://github.com/crumrine/mail-scoring/pull/5), at source commit `65d811e76cc99fd634a381e6f0b7ee1dd9300820`. Run `node scripts/check-html-joined.mjs /path/to/mail-scoring` with both repositories installed to exercise the actual pinned scorer and native Workers runtime. The original evidence in `docs/evidence/html-inspection/contract.json` belongs to the superseded rules-2 candidate; it is not evidence for rules-11.
+The scorer integration is tracked in [Mail Scoring PR 5](https://github.com/crumrine/mail-scoring/pull/5), at source commit `65d811e76cc99fd634a381e6f0b7ee1dd9300820`. The current joined test pins scorer `66c6ab8d1a1531d0d2319a440fdf16f66523cad2`. Run `node scripts/check-html-joined.mjs /path/to/mail-scoring` with both repositories installed to exercise the actual pinned scorer and native Workers runtime. The original evidence in `docs/evidence/html-inspection/contract.json` belongs to the superseded rules-2 candidate; it is not evidence for rules-11.
 It also checks that absent optional Reply-To/envelope fields do not masquerade
 as malformed identity evidence.
 
 The existing RPC schema/engine are retained. The decoder accepts stored
-`rules-1` through `rules-11`; the new combined rule is valid only in `rules-11`.
-New assessments record policy `inbox-scoring-11`; old assessments remain unchanged.
+`rules-1` through `rules-12`; brand evidence is valid under rules-11 and rules-12, and credential-phishing evidence only under rules-12.
+New assessments record policy `inbox-scoring-12`; old assessments remain unchanged.
 Automatic routing still requires successful scoring, no disallowed inspection
 limits, score >=45 and either the existing combined sensitive/identity evidence
-or positive rules-11 `brand_impersonation_combined` evidence (normally 45 points, reduced
-only by the global 100-point cap). Allow/block
+or positive rules-11/rules-12 `brand_impersonation_combined` evidence or rules-12 `credential_phishing_combined` evidence (normally 45 points, reduced only by family and global caps). Allow/block
 preferences, recoverable Spam, manual rescue and raw MIME/UID handling remain.
 Reads do not rescore, and this release does not backfill historical messages.
 
@@ -45,7 +44,7 @@ and prevent automatic brand routing. HTML alternatives are inspected alongside
 bounded plain text, which remains the statistical scoring source when present. This parameter is a claimed destination, not proof of a server redirect.
 
 Rollout order: publish the caller that accepts both rule versions, then publish
-the private scorer at `rules-11`. In a rollback, `MAIL_SCORING_MODE=shadow` preserves
+the private scorer at `rules-12`. In a rollback, `MAIL_SCORING_MODE=shadow` preserves
 mail and stops new automatic routing. Preserve the live Access, service,
 storage, agent and email bindings and disabled public scorer/preview settings.
 
