@@ -35,6 +35,8 @@ it('joins actual MIME intake, native HTML parser, private Worker RPC, SQLite, re
   expect((await deliver('notice@sender.invalid','QuickBooks',html,'Please investigate.\n----\nFrom: reported@example.test\nForwarded report.')).folder_id).toBe('inbox');
   const unknown=html.replace('fallback=https%3A%2F%2Fdestination.invalid%2F','u=https%3A%2F%2Fquickbooks.com%2Freviews');
   expect((await deliver('notice@sender.invalid','QuickBooks',unknown,'Please view this message in HTML.')).folder_id).toBe('inbox');
+  const pathRedirect=html.replace('route?fallback=https%3A%2F%2Fdestination.invalid%2F','redirect/https%3A%2F%2Fquickbooks.com%2Freviews');
+  expect((await deliver('notice@sender.invalid','QuickBooks',pathRedirect,'Please view this message in HTML.')).folder_id).toBe('inbox');
   const state=await stub.getSpamState(bad.id);
   expect(state?.assessments[0]).toMatchObject({policyVersion:'inbox-scoring-10',status:'partial',result:{ruleSetVersion:'rules-11',heuristicScore:45,reasons:[{id:'brand_impersonation_combined'}]}});
   expect((await deliver('notice@notification.intuit.com')).folder_id).toBe('inbox');
