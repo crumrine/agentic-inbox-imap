@@ -21,7 +21,7 @@ once; this is not a complete named-entity dictionary. Unknown remains distinct
 from safe. Existing MIME parsing precedes this bounded extraction and is not
 made safe for arbitrary hostile MIME by this change.
 
-The scorer integration is tracked in [Mail Scoring PR 5](https://github.com/crumrine/mail-scoring/pull/5), at source commit `65d811e76cc99fd634a381e6f0b7ee1dd9300820`. The current joined test pins scorer `91c8ee30c92485c012b061884dfa42ade8d46dbd`. Run `node scripts/check-html-joined.mjs /path/to/mail-scoring` with both repositories installed to exercise the actual pinned scorer and native Workers runtime. The original evidence in `docs/evidence/html-inspection/contract.json` belongs to the superseded rules-2 candidate; it is not evidence for rules-11.
+The scorer integration is tracked in [Mail Scoring PR 5](https://github.com/crumrine/mail-scoring/pull/5), at source commit `65d811e76cc99fd634a381e6f0b7ee1dd9300820`. The current joined test pins scorer `0b7f96f1b2172f465c2447bc630293983ed4df79`. Run `node scripts/check-html-joined.mjs /path/to/mail-scoring` with both repositories installed to exercise the actual pinned scorer and native Workers runtime. The original evidence in `docs/evidence/html-inspection/contract.json` belongs to the superseded rules-2 candidate; it is not evidence for rules-11.
 It also checks that absent optional Reply-To/envelope fields do not masquerade
 as malformed identity evidence.
 
