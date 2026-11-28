@@ -212,7 +212,7 @@ describe('actual app email and authenticated REST in local workerd', () => {
       if(kind==='malformed') b.scoreV1.mockResolvedValue('SYNTHETIC_PRIVATE_CANARY');
       if(kind==='huge') b.scoreV1.mockResolvedValue('x'.repeat(4097));
       if(kind==='deep') b.scoreV1.mockResolvedValue('['.repeat(10)+'0'+']'.repeat(10));
-      if(kind==='version') b.scoreV1.mockResolvedValue(wire.replace('rules-1','rules-12'));
+      if(kind==='version') b.scoreV1.mockResolvedValue(wire.replace('rules-1','rules-13'));
       if(kind==='rules1_gtube') b.scoreV1.mockResolvedValue(JSON.stringify({rpcVersion:'1',ok:true,result:{...result,ruleSetVersion:'rules-1',heuristicScore:100,signals:{spam:'present',phishing:'unknown',marketing:'unknown'},reasons:[{id:'gtube',contribution:100,reason:REASONS.gtube}]}}));
       if(kind==='arbitrary_reason') b.scoreV1.mockResolvedValue(JSON.stringify({rpcVersion:'1',ok:true,result:{...result,ruleSetVersion:'rules-2',heuristicScore:100,signals:{spam:'present',phishing:'unknown',marketing:'unknown'},reasons:[{id:'custom_spam',contribution:100,reason:REASONS.gtube}]}}));
       if(kind==='forged_reason') b.scoreV1.mockResolvedValue(JSON.stringify({rpcVersion:'1',ok:true,result:{...result,reasons:[{id:'auth_failed',contribution:20,reason:'SYNTHETIC_PRIVATE_CANARY'}],heuristicScore:20}}));
@@ -1029,8 +1029,15 @@ describe('joined local workerd GTUBE integration with separate actual scorer RPC
       version:1,policyVersion:'inbox-scoring-10',status:'partial',inputIncomplete:true,
       result:(await stub.getSpamState(currentGtube.id))!.assessments[0].result,
     });
-    // All ten stored rule sets and historical policies survive restart and REST.
+    await stub.createEmail('spam',emailData({id:'policy-11'}),[],{
+      version:1,policyVersion:'inbox-scoring-11',status:'partial',inputIncomplete:true,
+      result:(await stub.getSpamState(currentGtube.id))!.assessments[0].result,
+    });
+    // Historical rule sets and policies survive restart and REST.
     const restarted = await restart(BOX);
+    expect((await restarted.getSpamState('policy-11'))?.assessments[0].policyVersion).toBe('inbox-scoring-11');
+    expect((await request(currentB.e,`${base}/spam-feedback`,{emailId:'policy-11',disposition:'not_spam',expectedRevision:0})).status).toBe(200);
+    expect(await restarted.getEmail('policy-11')).toMatchObject({folder_id:'inbox'});
     expect((await restarted.getSpamState('policy-10'))?.assessments[0].policyVersion).toBe('inbox-scoring-10');
     expect((await request(currentB.e,`${base}/spam-feedback`,{emailId:'policy-10',disposition:'not_spam',expectedRevision:0})).status).toBe(200);
     expect(await restarted.getEmail('policy-10')).toMatchObject({folder_id:'inbox'});

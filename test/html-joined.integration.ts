@@ -40,7 +40,7 @@ it('joins actual MIME intake, native HTML parser, private Worker RPC, SQLite, re
   const nestedPath=html.replace('tracker.example/route?fallback=https%3A%2F%2Fdestination.invalid%2F','outer.example/?url=https%3A%2F%2Ftracker.example%2Fredirect%2Fhttps%253A%252F%252Fquickbooks.com%252Freviews');
   expect((await deliver('notice@sender.invalid','QuickBooks',nestedPath,'Please view this message in HTML.')).folder_id).toBe('inbox');
   const state=await stub.getSpamState(bad.id);
-  expect(state?.assessments[0]).toMatchObject({policyVersion:'inbox-scoring-11',status:'partial',result:{ruleSetVersion:'rules-11',heuristicScore:45,reasons:[{id:'brand_impersonation_combined'}]}});
+  expect(state?.assessments[0]).toMatchObject({policyVersion:'inbox-scoring-12',status:'partial',result:{ruleSetVersion:'rules-12',heuristicScore:45,reasons:[{id:'brand_impersonation_combined'}]}});
   expect((await deliver('notice@notification.intuit.com')).folder_id).toBe('inbox');
   expect((await deliver('person@example.test','Bookkeeping discussion')).folder_id).toBe('inbox');
   const calls=scoreV1.mock.calls.length;
@@ -67,7 +67,7 @@ it('keeps all frozen legitimate controls in Inbox under rules-11',async()=>{
     await waitOnExecutionContext(ctx);expect(reject,sample.id).not.toHaveBeenCalled();
     const [row]=await query<{id:string;folder_id:string;raw_key:string}>(stub,'SELECT id,folder_id,raw_key FROM emails ORDER BY rowid DESC');
     expect(row.folder_id,sample.id).toBe('inbox');
-    expect((await stub.getSpamState(row.id))?.assessments[0]).toMatchObject({policyVersion:'inbox-scoring-11',status:'partial',result:{status:'partial',ruleSetVersion:'rules-11',heuristicScore:0}});
+    expect((await stub.getSpamState(row.id))?.assessments[0]).toMatchObject({policyVersion:'inbox-scoring-12',status:'partial',result:{status:'partial',ruleSetVersion:'rules-12',heuristicScore:0}});
     expect(new Uint8Array(await (await env.BUCKET.get(row.raw_key))!.arrayBuffer())).toEqual(raw);
   }
   expect(forbidden).not.toHaveBeenCalled();
@@ -81,7 +81,7 @@ it('retains the existing HTML statistical regression and positive controls',asyn
   for(const [body,expected] of [[STATISTICAL_SPAM,60],[PHARMACY_SPAM,60],[FRAGILE_SPAM,0],[REFIT_FRAGILE_SPAM,0],[CONTEXT_FRAGILE_SPAM,0]] as const) {
     const raw=`From: Person <sender@example.test>\r\nTo: receiver@example.test\r\nSubject: \r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>${body}</p>`;
     const assessment=await assessArrival(e,await PostalMime.parse(raw),true,'sender@example.test','none');
-    expect(assessment?.status).toBe('partial');expect(assessment?.result?.ruleSetVersion).toBe('rules-11');
+    expect(assessment?.status).toBe('partial');expect(assessment?.result?.ruleSetVersion).toBe('rules-12');
     expect(assessment?.result?.heuristicScore).toBe(expected);expect(shouldQuarantine(assessment,'none')).toBe(expected===60);
   }
 });
@@ -96,4 +96,17 @@ it('keeps HTML anchor whitespace distinct from unsafe controls through the real 
   expect(ordinary?.result?.limitsHit).not.toContain('control_chars');expect(shouldQuarantine(ordinary,'none')).toBe(true);
   const hostile=await assess('<a href="https://example.test/">Read\u202e details</a>');
   expect(hostile?.result?.limitsHit).toContain('control_chars');expect(shouldQuarantine(hostile,'none')).toBe(false);
+});
+
+
+it('routes a credential lure without routing a warning through real Worker RPC',async()=>{
+  const {default:PostalMime}=await import('postal-mime');
+  const {assessArrival,shouldQuarantine}=await import('../workers/lib/mail-scoring/intake');
+  const e={...env,MAIL_SCORING_MODE:'filter'} as unknown as Env;
+  const html=(body:string)=>`From: Person <person@example.test>\r\nTo: receiver@example.test\r\nSubject: Your account is suspended\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>${body}</p><a href="https://account-check.invalid/login">Verify your account\n now</a>`;
+  const assess=async(body:string)=>assessArrival(e,await PostalMime.parse(html(body)),true,'person@example.test','none');
+  const lure=await assess('Your account has been temporarily suspended. Verify your identity and password immediately.');
+  expect(lure?.result).toMatchObject({ruleSetVersion:'rules-12',heuristicScore:45,reasons:[{id:'credential_phishing_combined'}]});expect(shouldQuarantine(lure,'none')).toBe(true);
+  const warning=await assess('Your account has been suspended. We will never ask you to verify your password.');
+  expect(shouldQuarantine(warning,'none')).toBe(false);
 });
