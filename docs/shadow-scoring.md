@@ -12,7 +12,7 @@ do not score again. Failures retain Inbox delivery; there is no historical scan.
 
 ## Current source compatibility
 
-The reconciled source uses scorer `66c6ab8d1a1531d0d2319a440fdf16f66523cad2`, `rules-12` and policy `inbox-scoring-12`; the decoder retains `rules-1` through `rules-11` and stored policies through `inbox-scoring-11`. The brand reason is accepted under rules-11 and rules-12, and the credential-phishing reason only under rules-12. Balanced statistical evidence remains valid under rules-10 through rules-12 for caller-first rollout. [HTML inspection](html-inspection.md) and [reconciliation evidence](evidence/html-reconcile/README.md) describe the current checks.
+The reconciled source uses scorer `6617c5627bb87cc35245ec8941e3908b984f3318`, `rules-12` and policy `inbox-scoring-12`; the decoder retains `rules-1` through `rules-11` and stored policies through `inbox-scoring-11`. The brand reason is accepted under rules-11 and rules-12, and the credential-phishing reason only under rules-12. Balanced statistical evidence remains valid under rules-10 through rules-12 for caller-first rollout. [HTML inspection](html-inspection.md) and [reconciliation evidence](evidence/html-reconcile/README.md) describe the current checks.
 
 ## Historical source pins and compatibility (DEV-1018)
 
